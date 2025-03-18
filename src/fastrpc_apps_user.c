@@ -76,9 +76,6 @@
 #include "fastrpc_trace.h"
 #include "fastrpc_config_parser.h"
 
-#define VENDOR_DSP_LOCATION "/vendor/dsp/"
-#define VENDOR_DOM_LOCATION "/vendor/dsp/xdsp/"
-
 char DSP_LIBS_LOCATION[PATH_MAX] = DEFAULT_DSP_SEARCH_PATHS;
 
 #ifdef LE_ENABLE
@@ -3393,11 +3390,10 @@ static void get_process_testsig(apps_std_FILE *fp, uint64_t *ptrlen) {
 }
 
 static int open_shell(int domain_id, apps_std_FILE *fh, int unsigned_shell) {
-  char *absName = NULL;
   char *shell_absName = NULL;
   char *domain_str = NULL;
   char dir_list[PATH_MAX] = {0};
-  uint16_t shell_absNameLen = 0, absNameLen = 0;
+  uint16_t shell_absNameLen = 0;
   int nErr = AEE_SUCCESS;
   int domain = GET_DOMAIN_FROM_EFFEC_DOMAIN_ID(domain_id);
   const char *shell_name = SIGNED_SHELL;
@@ -3423,28 +3419,6 @@ static int open_shell(int domain_id, apps_std_FILE *fh, int unsigned_shell) {
   strlcpy(dir_list, DSP_LIBS_LOCATION, sizeof(dir_list));
   nErr = fopen_from_dirlist(dir_list, ";", "r", shell_absName, fh);
 
-  if (nErr) {
-    absNameLen = strlen(VENDOR_DSP_LOCATION) + shell_absNameLen + 1;
-    VERIFYC(NULL !=
-                (absName = (char *)realloc(absName, sizeof(char) * absNameLen)),
-            AEE_ENOMEMORY);
-    strlcpy(absName, VENDOR_DSP_LOCATION, absNameLen);
-    strlcat(absName, shell_absName, absNameLen);
-
-    nErr = apps_std_fopen(absName, "r", fh);
-    if (nErr) {
-      absNameLen = strlen(VENDOR_DOM_LOCATION) + shell_absNameLen + 1;
-      VERIFYC(NULL != (absName =
-                           (char *)realloc(absName, sizeof(char) * absNameLen)),
-              AEE_ENOMEMORY);
-      strlcpy(absName, VENDOR_DSP_LOCATION, absNameLen);
-      strlcat(absName, SUBSYSTEM_NAME[domain], absNameLen);
-      strlcat(absName, "/", absNameLen);
-      strlcat(absName, shell_absName, absNameLen);
-
-      nErr = apps_std_fopen(absName, "r", fh);
-    }
-  }
   if (!nErr)
     FARF(RUNTIME_RPC_HIGH, "Successfully opened %s, domain %d", shell_absName, domain);
 bail:
@@ -3455,10 +3429,6 @@ bail:
   if (shell_absName) {
     free(shell_absName);
     shell_absName = NULL;
-  }
-  if (absName) {
-    free(absName);
-    absName = NULL;
   }
   if (nErr != AEE_SUCCESS) {
     if (domain == SDSP_DOMAIN_ID && fh != NULL) {
