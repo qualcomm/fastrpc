@@ -63,7 +63,7 @@
 #include "fastrpc_perf.h"
 #include "fastrpc_pm.h"
 #include "fastrpc_procbuf.h"
-#include "listener_android.h"
+#include "listener.h"
 #include "log_config.h"
 #include "platform_libs.h"
 #include "remotectl.h"
@@ -1606,7 +1606,7 @@ bail:
   return nErr;
 }
 
-int listener_android_geteventfd(int domain, int *fd);
+int listener_geteventfd(int domain, int *fd);
 int remote_handle_open_domain(int domain, const char *name, remote_handle *ph,
                               uint64_t *t_spawn, uint64_t *t_load) {
   char dlerrstr[255];
@@ -1629,7 +1629,7 @@ int remote_handle_open_domain(int domain, const char *name, remote_handle *ph,
   if (!strncmp(name, ITRANSPORT_PREFIX "geteventfd",
                    strlen(ITRANSPORT_PREFIX "geteventfd"))) {
     FARF(RUNTIME_RPC_HIGH, "getting event fd");
-    return listener_android_geteventfd(domain, (int *)ph);
+    return listener_geteventfd(domain, (int *)ph);
   }
   if (!strncmp(name, ITRANSPORT_PREFIX "attachguestos",
                    strlen(ITRANSPORT_PREFIX "attachguestos"))) {
@@ -3110,7 +3110,7 @@ PL_DEP(fastrpc_apps_user);
 PL_DEP(gpls);
 PL_DEP(apps_std);
 PL_DEP(rpcmem);
-PL_DEP(listener_android);
+PL_DEP(listener);
 PL_DEP(fastrpc_async);
 
 static int attach_guestos(int domain) {
@@ -3160,7 +3160,7 @@ static void domain_deinit(int domain) {
     pthread_mutex_unlock(&hlist[domain].mut);
 
     dspsignal_domain_deinit(domain);
-    listener_android_domain_deinit(domain);
+    listener_domain_deinit(domain);
     hlist[domain].first_revrpc_done = 0;
     pthread_mutex_lock(&hlist[domain].async_init_deinit_mut);
     fastrpc_async_domain_deinit(domain);
@@ -3957,7 +3957,7 @@ static int domain_init(int domain, int *dev) {
   hlist[domain].state = FASTRPC_DOMAIN_STATE_INIT;
   hlist[domain].ref = 0;
   pthread_mutex_unlock(&hlist[domain].mut);
-  VERIFY(AEE_SUCCESS == (nErr = listener_android_domain_init(
+  VERIFY(AEE_SUCCESS == (nErr = listener_domain_init(
                              domain, hlist[domain].th_params.update_requested,
                              &hlist[domain].th_params.r_sem)));
   if ((dom != SDSP_DOMAIN_ID) && hlist[domain].dsppd == ROOT_PD) {
@@ -4010,7 +4010,7 @@ static void fastrpc_apps_user_deinit(void) {
       pthread_mutex_destroy(&hlist[i].init);
       pthread_mutex_destroy(&hlist[i].async_init_deinit_mut);
     }
-    listener_android_deinit();
+    listener_deinit();
     free(hlist);
     hlist = NULL;
   }
@@ -4116,7 +4116,7 @@ static int fastrpc_apps_user_init(void) {
     pthread_mutex_init(&hlist[i].init, 0);
     pthread_mutex_init(&hlist[i].async_init_deinit_mut, 0);
   }
-  listener_android_init();
+  listener_init();
   VERIFY(AEE_SUCCESS == (nErr = PL_INIT(apps_std)));
   GenCrc32Tab(POLY32, crc_table);
   fastrpc_notif_init();

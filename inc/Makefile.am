@@ -53,7 +53,7 @@ noinst_HEADERS = \
 	fastrpc_procbuf.h \
 	fastrpc_process_attributes.h \
 	fastrpc_trace.h \
-	listener_android.h \
+	listener.h \
 	listener_buf.h \
 	log_config.h \
 	mod_table.h \
