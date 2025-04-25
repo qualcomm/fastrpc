@@ -54,7 +54,7 @@ LIBDSPRPC_SOURCES = \
 		fastrpc_context.c
 
 if ANDROID_CC
-# Do nothing (or Android-specific sources)
+LIBDSPRPC_SOURCES += fastrpc_android.c
 else
 LIBDSPRPC_SOURCES += fastrpc_config_parser.c
 endif
