@@ -78,16 +78,7 @@
 
 char DSP_LIBS_LOCATION[PATH_MAX] = DEFAULT_DSP_SEARCH_PATHS;
 
-#ifdef LE_ENABLE
-#define PROPERTY_VALUE_MAX                                                     \
-  92 // as this macro is defined in cutils for Android platforms, defined
-     // explicitly for LE platform
-#elif (defined _ANDROID) || (defined ANDROID)
-/// TODO: Bharath #include "cutils/properties.h"
 #define PROPERTY_VALUE_MAX 92
-#else
-#define PROPERTY_VALUE_MAX 92
-#endif
 
 #ifndef _WIN32
 #include <poll.h>

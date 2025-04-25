@@ -1172,14 +1172,7 @@ __QAIC_IMPL_EXPORT int __QAIC_IMPL(apps_std_fopen_with_env_fd)(
   VERIFYC(NULL != delim, AEE_EBADPARM);
   VERIFYC(NULL != name, AEE_EBADPARM);
   VERIFYC(NULL != envvarname, AEE_EBADPARM);
-#if 0 //TODO: Bharath
-  char *tempName = name;
-  tempName += 2;
-  if (tempName[0] == '\0') {
-    nErr = AEE_EBADPARM;
-    goto bail;
-  }
-#endif
+
   FASTRPC_ATRACE_BEGIN_L("%s for %s in %s mode from path in environment "
                          "variable %s delimited with %s",
                          __func__, name, mode, envvarname, delim);
