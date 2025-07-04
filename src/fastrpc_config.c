@@ -378,7 +378,7 @@ int fastrpc_config_init() {
   VERIFYC(NULL != (config_file = calloc(1, sizeof(char) * len)), AEE_ENOMEMORY);
   // Prepare config filename
   snprintf(config_file, len, "%s%s", name, file_extension);
-  FARF(ALWAYS, "Reading configuration file: %s\n", config_file);
+  FARF(RUNTIME_RPC_HIGH, "Reading configuration file: %s\n", config_file);
 
   // Get the required size for PATH
   apps_std_get_search_paths_with_env(ADSP_LIBRARY_PATH, ";", NULL, 0, &numPaths,
@@ -416,7 +416,7 @@ int fastrpc_config_init() {
     }
   }
   if (!file_found) {
-    FARF(ALWAYS, "%s: Couldn't find file %s, errno (%s) at %s\n", __func__,
+    FARF(RUNTIME_RPC_HIGH, "%s: Couldn't find file %s, errno (%s) at %s\n", __func__,
          config_file, strerror(errno), data_paths);
   }
 bail:
