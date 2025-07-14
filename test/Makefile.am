@@ -5,7 +5,9 @@ bin_PROGRAMS = fastrpc_test
 fastrpc_test_SOURCES = fastrpc_test.c
 
 # Define the compiler flags for the test program
-fastrpc_test_CFLAGS = -I$(top_srcdir)/inc -DUSE_SYSLOG
+fastrpc_test_CFLAGS = -I$(top_srcdir)/inc -DUSE_SYSLOG \
+                      -Dtestlibdir=\"$(testlibdir)\" \
+                      -Dtestdspdir=\"$(testdspdir)\"
 
 if ANDROID_CC
 USE_LOG = -llog
