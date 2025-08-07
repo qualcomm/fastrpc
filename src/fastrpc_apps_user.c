@@ -1460,7 +1460,6 @@ int remote_handle_invoke(remote_handle handle, uint32_t sc, remote_arg *pra) {
 
   FARF(RUNTIME_RPC_HIGH, "Entering %s, handle %u sc %X remote_arg %p\n",
        __func__, handle, sc, pra);
-  PRINT_WARN_USE_DOMAINS();
   FASTRPC_ATRACE_BEGIN_L("%s called with handle 0x%x , scalar 0x%x", __func__,
                          (int)handle, sc);
   VERIFYC(handle != (remote_handle)-1, AEE_EINVHANDLE);
@@ -1546,7 +1545,6 @@ int remote_handle_invoke_async(remote_handle handle,
 
   FARF(RUNTIME_RPC_HIGH, "Entering %s, handle %u desc %p sc %X remote_arg %p\n",
        __func__, handle, desc, sc, pra);
-  PRINT_WARN_USE_DOMAINS();
   FASTRPC_ATRACE_BEGIN_L("%s called with handle 0x%x , scalar 0x%x", __func__,
                          (int)handle, sc);
   VERIFYC(handle != (remote_handle)-1, AEE_EINVHANDLE);
@@ -1749,7 +1747,6 @@ int remote_handle_open(const char *name, remote_handle *ph) {
   VERIFY(AEE_SUCCESS == (nErr = fastrpc_init_once()));
 
   FARF(RUNTIME_RPC_HIGH, "Entering %s, name %s\n", __func__, name);
-  PRINT_WARN_USE_DOMAINS();
   FASTRPC_ATRACE_BEGIN_L("%s for %s", __func__, name);
 
   if (!name || !ph) {
@@ -1896,7 +1893,6 @@ int remote_handle_close(remote_handle h) {
 
   FARF(RUNTIME_RPC_HIGH, "Entering %s, handle %lu\n", __func__, h);
 
-  PRINT_WARN_USE_DOMAINS();
   VERIFY(AEE_SUCCESS == (nErr = remote_handle_close_domain(domain, h)));
   FASTRPC_PUT_REF(domain);
   fastrpc_update_module_list(NON_DOMAIN_LIST_DEQUEUE, domain, h, NULL, NULL);
@@ -2404,7 +2400,6 @@ int remote_handle_control(uint32_t req, void *data, uint32_t len) {
 
   FARF(RUNTIME_HIGH, "Entering %s, req %d, data %p, size %d\n", __func__, req,
        data, len);
-  PRINT_WARN_USE_DOMAINS();
 
   domain = get_current_domain();
   FASTRPC_GET_REF(domain);

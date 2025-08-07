@@ -469,7 +469,6 @@ int fastrpc_mmap(int domain, int fd, void *vaddr, int offset, size_t length,
 
   // Get domain and open session if not already open
   if (domain == -1) {
-    PRINT_WARN_USE_DOMAINS();
     domain = get_current_domain();
   }
   VERIFYC(IS_VALID_EFFECTIVE_DOMAIN_ID(domain), AEE_EBADPARM);
@@ -551,7 +550,6 @@ int fastrpc_munmap(int domain, int fd, void *vaddr, size_t length) {
   FARF(RUNTIME_RPC_HIGH, "%s: domain %d fd %d vaddr %p length 0x%zx", __func__,
        domain, fd, vaddr, length);
   if (domain == -1) {
-    PRINT_WARN_USE_DOMAINS();
     domain = get_current_domain();
   }
   VERIFYC(fd >= 0 && IS_VALID_EFFECTIVE_DOMAIN_ID(domain),
@@ -633,7 +631,6 @@ int remote_mem_map(int domain, int fd, int flags, uint64_t vaddr, size_t size,
   VERIFYC(flags >= 0 && flags < REMOTE_MAP_MAX_FLAG && raddr != NULL,
           AEE_EBADPARM);
   if (domain == -1) {
-    PRINT_WARN_USE_DOMAINS();
     domain = get_current_domain();
   }
   VERIFYC(IS_VALID_EFFECTIVE_DOMAIN_ID(domain), AEE_EBADPARM);
@@ -667,7 +664,6 @@ int remote_mem_unmap(int domain, uint64_t raddr, size_t size) {
   FARF(RUNTIME_RPC_HIGH, "%s: domain %d addr 0x%llx size 0x%zx", __func__,
        domain, raddr, size);
   if (domain == -1) {
-    PRINT_WARN_USE_DOMAINS();
     domain = get_current_domain();
   }
   VERIFYC(IS_VALID_EFFECTIVE_DOMAIN_ID(domain), AEE_EBADPARM);
@@ -722,7 +718,6 @@ int remote_mmap64(int fd, uint32_t flags, uint64_t vaddrin, int64_t size,
 
   VERIFY(AEE_SUCCESS == (nErr = fastrpc_init_once()));
 
-  PRINT_WARN_USE_DOMAINS();
   if (flags != 0) {
     nErr = AEE_EBADPARM;
     goto bail;
@@ -781,7 +776,6 @@ bail:
 }
 
 int remote_munmap(uint32_t vaddrout, int size) {
-  PRINT_WARN_USE_DOMAINS();
   return remote_munmap64((uintptr_t)vaddrout, (int64_t)size);
 }
 

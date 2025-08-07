@@ -471,13 +471,6 @@ static __inline int convert_kernel_to_user_error(int nErr, int err_no) {
 	return nErr;
 }
 
-#ifdef __ANDROID__
-// Warning message to use domains
-#define PRINT_WARN_USE_DOMAINS() VERIFY_WPRINTF("Warning: %s: Non-domain usage of FastRPC will be deprecated, use domains to offload to DSP using FastRPC", __func__)
-#else
-#define PRINT_WARN_USE_DOMAINS() /* empty */
-#endif
-
 /**
   * @brief utility APIs used in fastRPC library to get name, handle from domain 
   **/
