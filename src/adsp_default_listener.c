@@ -71,7 +71,7 @@ static domain_t *get_domain_uri(int domain_id) {
 }
 
 static const char *get_secure_device_name(int domain_id) {
-	const char *name;
+	const char *name = NULL;
 	int domain = GET_DOMAIN_FROM_EFFEC_DOMAIN_ID(domain_id);
 
 	switch (domain) {
@@ -97,15 +97,15 @@ static const char *get_secure_device_name(int domain_id) {
 		name = GDSP1_SECURE_DEVICE_NAME;
 		break;
 	default:
-		name = DEFAULT_DEVICE;
+		FARF(ERROR, "ERROR: %s Invalid domain_id %d", __func__, domain_id);
 		break;
 	}
 
 	return name;
 }
 
-static const char *get_default_device_name(int domain_id) {
-	const char *name;
+static const char *get_non_secure_device_name(int domain_id) {
+	const char *name = NULL;
 	int domain = GET_DOMAIN_FROM_EFFEC_DOMAIN_ID(domain_id);
 
 	switch (domain) {
@@ -131,7 +131,7 @@ static const char *get_default_device_name(int domain_id) {
 		name = GDSP1_DEVICE_NAME;
 		break;
 	default:
-		name = DEFAULT_DEVICE;
+		FARF(ERROR, "ERROR: %s Invalid domain_id %d", __func__, domain_id);
 		break;
 	}
 
@@ -151,6 +151,9 @@ static bool fastrpc_dev_exists(const char* dev_name)
 	struct stat buffer;
 	char *path = NULL;
 	uint64_t len;
+
+	if (!dev_name)
+		return false;
 
 	len = snprintf(0, 0, "/dev/%s", dev_name) + 1;
 	if(NULL == (path = (char *)malloc(len * sizeof(char))))
@@ -172,13 +175,13 @@ static bool fastrpc_dev_exists(const char* dev_name)
 static int fastrpc_wait_for_device(int domain)
 {
 	int inotify_fd = -1, watch_fd = -1, err = 0;
-	const char *sec_dev_name = NULL, *def_dev_name = NULL;
+	const char *sec_dev_name = NULL, *non_sec_dev_name = NULL;
 	struct pollfd pfd[1];
 
 	sec_dev_name = get_secure_device_name(domain);
-	def_dev_name = get_default_device_name(domain);
+	non_sec_dev_name = get_non_secure_device_name(domain);
 
-	if (fastrpc_dev_exists(sec_dev_name) || fastrpc_dev_exists(def_dev_name))
+	if (fastrpc_dev_exists(sec_dev_name) || fastrpc_dev_exists(non_sec_dev_name))
 		return 0;
 
 	inotify_fd = inotify_init();
@@ -194,7 +197,7 @@ static int fastrpc_wait_for_device(int domain)
 		return AEE_EINVALIDFD;
 	}
 
-	if (fastrpc_dev_exists(sec_dev_name) || fastrpc_dev_exists(def_dev_name))
+	if (fastrpc_dev_exists(sec_dev_name) || fastrpc_dev_exists(non_sec_dev_name))
 		goto bail;
 
 	memset(pfd, 0 , sizeof(pfd));
@@ -231,7 +234,7 @@ static int fastrpc_wait_for_device(int domain)
 			/* Check if the event corresponds to the creation of the device node. */
 			if (event->wd == watch_fd && (event->mask & IN_CREATE) &&
 				((strcmp(sec_dev_name, event->name) == 0) ||
-				(strcmp(def_dev_name, event->name) == 0))) {
+				(strcmp(non_sec_dev_name, event->name) == 0))) {
 				/* Device node created, process proceed to open and use it. */
 				VERIFY_IPRINTF("Device node %s created!\n", event->name);
 				goto bail; /* Exit the loop after device creation is detected. */

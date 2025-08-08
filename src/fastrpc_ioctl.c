@@ -21,7 +21,7 @@ int is_async_fastrpc_supported(void) {
  ADSP/SLPI/MDSP/CDSP - Return Secure node
  */
 const char *get_secure_domain_name(int domain_id) {
-  const char *name;
+  const char *name = NULL;
   int domain = GET_DOMAIN_FROM_EFFEC_DOMAIN_ID(domain_id);
 
   switch (domain) {
@@ -47,7 +47,7 @@ const char *get_secure_domain_name(int domain_id) {
     name = GDSP1RPC_SECURE_DEVICE;
     break;
   default:
-    name = DEFAULT_DEVICE;
+    FARF(ERROR, "ERROR: %s Invalid domain_id %d", __func__, domain_id);
     break;
   }
   return name;
