@@ -1,0 +1,38 @@
+name: Check formatting
+
+on:
+  push:
+    branches:
+    - 'main'
+    - 'development'
+  pull_request:
+    branches:
+    - 'main'
+    - 'development'
+
+jobs:
+  clang-format:
+    # The exact version doesn't really matter, as we're getting a build from LLVM repos anyway
+    runs-on: [ ubuntu-latest ]
+
+    env:
+      CLANG_MAJOR_VERSION: 20
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Clang Format
+        run: |
+          wget https://apt.llvm.org/llvm.sh
+          sudo chmod +x llvm.sh
+          sudo ./llvm.sh $CLANG_MAJOR_VERSION
+          sudo apt-get install clang-format-$CLANG_MAJOR_VERSION
+
+      - name: Print clang-format version
+        run: clang-format-$CLANG_MAJOR_VERSION --version
+
+      - name: Run Clang Format
+        run: |
+          find . -name '*.cpp' -o -name '*.hpp' -o -name '*.c' -o -name '*.h' | xargs clang-format-$CLANG_MAJOR_VERSION -i
+          git diff --exit-code || (echo "The changes are not formatted properly" && exit 1)
