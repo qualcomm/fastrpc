@@ -55,14 +55,12 @@ cd fastrpc
 sudo make install
 ```
 
-### Steps to Generate ARM Binaries Using Linaro Toolchain on Ubuntu Build Machine
+### Steps to cross-compile the project on Ubuntu
 
-1. **Install Linaro tools and add the tools bin location to the path:**
+1. **Install the cross compiler and dependencies:**
 
     ```bash
-    wget -c https://releases.linaro.org/components/toolchain/binaries/latest-7/aarch64-linux-gnu/gcc-linaro-7.5.0-2019.12-i686_aarch64-linux-gnu.tar.xz
-    tar xf gcc-linaro-7.5.0-2019.12-i686_aarch64-linux-gnu.tar.xz
-    export PATH="$PATH:<linaro tools path>/toolchain/bin"
+    sudo apt install g++-aarch64-linux-gnu binutils-aarch64-linux-gnu
     ```
 
 2. **Create softlink files for the compiler, linker, and other tools. Create environment variables as below for the auto tools:**
