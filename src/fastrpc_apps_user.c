@@ -52,7 +52,6 @@
 #include "apps_std_internal.h"
 #include "dspsignal.h"
 #include "fastrpc_apps_user.h"
-#include "fastrpc_async.h"
 #include "fastrpc_cap.h"
 #include "fastrpc_common.h"
 #include "fastrpc_config.h"
@@ -1158,8 +1157,7 @@ static void fastrpc_delete_timer(timer_t *timer) {
 }
 
 int remote_handle_invoke_domain(int domain, remote_handle handle,
-                                fastrpc_async_descriptor_t *desc, uint32_t sc,
-                                remote_arg *pra) {
+                                uint32_t sc, remote_arg *pra) {
   int dev, total, bufs, handles, i, nErr = 0, wake_lock = 0, rpc_timeout = 0;
   unsigned req;
   uint32_t len;
@@ -1168,7 +1166,6 @@ int remote_handle_invoke_domain(int domain, remote_handle handle,
   uint32_t *crc_local = NULL;
   uint64_t *perf_kernel = NULL;
   uint64_t *perf_dsp = NULL;
-  struct fastrpc_async_job asyncjob = {0}, *job = NULL;
   fastrpc_timer frpc_timer;
   int trace_marker_fd = hlist[domain].trace_marker_fd;
   bool trace_enabled = false;
@@ -1212,31 +1209,6 @@ int remote_handle_invoke_domain(int domain, remote_handle handle,
 
   INITIALIZE_REMOTE_ARGS(total);
 
-  if (desc) {
-    struct timespec time_spec;
-    // Check for valid user async descriptor
-    VERIFYC(desc->type >= FASTRPC_ASYNC_NO_SYNC &&
-                desc->type < FASTRPC_ASYNC_TYPE_MAX,
-            AEE_EBADPARM);
-    VERIFYC(!(desc->type == FASTRPC_ASYNC_CALLBACK && desc->cb.fn == NULL),
-            AEE_EBADPARM);
-    pthread_mutex_lock(&hlist[domain].async_init_deinit_mut);
-    if (AEE_SUCCESS != (nErr = fastrpc_async_domain_init(domain))) {
-      pthread_mutex_unlock(&hlist[domain].async_init_deinit_mut);
-      goto bail;
-    }
-    asyncjob.jobid = ++list->jobid;
-    pthread_mutex_unlock(&hlist[domain].async_init_deinit_mut);
-    clock_gettime(CLOCK_MONOTONIC, &time_spec);
-    asyncjob.jobid = ((((time_spec.tv_sec) / SECONDS_PER_HOUR)
-                       << (FASTRPC_ASYNC_TIME_SPEC_POS / 2))
-                          << ((FASTRPC_ASYNC_TIME_SPEC_POS + 1) / 2) |
-                      (asyncjob.jobid << FASTRPC_ASYNC_JOB_POS) | domain);
-    asyncjob.isasyncjob = 1;
-    fastrpc_save_async_job(domain, &asyncjob, desc);
-    job = &asyncjob;
-  }
-
   req = INVOKE;
   VERIFYC(!(NULL == pra && total > 0), AEE_EBADPARM);
   for (i = 0; i < bufs; i++) {
@@ -1250,11 +1222,6 @@ int remote_handle_invoke_domain(int domain, remote_handle handle,
       if (fd != -1) {
         set_args_fd(i, fd);
         req = INVOKE_FD;
-      }
-      // AsyncRPC doesn't support Non-ion output buffers
-      if (asyncjob.isasyncjob && i >= (int)REMOTE_SCALARS_INBUFS(sc)) {
-        VERIFYM(fd != -1, AEE_EBADPARM,
-                "AsyncRPC doesn't support Non-ion output buffers");
       }
       if (nova) {
         req = INVOKE_ATTRS;
@@ -1313,7 +1280,7 @@ int remote_handle_invoke_domain(int domain, remote_handle handle,
   }
 
   if (IS_CRC_CHECK_ENABLED(hlist[domain].procattrs) &&
-      (!IS_STATIC_HANDLE(handle)) && !asyncjob.isasyncjob) {
+      (!IS_STATIC_HANDLE(handle))) {
     int nInBufs = REMOTE_SCALARS_INBUFS(sc);
     crc_local = (uint32_t *)calloc(M_CRCLIST, sizeof(uint32_t));
     crc_remote = (uint32_t *)calloc(M_CRCLIST, sizeof(uint32_t));
@@ -1357,7 +1324,7 @@ int remote_handle_invoke_domain(int domain, remote_handle handle,
     wake_lock = 0;
   }
   // Macros are initializing and destroying pfds and pattrs.
-  nErr = ioctl_invoke(dev, req, handle, sc, get_args(), pfds, pattrs, job,
+  nErr = ioctl_invoke(dev, req, handle, sc, get_args(), pfds, pattrs,
                       crc_remote, perf_kernel, perf_dsp);
   if (nErr) {
     nErr = convert_kernel_to_user_error(nErr, errno);
@@ -1373,7 +1340,7 @@ int remote_handle_invoke_domain(int domain, remote_handle handle,
   }
 
   if (IS_CRC_CHECK_ENABLED(hlist[domain].procattrs) &&
-      (!IS_STATIC_HANDLE(handle)) && !asyncjob.isasyncjob) {
+      (!IS_STATIC_HANDLE(handle))) {
     int nInBufs = REMOTE_SCALARS_INBUFS(sc);
     VERIFYC(crc_local != NULL && crc_remote != NULL, AEE_ENOMEMORY);
     for (i = nInBufs; i < bufs; i++)
@@ -1389,7 +1356,7 @@ int remote_handle_invoke_domain(int domain, remote_handle handle,
   }
 
   if (IS_KERNEL_PERF_ENABLED(hlist[domain].procattrs) &&
-      (!IS_STATIC_HANDLE(handle)) && !asyncjob.isasyncjob) {
+      (!IS_STATIC_HANDLE(handle))) {
     VERIFYC(perf_kernel != NULL, AEE_ENOMEMORY);
     FARF(ALWAYS,
          "RPCPERF-K  H:0x%x SC:0x%x C:%" PRIu64 " F:%" PRIu64 " ns M:%" PRIu64
@@ -1400,7 +1367,7 @@ int remote_handle_invoke_domain(int domain, remote_handle handle,
          perf_kernel[7], perf_kernel[8]);
   }
   if (IS_DSP_PERF_ENABLED(hlist[domain].procattrs) &&
-      (!IS_STATIC_HANDLE(handle)) && !asyncjob.isasyncjob) {
+      (!IS_STATIC_HANDLE(handle))) {
     VERIFYC(perf_dsp != NULL, AEE_ENOMEMORY);
     FARF(ALWAYS,
          "RPCPERF-D  H:0x%x SC:0x%x C:%" PRIu64 " M_H:%" PRIu64 " us M:%" PRIu64
@@ -1417,16 +1384,6 @@ int remote_handle_invoke_domain(int domain, remote_handle handle,
     fastrpc_perf_update(dev, handle, sc);
   }
 bail:
-  if (asyncjob.isasyncjob) {
-    if (!nErr) {
-      FARF(RUNTIME_RPC_HIGH, "adsprpc : %s Async job Queued, job 0x%" PRIx64 "",
-           __func__, asyncjob.jobid);
-      desc->jobid = asyncjob.jobid;
-    } else {
-      fastrpc_remove_async_job(asyncjob.jobid, false);
-      desc->jobid = -1;
-    }
-  }
   DESTROY_REMOTE_ARGS();
   if (crc_local) {
     free(crc_local);
@@ -1436,11 +1393,11 @@ bail:
     free(crc_remote);
     crc_remote = NULL;
   }
-  if (perf_kernel && !asyncjob.isasyncjob) {
+  if (perf_kernel) {
     free(perf_kernel);
     perf_kernel = NULL;
   }
-  if (perf_dsp && !asyncjob.isasyncjob) {
+  if (perf_dsp) {
     free(perf_dsp);
     perf_dsp = NULL;
   }
@@ -1479,7 +1436,7 @@ int remote_handle_invoke(remote_handle handle, uint32_t sc, remote_arg *pra) {
   domain = get_current_domain();
   FASTRPC_GET_REF(domain);
   VERIFY(AEE_SUCCESS ==
-         (nErr = remote_handle_invoke_domain(domain, handle, NULL, sc, pra)));
+         (nErr = remote_handle_invoke_domain(domain, handle, sc, pra)));
 bail:
   FASTRPC_PUT_REF(domain);
   if (nErr != AEE_SUCCESS) {
@@ -1527,7 +1484,7 @@ int remote_handle64_invoke(remote_handle64 local, uint32_t sc,
   FASTRPC_GET_REF(domain);
   VERIFY(AEE_SUCCESS == (nErr = get_handle_remote(local, &remote)));
   VERIFY(AEE_SUCCESS ==
-         (nErr = remote_handle_invoke_domain(domain, remote, NULL, sc, pra)));
+         (nErr = remote_handle_invoke_domain(domain, remote, sc, pra)));
 bail:
   FASTRPC_PUT_REF(domain);
   if (nErr != AEE_SUCCESS) {
@@ -1542,72 +1499,6 @@ bail:
              nErr, __func__, h->name, local, REMOTE_SCALARS_METHOD(sc), domain, sc,
              strerror(errno));
       }
-    }
-  }
-  FASTRPC_ATRACE_END();
-  return nErr;
-}
-
-int remote_handle_invoke_async(remote_handle handle,
-                               fastrpc_async_descriptor_t *desc, uint32_t sc,
-                               remote_arg *pra) {
-  int domain = -1, nErr = AEE_SUCCESS, ref = 0;
-
-  VERIFY(AEE_SUCCESS == (nErr = fastrpc_init_once()));
-
-  FARF(RUNTIME_RPC_HIGH, "Entering %s, handle %u desc %p sc %X remote_arg %p\n",
-       __func__, handle, desc, sc, pra);
-  FASTRPC_ATRACE_BEGIN_L("%s called with handle 0x%x , scalar 0x%x", __func__,
-                         (int)handle, sc);
-  VERIFYC(handle != (remote_handle)-1, AEE_EINVHANDLE);
-
-  domain = get_current_domain();
-  FASTRPC_GET_REF(domain);
-  VERIFY(AEE_SUCCESS ==
-         (nErr = remote_handle_invoke_domain(domain, handle, desc, sc, pra)));
-bail:
-  FASTRPC_PUT_REF(domain);
-  if (nErr != AEE_SUCCESS) {
-    if (0 == check_rpc_error(nErr)) {
-      FARF(ERROR,
-           "Error 0x%x: %s failed for handle 0x%x, method %d async type %d on "
-           "domain %d (sc 0x%x) (errno %s)\n",
-           nErr, __func__, (int)handle, REMOTE_SCALARS_METHOD(sc), desc->type,
-           domain, sc, strerror(errno));
-    }
-  }
-  FASTRPC_ATRACE_END();
-  return nErr;
-}
-
-int remote_handle64_invoke_async(remote_handle64 local,
-                                 fastrpc_async_descriptor_t *desc, uint32_t sc,
-                                 remote_arg *pra) {
-  remote_handle64 remote = 0;
-  int nErr = AEE_SUCCESS, domain = -1, ref = 0;
-
-  VERIFY(AEE_SUCCESS == (nErr = fastrpc_init_once()));
-
-  FARF(RUNTIME_RPC_HIGH, "Entering %s, handle %llu desc %p sc %X remote_arg %p\n", __func__,
-       local, desc, sc, pra);
-  FASTRPC_ATRACE_BEGIN_L("%s called with handle 0x%x , scalar 0x%x", __func__,
-                         (int)local, sc);
-  VERIFYC(local != (remote_handle64)-1, AEE_EINVHANDLE);
-
-  VERIFY(AEE_SUCCESS == (nErr = get_domain_from_handle(local, &domain)));
-  FASTRPC_GET_REF(domain);
-  VERIFY(AEE_SUCCESS == (nErr = get_handle_remote(local, &remote)));
-  VERIFY(AEE_SUCCESS ==
-         (nErr = remote_handle_invoke_domain(domain, remote, desc, sc, pra)));
-bail:
-  FASTRPC_PUT_REF(domain);
-  if (nErr != AEE_SUCCESS) {
-    if (0 == check_rpc_error(nErr)) {
-      FARF(ERROR,
-           "Error 0x%x: %s failed for handle 0x%" PRIx64
-           ", method %d on domain %d (sc 0x%x) (errno %s)\n",
-           nErr, __func__, local, REMOTE_SCALARS_METHOD(sc), domain, sc,
-           strerror(errno));
     }
   }
   FASTRPC_ATRACE_END();
@@ -2114,81 +2005,6 @@ static inline int enable_process_state_notif_on_dsp(int domain) {
     VERIFY(AEE_SUCCESS == (nErr = adsp_current_process_enable_notifications()));
   }
 bail:
-  return nErr;
-}
-
-/*
- * Internal function to get async response from kernel. Waits in kernel until
- * response is received from DSP
- * @ domain: domain to which Async job is submitted
- * @ async_data: IOCTL structure that is sent to kernel to get async response
- * job information returns 0 on success
- *
- */
-int get_remote_async_response(int domain, fastrpc_async_jobid *jobid,
-                              int *result) {
-  int nErr = AEE_SUCCESS, dev = -1;
-  uint64_t *perf_kernel = NULL, *perf_dsp = NULL;
-  fastrpc_async_jobid job = -1;
-  int res = -1;
-  remote_handle handle = -1;
-  uint32_t sc = 0;
-
-  VERIFYC(IS_VALID_EFFECTIVE_DOMAIN_ID(domain), AEE_EBADPARM);
-  VERIFY(AEE_SUCCESS == (nErr = domain_init(domain, &dev)));
-  VERIFYM(-1 != dev, AEE_ERPC, "open dev failed\n");
-  if (IS_KERNEL_PERF_ENABLED(hlist[domain].procattrs)) {
-    perf_kernel = (uint64_t *)calloc(PERF_KERNEL_KEY_MAX, sizeof(uint64_t));
-    VERIFYC(perf_kernel != NULL, AEE_ENOMEMORY);
-  }
-  if (IS_DSP_PERF_ENABLED(hlist[domain].procattrs)) {
-    perf_dsp = (uint64_t *)calloc(PERF_DSP_KEY_MAX, sizeof(uint64_t));
-    VERIFYC(perf_dsp != NULL, AEE_ENOMEMORY);
-  }
-  nErr = ioctl_invoke2_response(dev, &job, &handle, &sc, &res, perf_kernel,
-                                perf_dsp);
-  if (IS_KERNEL_PERF_ENABLED(hlist[domain].procattrs) &&
-      (!IS_STATIC_HANDLE(handle))) {
-    VERIFYC(perf_kernel != NULL, AEE_ENOMEMORY);
-    FARF(ALWAYS,
-         "RPCPERF-K  H:0x%x SC:0x%x C:%" PRIu64 " F:%" PRIu64 " ns M:%" PRIu64
-         " ns CP:%" PRIu64 " ns L:%" PRIu64 " ns G:%" PRIu64 " ns P:%" PRIu64
-         " ns INV:%" PRIu64 " ns INVOKE:%" PRIu64 " ns\n",
-         handle, sc, perf_kernel[0], perf_kernel[1], perf_kernel[2],
-         perf_kernel[3], perf_kernel[4], perf_kernel[5], perf_kernel[6],
-         perf_kernel[7], perf_kernel[8]);
-  }
-  if (IS_DSP_PERF_ENABLED(hlist[domain].procattrs) &&
-      (!IS_STATIC_HANDLE(handle))) {
-    VERIFYC(perf_dsp != NULL, AEE_ENOMEMORY);
-    FARF(ALWAYS,
-         "RPCPERF-D  H:0x%x SC:0x%x C:%" PRIu64 " M_H:%" PRIu64 " us M:%" PRIu64
-         " us G:%" PRIu64 " us INVOKE:%" PRIu64 " us P:%" PRIu64
-         " us CACHE:%" PRIu64 " us UM:%" PRIu64 " us "
-         "UM_H:%" PRIu64 " us R:%" PRIu64 " us E_R:%" PRIu64
-         " us J_S_T:%" PRIu64 " us\n",
-         handle, sc, perf_dsp[0], perf_dsp[1], perf_dsp[2], perf_dsp[3],
-         perf_dsp[4], perf_dsp[5], perf_dsp[6], perf_dsp[7], perf_dsp[8],
-         perf_dsp[9], perf_dsp[10], perf_dsp[11]);
-  }
-  *jobid = job;
-  *result = res;
-
-bail:
-  if (perf_kernel) {
-    free(perf_kernel);
-    perf_kernel = NULL;
-  }
-  if (perf_dsp) {
-    free(perf_dsp);
-    perf_dsp = NULL;
-  }
-  if (nErr) {
-    FARF(ERROR,
-         "Error 0x%x: %s failed to get async response data for domain %d errno "
-         "%s",
-         nErr, __func__, domain, strerror(errno));
-  }
   return nErr;
 }
 
@@ -3154,7 +2970,6 @@ PL_DEP(gpls);
 PL_DEP(apps_std);
 PL_DEP(rpcmem);
 PL_DEP(listener_android);
-PL_DEP(fastrpc_async);
 
 static int attach_guestos(int domain) {
   int attach;
@@ -3205,9 +3020,6 @@ static void domain_deinit(int domain) {
     dspsignal_domain_deinit(domain);
     listener_android_domain_deinit(domain);
     hlist[domain].first_revrpc_done = 0;
-    pthread_mutex_lock(&hlist[domain].async_init_deinit_mut);
-    fastrpc_async_domain_deinit(domain);
-    pthread_mutex_unlock(&hlist[domain].async_init_deinit_mut);
     fastrpc_notif_domain_deinit(domain);
     fastrpc_clear_handle_list(MULTI_DOMAIN_HANDLE_LIST_ID, domain);
     fastrpc_clear_handle_list(REVERSE_HANDLE_LIST_ID, domain);
@@ -4100,7 +3912,6 @@ static void fastrpc_apps_user_deinit(void) {
       pthread_mutex_destroy(&hlist[i].mut);
       pthread_mutex_destroy(&hlist[i].lmut);
       pthread_mutex_destroy(&hlist[i].init);
-      pthread_mutex_destroy(&hlist[i].async_init_deinit_mut);
     }
     listener_android_deinit();
     free(hlist);
@@ -4181,7 +3992,6 @@ static int fastrpc_apps_user_init(void) {
   FOR_EACH_EFFECTIVE_DOMAIN_ID(i) {
     hlist[i].dev = -1;
     hlist[i].th_params.thread_priority = DEFAULT_UTHREAD_PRIORITY;
-    hlist[i].jobid = 1;
     hlist[i].info = -1;
     hlist[i].th_params.stack_size = DEFAULT_UTHREAD_STACK_SIZE;
     sem_init(&hlist[i].th_params.r_sem, 0,
@@ -4198,7 +4008,6 @@ static int fastrpc_apps_user_init(void) {
     pthread_mutex_init(&hlist[i].mut, &attr);
     pthread_mutex_init(&hlist[i].lmut, 0);
     pthread_mutex_init(&hlist[i].init, 0);
-    pthread_mutex_init(&hlist[i].async_init_deinit_mut, 0);
   }
   listener_android_init();
   VERIFY(AEE_SUCCESS == (nErr = pthread_key_create(&tlsKey, exit_thread)));

@@ -36,7 +36,6 @@ noinst_HEADERS = \
 	dspqueue_shared.h \
 	dspsignal.h \
 	fastrpc_apps_user.h \
-	fastrpc_async.h \
 	fastrpc_cap.h \
 	fastrpc_common.h \
 	fastrpc_config.h \

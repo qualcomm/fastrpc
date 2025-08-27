@@ -108,12 +108,6 @@ int fastrpc_get_cap(uint32_t domain, uint32_t attributeID, uint32_t *capability)
       }
       goto bail;
    }
-   if(attributeID == ASYNC_FASTRPC_SUPPORT) {
-      if(!is_async_fastrpc_supported() ) {
-        *capability = 0;
-        goto bail;
-      }
-   }
 
    VERIFY(AEE_SUCCESS == (nErr = fastrpc_session_open(dom, &dev)));
    errno = 0;
