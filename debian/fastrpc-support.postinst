@@ -1,0 +1,16 @@
+#!/bin/sh
+
+set -e
+
+if [ "$1" = "configure" ]; then
+    if ! getent group fastrpc >/dev/null 2>&1; then
+        addgroup --system --quiet fastrpc
+    fi
+    if ! getent passwd fastrpc >/dev/null 2>&1; then
+        adduser --system --quiet --ingroup fastrpc \
+            --no-create-home --home /nonexistent   \
+            fastrpc
+    fi
+fi
+
+#DEBHELPER#

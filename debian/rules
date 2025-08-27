@@ -2,3 +2,6 @@
 
 %:
 	dh $@ --with autoreconf
+
+override_dh_installsystemd:
+	dh_installsystemd -p fastrpc-support adsprpcd.service cdsprpcd.service

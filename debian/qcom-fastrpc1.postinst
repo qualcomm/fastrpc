@@ -2,14 +2,6 @@
 
 set -e
 
-if ! getent group fastrpc >/dev/null 2>&1; then
-    addgroup --system --quiet fastrpc
-fi
-if ! getent passwd fastrpc >/dev/null 2>&1; then
-    adduser --system --quiet --ingroup fastrpc		\
-	    --no-create-home --home /nonexistent	\
-	    fastrpc
-fi
 if [ "$1" = "configure" ]; then
     if which udevadm >/dev/null 2>&1 ; then
         udevadm control --reload-rules || true
@@ -19,64 +11,3 @@ if [ "$1" = "configure" ]; then
         udevadm trigger --subsystem-match=dma_heap --action=add || true
     fi
 fi
-# Automatically added by dh_installsystemd/13.14.1ubuntu5
-if [ "$1" = "configure" ] || [ "$1" = "abort-upgrade" ] || [ "$1" = "abort-deconfigure" ] || [ "$1" = "abort-remove" ] ; then
-	# The following line should be removed in trixie or trixie+1
-	deb-systemd-helper unmask 'adsprpcd.service' >/dev/null || true
-
-	# was-enabled defaults to true, so new installations run enable.
-	if deb-systemd-helper --quiet was-enabled 'adsprpcd.service'; then
-		# Enables the unit on first installation, creates new
-		# symlinks on upgrades if the unit file has changed.
-		deb-systemd-helper enable 'adsprpcd.service' >/dev/null || true
-	else
-		# Update the statefile to add new symlinks (if any), which need to be
-		# cleaned up on purge. Also remove old symlinks.
-		deb-systemd-helper update-state 'adsprpcd.service' >/dev/null || true
-	fi
-fi
-# End automatically added section
-# Automatically added by dh_installsystemd/13.14.1ubuntu5
-if [ "$1" = "configure" ] || [ "$1" = "abort-upgrade" ] || [ "$1" = "abort-deconfigure" ] || [ "$1" = "abort-remove" ] ; then
-	if [ -d /run/systemd/system ]; then
-		systemctl --system daemon-reload >/dev/null || true
-		if [ -n "$2" ]; then
-			_dh_action=restart
-		else
-			_dh_action=start
-		fi
-		deb-systemd-invoke $_dh_action 'adsprpcd.service' >/dev/null || true
-	fi
-fi
-# End automatically added section
-# Automatically added by dh_installsystemd/13.14.1ubuntu5
-if [ "$1" = "configure" ] || [ "$1" = "abort-upgrade" ] || [ "$1" = "abort-deconfigure" ] || [ "$1" = "abort-remove" ] ; then
-	# The following line should be removed in trixie or trixie+1
-	deb-systemd-helper unmask 'cdsprpcd.service' >/dev/null || true
-
-	# was-enabled defaults to true, so new installations run enable.
-	if deb-systemd-helper --quiet was-enabled 'cdsprpcd.service'; then
-		# Enables the unit on first installation, creates new
-		# symlinks on upgrades if the unit file has changed.
-		deb-systemd-helper enable 'cdsprpcd.service' >/dev/null || true
-	else
-		# Update the statefile to add new symlinks (if any), which need to be
-		# cleaned up on purge. Also remove old symlinks.
-		deb-systemd-helper update-state 'cdsprpcd.service' >/dev/null || true
-	fi
-fi
-# End automatically added section
-# Automatically added by dh_installsystemd/13.14.1ubuntu5
-if [ "$1" = "configure" ] || [ "$1" = "abort-upgrade" ] || [ "$1" = "abort-deconfigure" ] || [ "$1" = "abort-remove" ] ; then
-	if [ -d /run/systemd/system ]; then
-		systemctl --system daemon-reload >/dev/null || true
-		if [ -n "$2" ]; then
-			_dh_action=restart
-		else
-			_dh_action=start
-		fi
-		deb-systemd-invoke $_dh_action 'cdsprpcd.service' >/dev/null || true
-	fi
-fi
-# End automatically added section
-
