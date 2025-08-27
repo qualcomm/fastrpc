@@ -12,7 +12,7 @@ Description: Qualcomm FastRPC applications and library
  function calls between the CPU and aDSP.
 Section: libs
 Priority: optional
-Depends: ${misc:Depends}, libc6 (>= 2.34), qcom-libdmabufheap (>= 1.0.0)
+Depends: ${misc:Depends}, ${shlibs:Depends}, qcom-libdmabufheap (>= 1.0.0)
 
 Package: qcom-fastrpc-dev
 Architecture: arm64
