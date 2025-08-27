@@ -2,7 +2,6 @@
 Description=cdsprpc Service
 Requires=dev-fastrpc\x2dcdsp\x2dsecure.device
 After=dev-fastrpc\x2dcdsp\x2dsecure.device
-SourcePath=/usr/bin/cdsprpcd
 
 [Service]
 User=fastrpc
