@@ -1,3 +1,4 @@
+usr/bin/fastrpc_test
 usr/lib/${DEB_HOST_MULTIARCH}/fastrpc_test/libcalculator.so
 usr/lib/${DEB_HOST_MULTIARCH}/fastrpc_test/libhap_example.so
 usr/lib/${DEB_HOST_MULTIARCH}/fastrpc_test/libmultithreading.so
