@@ -7,18 +7,8 @@ After=dev-fastrpc\x2dcdsp\x2dsecure.device
 User=fastrpc
 Group=fastrpc
 Restart=always
-ExecStartPre=+/bin/bash -c 'if [ -L /usr/lib/dsp/cdsp ]; then rm /usr/lib/dsp/cdsp; fi'
-ExecStartPre=+/bin/mkdir -p /usr/lib/dsp/cdsp
-ExecStartPre=+/bin/bash -c 'SOC=$(cat /sys/devices/soc0/soc_id); \
-if [ "$SOC" = "667" ] || [ "$SOC" = "533" ] || [ "$SOC" = "534" ] || [ "$SOC" = "676" ]; then \
-    if [ -L /usr/lib/dsp/cdsp1 ]; then rm /usr/lib/dsp/cdsp1; fi; \
-    /bin/mkdir -p /usr/lib/dsp/cdsp1; \
-    ln -sf /usr/share/qcom/sa8775p/Qualcomm/SA8775P-RIDE/dsp/cdsp/* /usr/lib/dsp/cdsp; \
-    ln -sf /usr/share/qcom/sa8775p/Qualcomm/SA8775P-RIDE/dsp/cdsp1/* /usr/lib/dsp/cdsp1; \
-elif [ "$SOC" = "497" ] || [ "$SOC" = "498" ] || [ "$SOC" = "475" ] || [ "$SOC" = "515" ] || [ "$SOC" = "575" ]; then \
-    ln -sf /usr/share/qcom/qcm6490/Thundercomm/RB3gen2/dsp/cdsp/* /usr/lib/dsp/cdsp; \
-fi'
-ExecStart=/usr/bin/cdsprpcd
+Type=exec
+ExecStart=/bin/sh -c 'source /usr/share/fastrpc/guess-dsp.sh && /usr/bin/cdsprpcd'
 
 [Install]
 WantedBy=multi-user.target

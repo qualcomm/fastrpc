@@ -7,15 +7,8 @@ After=dev-fastrpc\x2dadsp\x2dsecure.device
 User=fastrpc
 Group=fastrpc
 Restart=always
-ExecStartPre=+/bin/bash -c 'if [ -L /usr/lib/dsp/adsp ]; then rm /usr/lib/dsp/adsp; fi'
-ExecStartPre=+/bin/mkdir -p /usr/lib/dsp/adsp
-ExecStartPre=+/bin/bash -c 'SOC=$(cat /sys/devices/soc0/soc_id); \
-if [ "$SOC" = "667" ] || [ "$SOC" = "533" ] || [ "$SOC" = "534" ] || [ "$SOC" = "676" ]; then \
-    ln -sf /usr/share/qcom/sa8775p/Qualcomm/SA8775P-RIDE/dsp/adsp/* /usr/lib/dsp/adsp; \
-elif [ "$SOC" = "497" ] || [ "$SOC" = "498" ] || [ "$SOC" = "475" ] || [ "$SOC" = "515" ] || [ "$SOC" = "575" ]; then \
-    ln -sf /usr/share/qcom/qcm6490/Thundercomm/RB3gen2/dsp/adsp/* /usr/lib/dsp/adsp; \
-fi'
-ExecStart=/usr/bin/adsprpcd
+Type=exec
+ExecStart=/bin/sh -c 'source /usr/share/fastrpc/guess-dsp.sh && /usr/bin/adsprpcd'
 
 [Install]
 WantedBy=multi-user.target
