@@ -1,6 +1,6 @@
 debian/adsprpcd.service usr/lib/systemd/system/
 debian/cdsprpcd.service usr/lib/systemd/system/
 debian/guess-dsp.sh usr/share/fastrpc/
-usr/bin/adsprpcd
-usr/bin/cdsprpcd
-usr/bin/sdsprpcd
+usr/bin/adsprpcd usr/sbin
+usr/bin/cdsprpcd usr/sbin
+usr/bin/sdsprpcd usr/sbin

@@ -8,7 +8,7 @@ User=fastrpc
 Group=fastrpc
 Restart=always
 Type=exec
-ExecStart=/bin/sh -c 'source /usr/share/fastrpc/guess-dsp.sh && /usr/bin/cdsprpcd'
+ExecStart=/bin/sh -c 'source /usr/share/fastrpc/guess-dsp.sh && /usr/sbin/cdsprpcd'
 
 [Install]
 WantedBy=multi-user.target
