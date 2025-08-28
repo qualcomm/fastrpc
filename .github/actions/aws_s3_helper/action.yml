@@ -1,0 +1,99 @@
+name: AWS S3 Helper
+description: Upload and download files from AWS S3
+
+inputs:
+  s3_bucket:
+    description: S3 Bucket Name
+    required: true
+  local_file:
+    description: Local file paths. For 'multi-upload', this should be a path to a file containing a list of local file paths (one per line). For 'single-upload', it's a single local file path.
+    required: false
+    default: ../artifacts/file_list.txt
+  download_file:
+    description: S3 path of the file to download (e.g., path/to/your/file.txt). Used only in 'download' mode.
+    required: false
+    default: ''
+  download_location:
+    description: Local directory where the downloaded file should be placed. Used only in 'download' mode.
+    required: false
+    default: .
+  mode:
+    description: Mode of operation (single-upload, multi-upload, download)
+    required: true
+    default: single-upload
+  machine:
+    description: Target machine name or identifier, used to organize uploads in S3.
+    type: string
+    required: true
+
+outputs:
+  presigned_url:
+    description: Pre-signed URL for the single uploaded file (only available in 'single-upload' mode).
+    value: ${{ steps.sync-data.outputs.presigned_url }}
+
+runs:
+  using: "composite"
+  steps:
+    - name: Sync Data
+      id: sync-data
+      shell: bash
+      env:
+        UPLOAD_LOCATION: ${{ github.repository_owner }}/${{ github.event.repository.name }}/${{ github.workflow }}/${{ github.head_ref != '' && github.head_ref || github.run_id }}/${{ inputs.machine }}/
+      run: |
+        echo "::group::$(printf '__________ %-100s' 'Process' | tr ' ' _)"
+        case "${{ inputs.mode }}" in
+          multi-upload)
+            echo "Uploading files to S3 bucket..."
+            first_line=true
+            # Start the JSON object
+            mkdir -p "${{ github.workspace }}/${{ inputs.machine }}"
+            echo "{" > ${{ github.workspace }}/${{ inputs.machine }}/presigned_urls_${{ inputs.machine }}.json
+            while IFS= read -r file; do
+              if [ -f "$file" ]; then
+                echo "Uploading $file..."
+                aws s3 cp "$file" s3://${{ inputs.s3_bucket }}/${{ env.UPLOAD_LOCATION }}
+                echo "Uploaded $file to s3://${{ inputs.s3_bucket }}/${{ env.UPLOAD_LOCATION }}"
+                echo "Creating Pre-signed URL for $file..."
+                filename=$(basename "$file")
+                presigned_url=$(aws s3 presign s3://${{ inputs.s3_bucket }}/${{ env.UPLOAD_LOCATION }}$filename --expires-in 259200)
+                if [ "$first_line" = true ]; then
+                  first_line=false
+                else
+                  echo "," >> ${{ github.workspace }}/${{ inputs.machine }}/presigned_urls_${{ inputs.machine }}.json
+                fi
+                # Append the pre-signed URL to the file
+                echo " \"${file}\": \"${presigned_url}\"" >> ${{ github.workspace }}/${{ inputs.machine }}/presigned_urls_${{ inputs.machine }}.json
+                echo "Pre-signed URL for $file: $presigned_url"
+              else
+                echo "Warning: $file does not exist or is not a regular file."
+              fi
+            done < "${{ inputs.local_file }}"
+            # Close the JSON object
+            echo "}" >> ${{ github.workspace }}/${{ inputs.machine }}/presigned_urls_${{ inputs.machine }}.json
+            ;;
+          single-upload)
+            echo "Uploading single file to S3 bucket..."
+            aws s3 cp "${{ inputs.local_file }}" s3://${{ inputs.s3_bucket }}/${{ env.UPLOAD_LOCATION }}
+            echo "Uploaded ${{ inputs.local_file }} to s3://${{ inputs.s3_bucket }}/${{ env.UPLOAD_LOCATION }}"
+            echo "Creating Pre-signed URL for ${{ inputs.local_file }}..."
+            presigned_url=$(aws s3 presign s3://${{ inputs.s3_bucket }}/${{ env.UPLOAD_LOCATION }}${{ inputs.local_file }} --expires-in 259200)
+            echo "presigned_url=${presigned_url}" >> "$GITHUB_OUTPUT"
+            ;;
+          download)
+            #Download The required file from s3
+            echo "Downloading files from S3 bucket..."
+            aws s3 cp s3://${{ inputs.s3_bucket }}/${{ inputs.download_file }} ${{ inputs.download_location }}
+            ;;
+          *)
+            echo "Invalid mode. Use 'upload' or 'download'."
+            exit 1
+            ;;
+        esac
+
+    - name: Upload artifacts
+      if: ${{ inputs.mode == 'multi-upload' }}
+      uses: actions/upload-artifact@v4
+      with:
+        name: presigned_urls_${{ inputs.machine }}.json
+        path: ${{ github.workspace }}/${{ inputs.machine }}/presigned_urls_${{ inputs.machine }}.json
+        retention-days: 3

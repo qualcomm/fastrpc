@@ -1,0 +1,54 @@
+name: Load Parameters
+description: |
+  This composite action loads build parameters from a `MACHINES.json` file.
+  It parses the JSON file to create two matrices:
+  - `build_matrix`: A slimmed-down matrix containing only 'machine' and 'firmware' for better visibility in job names.
+  - `full_matrix`: A complete matrix including 'machine', 'firmware', and 'lavaname' for passing all necessary details to test jobs.
+  It expects the `MACHINES.json` file to be located at `ci/MACHINES.json` relative to the workspace root.
+  Each entry in `MACHINES.json` should be a key-value pair where the key is the machine name
+  and the value is an array `[firmware, lavaname]`.
+
+outputs:
+  build_matrix:
+    description: Build matrix
+    value: ${{ steps.set-matrix.outputs.build_matrix }}
+
+  full_matrix:
+    description: full matrix containing lava devails
+    value: ${{ steps.set-matrix.outputs.full_matrix }}
+
+runs:
+  using: "composite"
+  steps:
+    - name: Set Build Matrix
+      id: set-matrix
+      uses: actions/github-script@v7
+      with:
+        script: |
+          const fs = require('fs');
+          const path = require('path');
+          const filePath = path.join(process.env.GITHUB_WORKSPACE, 'ci', 'MACHINES.json');
+          let file;
+          try {
+            if (!fs.existsSync(filePath)) {
+              core.setFailed(`MACHINES.json not found at ${filePath}`);
+              return;
+            }
+            file = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
+          } catch (err) {
+            core.setFailed(`Failed to load or parse MACHINES.json: ${err.message}`);
+            return;
+          }
+          # Slim matrix for better job visibility
+          const slim_matrix = Object.entries(file).map(([machine, [firmware]]) => ({ machine, firmware }));
+          core.setOutput('build_matrix', JSON.stringify(slim_matrix));
+          console.log(slim_matrix);
+
+          # Full matrix to pass to test jobs
+          const complete_matrix = Object.entries(file).map(([machine, [firmware, lavaname]]) => ({
+            machine,
+            firmware,
+            lavaname
+          }));
+          core.setOutput('full_matrix', JSON.stringify(complete_matrix));
+          console.log(complete_matrix);

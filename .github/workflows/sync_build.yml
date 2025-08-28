@@ -1,0 +1,107 @@
+name: Sync and build 
+description: sync and builds fastrpc code for a specified machine using a Docker image
+
+on:
+  workflow_call:
+    inputs:
+      docker_image:
+        description: Docker image
+        type: string
+        required: true
+      machine:
+        description: Target machine name
+        type: string
+        required: true
+      firmware:
+        description: Firmware identifier
+        type: string
+        required: true
+
+jobs:
+  build:
+    runs-on:
+      group: GHA-fastrpc-Prd-SelfHosted-RG
+      labels: [ self-hosted, fastrpc-prd-u2404-x64-large-od-ephem ] 
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          # fetch-depth: 1 is generally sufficient for builds and is faster than 0 (full history).
+          # Change to 0 if your build process strictly requires the full Git history.
+          fetch-depth: 1
+
+      - name: Build fastrpc docker image
+        uses: qualcomm/fastrpc/.github/actions/build_docker_image@main
+        with:
+          image: ${{ inputs.docker_image }}
+
+      - name: Sync codebase
+        id: sync
+        uses: qualcomm/fastrpc/.github/actions/sync@main
+        with:
+          machine: ${{ inputs.machine }}
+          firmware: ${{ inputs.firmware }}
+
+      - name: Build workspace
+        id: build_workspace
+        uses: qualcomm/fastrpc/.github/actions/build@main
+        with:
+          docker_image: ${{ inputs.docker_image }}
+          workspace_path: ${{ steps.sync.outputs.workspace_path }}
+
+      - name: Create file list for artifacts upload
+        run: |
+          workspace=${{ steps.sync.outputs.workspace_path }}
+
+          # Create the tarball in the root of the GitHub workspace
+          cd "$workspace/kobj/tar-install"
+          tar -cJf "${{ github.workspace }}/modules.tar.xz" lib/modules/
+          
+          # Populate the file_list.txt with paths to artifacts
+          cat <<EOF > "$workspace/artifacts/file_list.txt"
+          ${{ github.workspace }}/modules.tar.xz
+          $workspace/kobj/arch/arm64/boot/Image
+          $workspace/kobj/vmlinux
+          $workspace/artifacts/ramdisk_fastrpc.gz
+          $workspace/kobj/arch/arm64/boot/dts/qcom/${{ inputs.machine }}.dtb
+          EOF
+
+          echo "Generated artifact list:"
+          cat "$workspace/artifacts/file_list.txt"
+
+      - name: Upload artifacts
+        uses: qualcomm/fastrpc/.github/actions/aws_s3_helper@main
+        with:
+          s3_bucket: qli-prd-fastrpc-gh-artifacts
+          # local_file points to the list of files to upload
+          local_file: ${{ steps.sync.outputs.workspace_path }}/artifacts/file_list.txt
+          mode: multi-upload
+          machine: ${{ inputs.machine }}
+
+      - name: Clean up
+        # This step is crucial for self-hosted runners to manage disk space.
+        run: |
+          rm -rf "${{ steps.sync.outputs.workspace_path }}/artifacts" || true
+          rm -rf "${{ steps.sync.outputs.workspace_path }}/fastrpc_libs" || true
+          rm -rf "${{ steps.sync.outputs.workspace_path }}/gcc-linaro-7.5.0-2019.12-i686_aarch64-linux-gnu" || true
+          rm -rf "${{ steps.sync.outputs.workspace_path }}/kobj" || true
+          rm -f "${{ github.workspace }}/modules.tar.xz" || true # Clean up the tarball from the root workspace
+
+      - name: Update summary
+        # This step always runs to provide feedback on the build status.
+        if: success() || failure()
+        shell: bash
+        run: |
+          if [ "${{ steps.build_workspace.outcome }}" == 'success' ]; then
+            echo "Build was successful"
+            summary=":heavy_check_mark: Build Success"
+          else
+            echo "Build failed"
+            summary=":x: Build Failed"
+          fi
+          SUMMARY='
+          <details><summary><i>Build Summary</i></summary>
+          '${summary}'
+          </details>
+          '
+          echo -e "$SUMMARY" >> "$GITHUB_STEP_SUMMARY"

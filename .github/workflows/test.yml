@@ -1,0 +1,142 @@
+name: test
+
+description: |
+  Run tests on LAVA for a specified machine using a Docker image.
+  This reusable GitHub Actions workflow executes FastRPC tests on LAVA infrastructure.
+  It leverages a Docker image for test execution and supports multi-target builds via a matrix strategy.
+  The workflow automates job creation, submission, and result validation on LAVA,
+  providing a streamlined testing process.
+  Designed to be triggered by other workflows, it offers a summary of test outcomes
+  with direct links to LAVA job results, enhancing traceability and debugging.
+
+on:
+  workflow_call:
+    inputs:
+      docker_image:
+        description: Docker image
+        type: string
+        required: true
+        default: fastrpc-image:latest
+
+      build_matrix:
+        description: Build matrix for multi target builds
+        type: string
+        required: true
+
+      full_matrix:
+        description: Full matrix containing lava description
+        type: string
+        required: true
+
+jobs:
+  test:
+    runs-on:
+      group: GHA-fastrpc-Prd-SelfHosted-RG
+      labels: [ self-hosted, fastrpc-prd-u2404-x64-large-od-ephem ]
+    strategy:
+      fail-fast: false
+      matrix:
+        build_matrix: ${{ fromJson(inputs.build_matrix) }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref }}
+          fetch-depth: 0
+
+      - name: Build fastrpc docker image
+        uses: qualcomm/fastrpc/.github/actions/build_docker_image@main
+        with:
+          image: ${{ inputs.docker_image }}
+
+      - name: Download URLs list
+        uses: actions/download-artifact@v4
+        with:
+          name: presigned_urls_${{ matrix.build_matrix.machine }}.json
+          merge-multiple: true
+          path: ${{ github.workspace }}
+
+      - name: Clone lava job render scripts
+        run: cd .. && git clone https://github.com/qualcomm-linux/job_render
+
+      - name: Extract the LAVA machine name
+        id: get_lavaname
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fullMatrix = JSON.parse(`${{ inputs.full_matrix }}`);
+            const currentMachine = `${{ matrix.build_matrix.machine }}`;
+
+            const entry = fullMatrix.find(item => item.machine === currentMachine);
+            if (!entry) {
+              core.setFailed(`No entry found in full matrix for machine: ${currentMachine}`);
+              return;
+            }
+
+            const lavaname = entry.lavaname;
+            console.log(`Lavaname for ${currentMachine} is ${lavaname}`);
+            core.setOutput("LAVANAME", lavaname);
+
+      - name: Create fastrpc - lava job definition
+        uses: qualcomm/fastrpc/.github/actions/lava_job_render@main
+        id: create_job_definition
+        with:
+          docker_image: ${{ inputs.docker_image }}
+        env:
+          FIRMWARE: ${{ matrix.build_matrix.firmware }}
+          MACHINE: ${{ matrix.build_matrix.machine }}
+          LAVA_NAME: ${{ steps.get_lavaname.outputs.LAVANAME }}
+
+      - name: Submit lava job
+        id: submit_job
+        run: |
+          cd ../job_render
+          job_id=$(docker run -i --rm --workdir="$PWD" -v "$(dirname $PWD)":"$(dirname $PWD)" ${{ inputs.docker_image }} sh -c "lavacli identities add --token ${{ secrets.LAVA_OSS_TOKEN }} --uri https://lava-oss.qualcomm.com/RPC2 --username ${{ secrets.LAVA_OSS_USER }} production && lavacli -i production jobs submit ./renders/lava_job_definition.yaml")
+          job_url="https://lava-oss.qualcomm.com/scheduler/job/$job_id"
+          echo "job_id=$job_id" >> $GITHUB_OUTPUT
+          echo "job_url=$job_url" >> $GITHUB_OUTPUT
+          echo "Lava Job: $job_url"
+          echo "JOB_ID=$job_id" >> $GITHUB_ENV
+
+      - name: Check lava job results
+        id: check_job
+        run: |
+          STATE=""
+          while [ "$STATE" != "Finished" ]; do
+            state=$(docker run -i --rm --workdir="$PWD" -v "$(dirname $PWD)":"$(dirname $PWD)" ${{ inputs.docker_image }} sh -c "lavacli identities add --token ${{ secrets.LAVA_OSS_TOKEN }} --uri https://lava-oss.qualcomm.com/RPC2 --username ${{ secrets.LAVA_OSS_USER }} production && lavacli -i production jobs show $JOB_ID" | grep state)
+            STATE=$(echo "$state" | cut -d':' -f2 | sed 's/^ *//;s/ *$//')
+            echo "Current status: $STATE"
+            sleep 30
+          done
+          health=$(docker run -i --rm --workdir="$PWD" -v "$(dirname $PWD)":"$(dirname $PWD)" ${{ inputs.docker_image }} sh -c "lavacli identities add --token ${{ secrets.LAVA_OSS_TOKEN }} --uri https://lava-oss.qualcomm.com/RPC2 --username ${{ secrets.LAVA_OSS_USER }} production && lavacli -i production jobs show $JOB_ID" | grep Health)
+          HEALTH=$(echo "$health" | cut -d':' -f2 | sed 's/^ *//;s/ *$//')
+          if [[ "$HEALTH" == "Complete" ]]; then
+            echo "Lava job passed."
+            summary=":heavy_check_mark: Lava job passed."
+            echo "summary=$summary" >> $GITHUB_OUTPUT
+            exit 0
+          else
+            echo "Lava job failed."
+            summary=":x: Lava job failed."
+            echo "summary=$summary" >> $GITHUB_OUTPUT
+            exit 1
+          fi
+
+      - name: Update summary
+        if: success() || failure()
+        shell: bash
+        run: |
+          if [ "${{ steps.create_job_definition.conclusion }}" == 'failure' ]; then
+            status=":x: Test job failed"
+          else
+            status="${{ steps.check_job.outputs.summary }}"
+            job_url="${{ steps.submit_job.outputs.job_url }}"
+            job_id="${{ steps.submit_job.outputs.job_id }}"
+          fi
+          SUMMARY='
+          <details><summary><i>'${status}'</i></summary>
+          <br>
+          JOB ID: <a href="${job_url}">'${job_id}'</a>
+          </details>
+          '
+          echo -e "$SUMMARY" >> $GITHUB_STEP_SUMMARY

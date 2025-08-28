@@ -1,0 +1,128 @@
+name: Sync workspace
+description: |
+  This composite action synchronizes a workspace by cleaning it up,
+  checking out necessary code repositories, and preparing a firmware
+  directory with required binaries. It clones and copies FastRPC hexagon
+  DSP binaries and Linux firmware (specifically QCOM firmware)
+  based on the provided `firmware` input. It also clones the
+  `qualcomm-linux/kernel` repository.
+  The action sets an output `workspace_path` to the GitHub workspace
+  directory.
+
+inputs:
+  machine:
+    description: Target machine name
+    type: string
+    required: true
+  firmware:
+    description: Firmware identifier
+    type: string
+    required: true
+
+outputs:
+  workspace_path:
+    description: Sync workspace path
+    value: ${{ steps.set-workspace.outputs.workspace }}
+
+runs:
+  using: "composite"
+  steps:
+    - name: Clean workspace
+      shell: bash
+      run: |
+        echo "Cleaning up workspace..."
+        rm -rf ${{ github.workspace }}/*
+        echo "Workspace cleaned successfully!"
+
+    - name: Checkout fastrpc code
+      uses: actions/checkout@v4
+
+    - name: Clone FastRPC hexagon DSP binaries repositories and copy Firmware
+      shell: bash
+      run: |
+        cd ${{ github.workspace }}
+        mkdir -p firmware_dir/usr/lib/dsp/
+
+        echo "Cloning FastRPC hexagon DSP binaries..."
+        git clone https://github.com/linux-msm/hexagon-dsp-binaries.git
+        cd hexagon-dsp-binaries
+        git fetch --all --tags --prune
+
+        TARGET="${{ inputs.firmware }}"
+        DSP_REF=""
+        CONFIG="config.txt"
+
+        echo "Searching FastRPC hexagon DSP binaries for target: $TARGET"
+        if [ ! -f "$CONFIG" ]; then
+          echo "Error: $CONFIG file not found in hexagon-dsp-binaries directory."
+          exit 1
+        fi
+        while read -r _ subdir dsp version; do
+          echo "DSP binaries for $dsp in $subdir - $version" 
+          if [[ "${subdir,,}" == */"${TARGET,,}" ]]; then
+            echo "Found matching DSP binaries for target '$TARGET': $subdir - $version"
+            echo "Copying DSP binaries for $dsp in $subdir/$version"
+            mkdir -p "../firmware_dir/usr/lib/dsp/${dsp}"
+            cp -rf "$subdir/$version/"* "../firmware_dir/usr/lib/dsp/${dsp}/"
+            echo "Copied DSP binaries for $dsp in ../firmware_dir/usr/lib/dsp/${dsp}"
+            DSP_REF="$version"
+            echo "${dsp}:${subdir}////${version}"
+          fi
+        done < <(grep "^Install:" "$CONFIG")
+        echo "DSP binaries copied successfully!"
+
+    - name: Clone Firmware binaries repositories and copy Firmware 
+      shell: bash
+      run: |
+        cd ${{ github.workspace }}
+        git clone https://git.kernel.org/pub/scm/linux/kernel/git/firmware/linux-firmware.git
+        TARGET_RAW="${{ inputs.firmware }}"
+        # Remove "-ride" suffix if present
+        TARGET="${TARGET_RAW%-ride}"
+
+        # Construct the source path for qcom firmware in the cloned linux-firmware repo
+        # It's usually under <cloned_repo_root>/qcom/<target>
+        LINUX_FIRMWARE_QCOM_PATH="linux-firmware/qcom/${TARGET}"
+
+        # Check if the target qcom firmware directory exists in the cloned repo
+        if [ ! -d "$LINUX_FIRMWARE_QCOM_PATH" ]; then
+          echo "ERROR: Directory '$LINUX_FIRMWARE_QCOM_PATH' not found in linux-firmware repo."
+          exit -1
+        else
+          # Create the destination directory in firmware_dir
+          mkdir -p "${{ github.workspace }}/firmware_dir/usr/lib/firmware/qcom/${TARGET}"
+          
+          # Copy the contents of the qcom target directory
+          # Use trailing slashes to copy contents, not the directory itself
+          cp -rf "${LINUX_FIRMWARE_QCOM_PATH}/"* "${{ github.workspace }}/firmware_dir/usr/lib/firmware/qcom/${TARGET}/"
+          echo "Copied QCOM firmware from '${LINUX_FIRMWARE_QCOM_PATH}' to '${{ github.workspace }}/firmware_dir/usr/lib/firmware/qcom/${TARGET}/' successfully!"
+        fi
+
+    - name: List all subdirectories and files in firmware_dir
+      shell: bash
+      run: |
+        cd ${{ github.workspace }}
+        echo "Listing contents of firmware_dir recursively..."
+        find firmware_dir -type d -print
+        find firmware_dir -type f -print
+
+    - name: Configure git
+      shell: bash
+      run: |
+        git config --global user.name "github-actions"
+        git config --global user.email "github-actions@github.com"
+
+    - name: Clone kernel repositories
+      shell: bash
+      run: |
+        cd ${{ github.workspace }}
+        git clone https://github.com/qualcomm-linux/kernel.git
+        cd kernel
+        git fetch origin
+        git checkout qcom-next
+
+    - name: Set workspace path
+      id: set-workspace
+      shell: bash
+      run: |
+          echo "workspace=${{ github.workspace }}" >> "$GITHUB_OUTPUT"
