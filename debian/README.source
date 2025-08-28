@@ -1,0 +1,23 @@
+The upstream fastrpc library comprises six shared libraries and one set
+of include files. The shared libraries are in pairs, supporting three
+classes of DSP. The shared libraries for each class support a common ABI
+that corresponds to the single API provided by the include files. The
+underlying implementation across the classes is actually the same.
+
+The common API and ABI support two separate methods: old and new. In the
+old method, the DSP to use is chosen by which of the three library
+classes you linked against at build time. In the new method, the caller
+specifies the DSP to use in the API call, and the underlying
+implementation is the same. It does not matter which shared library was
+linked against, but different builds already released by third parties
+may have used different ones.
+
+Therefore, and after discussion with upstream, it seems likely that if
+there is an ABI change, all sonames will change at once. There are no
+current plans to do this, but if it happens it is likely to be
+libfastrpc.so.2, bringing together the previous split. For this reason,
+bundling the different shared libraries into a single Debian package is
+safe, as permitted under Debian policy section 8.1.
+
+libfastrpc1 ships all six shared libraries, and libfastrpc-dev ships the
+six .so symlinks and the single set of headers.
