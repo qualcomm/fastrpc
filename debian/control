@@ -1,4 +1,4 @@
-Source: qcom-fastrpc1
+Source: fastrpc
 Maintainer: Ekansh Gupta <ekangupt@qti.qualcomm.com>
 Standards-Version: 4.6.2
 Section: misc

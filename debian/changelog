@@ -1,4 +1,4 @@
-qcom-fastrpc1 (1.0.0-8) UNRELEASED; urgency=medium
+fastrpc (1.0.0-8) UNRELEASED; urgency=medium
 
   * Refactor packaging for true source build.
 
