@@ -11,6 +11,14 @@ if [ "$1" = "configure" ]; then
             --no-create-home --home /nonexistent   \
             fastrpc
     fi
+
+    if which udevadm >/dev/null 2>&1 ; then
+        udevadm control --reload-rules || true
+        for f in $(find /dev -name 'fastrpc-*'); do
+            udevadm trigger --subsystem-match=misc --action=add --name-match=$f || true
+        done
+        udevadm trigger --subsystem-match=dma_heap --action=add || true
+    fi
 fi
 
 #DEBHELPER#

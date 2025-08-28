@@ -1,0 +1,11 @@
+SUBSYSTEM=="misc", KERNEL=="fastrpc-adsp-secure", TAG+="systemd"
+SUBSYSTEM=="misc", KERNEL=="fastrpc-cdsp-secure", TAG+="systemd"
+# device nodes used by fastrpc clients to allocate memory for use by DMA
+ACTION=="add", SUBSYSTEM=="dma_heap", KERNEL=="system", MODE="0660", RUN+="/bin/setfacl -m g:fastrpc:rw $env{DEVNAME}"
+ACTION=="add", SUBSYSTEM=="dma_heap", KERNEL=="qcom,system", MODE="0660", RUN+="/bin/setfacl -m g:fastrpc:rw $env{DEVNAME}"
+ACTION=="add" SUBSYSTEM=="misc", KERNEL=="fastrpc-adsp-secure", OWNER="fastrpc", GROUP="fastrpc", MODE="0640"
+ACTION=="add" SUBSYSTEM=="misc", KERNEL=="fastrpc-cdsp-secure", OWNER="fastrpc", GROUP="fastrpc", MODE="0640"
+ACTION=="add" SUBSYSTEM=="misc", KERNEL=="fastrpc-cdsp1-secure", OWNER="fastrpc", GROUP="fastrpc", MODE="0640"
+ACTION=="add" SUBSYSTEM=="misc", KERNEL=="fastrpc-adsp", OWNER="fastrpc", GROUP="fastrpc", MODE="0664"
+ACTION=="add" SUBSYSTEM=="misc", KERNEL=="fastrpc-cdsp", OWNER="fastrpc", GROUP="fastrpc", MODE="0664"
+ACTION=="add" SUBSYSTEM=="misc", KERNEL=="fastrpc-cdsp1", OWNER="fastrpc", GROUP="fastrpc", MODE="0664"
