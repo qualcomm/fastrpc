@@ -26,6 +26,9 @@ if [ -r /sys/firmware/devicetree/base/model ] ; then
 		*"Robotics RB5"*)
 			DSP_LIBRARY_PATH=/usr/share/qcom/sm8250/Thundercomm/RB5/dsp
 			;;
+		*"Robotics RB3gen2"*)
+			DSP_LIBRARY_PATH=/usr/share/qcom/qcm6490/Thundercomm/RB3gen2/dsp
+			;;
 	esac
 fi
 
