@@ -37,4 +37,4 @@ Description: Qualcomm FastRPC - support daemons and udev rules
  .
  This package provides the necessary support daemons used to supply object code
  to the DSPs and the udev rules to make the DSPs available to users.
-Depends: ${misc:Depends}, ${shlibs:Depends}, firmware-qcom-hlosfw (>= 1.0.r00078.0), adduser
+Depends: ${misc:Depends}, ${shlibs:Depends}, hexagon-dsp-binaries, adduser
