@@ -15,7 +15,7 @@ Description: Qualcomm FastRPC and library
  and their _default_listener counterparts.
 Section: libs
 Priority: optional
-Depends: ${misc:Depends}, ${shlibs:Depends}, qcom-libdmabufheap (>= 1.0.0)
+Depends: ${misc:Depends}, ${shlibs:Depends}
 
 Package: libfastrpc-dev
 Architecture: arm64
