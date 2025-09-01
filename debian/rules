@@ -5,3 +5,8 @@
 
 override_dh_installsystemd:
 	dh_installsystemd -p fastrpc-support adsprpcd.service cdsprpcd.service
+
+override_dh_strip:
+	# strip is unable to operate on these files that target the DSP, not
+	# the host
+	dh_strip -Xusr/share/fastrpc_test/

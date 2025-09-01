@@ -1,0 +1,10 @@
+usr/bin/fastrpc_test
+usr/lib/${DEB_HOST_MULTIARCH}/fastrpc_test/libcalculator.so
+usr/lib/${DEB_HOST_MULTIARCH}/fastrpc_test/libhap_example.so
+usr/lib/${DEB_HOST_MULTIARCH}/fastrpc_test/libmultithreading.so
+usr/share/fastrpc_test/v68/libcalculator_skel.so
+usr/share/fastrpc_test/v68/libhap_example_skel.so
+usr/share/fastrpc_test/v68/libmultithreading_skel.so
+usr/share/fastrpc_test/v75/libcalculator_skel.so
+usr/share/fastrpc_test/v75/libhap_example_skel.so
+usr/share/fastrpc_test/v75/libmultithreading_skel.so

@@ -38,3 +38,12 @@ Description: Qualcomm FastRPC - support daemons and udev rules
  This package provides the necessary support daemons used to supply object code
  to the DSPs and the udev rules to make the DSPs available to users.
 Depends: ${misc:Depends}, ${shlibs:Depends}, hexagon-dsp-binaries, adduser
+
+Package: fastrpc-tests
+Architecture: arm64
+Description: Qualcomm FastRPC - test programs
+ FastRPC is the Qualcomm-proprietary RPC mechanism used to enable remote
+ function calls between the CPU and aDSP. Development package.
+ .
+ This package provides the FastRPC test suite.
+Depends: ${misc:Depends}, ${shlibs:Depends}
