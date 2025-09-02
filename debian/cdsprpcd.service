@@ -1,0 +1,14 @@
+[Unit]
+Description=cdsprpc Service
+Requires=dev-fastrpc\x2dcdsp\x2dsecure.device
+After=dev-fastrpc\x2dcdsp\x2dsecure.device
+
+[Service]
+User=fastrpc
+Group=fastrpc
+Restart=always
+Type=exec
+ExecStart=/bin/sh -c '. /usr/share/fastrpc/guess-dsp.sh && /usr/sbin/cdsprpcd'
+
+[Install]
+WantedBy=multi-user.target

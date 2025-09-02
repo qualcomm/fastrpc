@@ -1,0 +1,4 @@
+# Debian Policy 8.1 allows multiple shared libraries to be shipped in the same
+# package, which is appropriate in this case; see README.source in the
+# packaging source tree.
+libfastrpc1 binary: package-name-doesnt-match-sonames

@@ -1,0 +1,62 @@
+fastrpc (1.0.0-8) UNRELEASED; urgency=medium
+
+  * Refactor packaging for true source build.
+
+ -- Robie Basak <robibasa@qti.qualcomm.com>  Wed, 06 Aug 2025 11:01:53 +0000
+
+qcom-fastrpc1 (1.0.0-7.1) noble; urgency=medium
+
+  * LOCAL: import .service files from 1.0.0-8
+  * LOCAL: make sure mkdir doesn't fail after updating
+
+ -- Krzysztof Adamski <krzysztof.adamski@canonical.com>  Tue, 22 Jul 2025 14:37:49 +0200
+
+qcom-fastrpc1 (1.0.0-7) noble; urgency=medium
+
+  * Fixed the Incorrect symlink creation by cdsprpcd service bug
+
+ -- Krzysztof Adamski <krzysztof.adamski@canonical.com>  Thu, 29 May 2025 18:42:08 +0200
+
+qcom-fastrpc1 (1.0.0-6) noble; urgency=medium
+
+  * Repackaged with deb2dsc:
+    - qcom-fastrpc1_1.0.0-6_arm64.deb
+    - qcom-fastrpc-dev_1.0.0-6_arm64.deb
+
+ -- Krzysztof Adamski <krzysztof.adamski@canonical.com>  Fri, 09 May 2025 09:17:07 +0200
+
+qcom-fastrpc1 (1.0.0-5) noble; urgency=medium
+
+  * Use soc_id instead of machine to choose proper dsp libs
+
+ -- Krzysztof Adamski <krzysztof.adamski@canonical.com>  Tue, 22 Apr 2025 15:20:30 +0200
+
+qcom-fastrpc1 (1.0.0-4) noble; urgency=medium
+
+  [ Michaël Blanc <michael.blanc@canonical.com> ]
+  * debian: Add udev rules for dma_heap kernel nodes
+
+ -- Krzysztof Adamski <krzysztof.adamski@canonical.com>  Wed, 16 Apr 2025 22:24:56 +0200
+
+qcom-fastrpc1 (1.0.0-3) noble; urgency=medium
+
+  * debian: fix deps
+  * Multi device dsp firmware support
+
+ -- Krzysztof Adamski <krzysztof.adamski@canonical.com>  Mon, 14 Apr 2025 19:44:57 +0200
+
+qcom-fastrpc1 (1.0.0-1) noble; urgency=medium
+
+  * Repackaged with deb2dsc:
+    - qcom-fastrpc1_1.0.0_arm64.deb
+    - qcom-fastrpc-dev_1.0.0_arm64.deb
+
+ -- Krzysztof Adamski <krzysztof.adamski@canonical.com>  Tue, 08 Apr 2025 13:03:15 +0200
+
+qcom-fastrpc (1.0-1) noble; urgency=medium
+
+  * Repackaged with deb2dsc:
+    - qcom-fastrpc-dev_1.0-1_arm64.deb
+    - qcom-fastrpc_1.0-1_arm64.deb
+
+ -- Krzysztof Adamski <krzysztof.adamski@canonical.com>  Wed, 26 Feb 2025 15:29:56 +0100

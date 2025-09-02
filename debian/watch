@@ -1,0 +1,2 @@
+version=4
+https://github.com/qualcomm/fastrpc/tags .*/v?(\d.*).tar.gz

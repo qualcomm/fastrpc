@@ -1,0 +1,24 @@
+#!/bin/sh
+
+set -e
+
+if [ "$1" = "configure" ]; then
+    if ! getent group fastrpc >/dev/null 2>&1; then
+        addgroup --system --quiet fastrpc
+    fi
+    if ! getent passwd fastrpc >/dev/null 2>&1; then
+        adduser --system --quiet --ingroup fastrpc \
+            --no-create-home --home /nonexistent   \
+            fastrpc
+    fi
+
+    if which udevadm >/dev/null 2>&1 ; then
+        udevadm control --reload-rules || true
+        for f in $(find /dev -name 'fastrpc-*'); do
+            udevadm trigger --subsystem-match=misc --action=add --name-match=$f || true
+        done
+        udevadm trigger --subsystem-match=dma_heap --action=add || true
+    fi
+fi
+
+#DEBHELPER#

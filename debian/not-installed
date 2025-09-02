@@ -1,0 +1,6 @@
+usr/lib/${DEB_HOST_MULTIARCH}/libadsp_default_listener.la
+usr/lib/${DEB_HOST_MULTIARCH}/libadsprpc.la
+usr/lib/${DEB_HOST_MULTIARCH}/libcdsp_default_listener.la
+usr/lib/${DEB_HOST_MULTIARCH}/libcdsprpc.la
+usr/lib/${DEB_HOST_MULTIARCH}/libsdsp_default_listener.la
+usr/lib/${DEB_HOST_MULTIARCH}/libsdsprpc.la

@@ -1,0 +1,73 @@
+Author: Robie Basak <robie.basak@oss.qualcomm.com>
+Description: find test files in package-installed locations
+Last-Update: 2025-09-02
+Forwarded: no
+
+--- a/configure.ac
++++ b/configure.ac
+@@ -21,6 +21,9 @@
+ AM_CONDITIONAL([ANDROID_CC],
+ [test "$compile_for_android" = yes])
+ 
++eval_libdir=`eval echo "$libdir"`
++AC_DEFINE_UNQUOTED([LIBDIR], ["$eval_libdir"], [Installation library directory])
++
+ # Add shared object versioning
+ m4_define([LT_MAJOR], [1])
+ m4_define([LT_MINOR], [0])
+--- a/test/fastrpc_test.c
++++ b/test/fastrpc_test.c
+@@ -11,6 +11,8 @@
+ #include <errno.h>
+ #include <limits.h>  // For PATH_MAX
+ 
++#include "config.h"
++
+ typedef int (*run_test_t)(int domain_id, bool is_unsignedpd_enabled);
+ 
+ static void print_usage() {
+@@ -27,8 +29,6 @@
+            "    0: Run on signed PD.\n"
+            "    1: Run on unsigned PD.\n"
+            "        Default Value: 1\n"
+-           "-t target: Specify the target platform (android or linux).\n"
+-           "    Default Value: linux\n"
+            "-a arch_version: Specify the architecture version (v68 or v75).\n"
+            "    Default Value: v68\n"
+     );
+@@ -59,8 +59,8 @@
+                 is_unsignedpd_enabled = atoi(optarg) != 0;
+                 break;
+             case 't':
+-                target = optarg;
+-                break;
++                printf("\nERROR: -t cannot be used on this packaged build\n");
++                return -1;
+             case 'a':
+                 arch_version = optarg;
+                 if (strcmp(arch_version, "v68") != 0 && strcmp(arch_version, "v75") != 0) {
+@@ -76,7 +76,7 @@
+     }
+ 
+     // Construct the absolute library path
+-    snprintf(abs_lib_path, sizeof(abs_lib_path), "%s", target);
++    snprintf(abs_lib_path, sizeof(abs_lib_path), "%s", LIBDIR "/fastrpc_test");
+ 
+     if (realpath(abs_lib_path, abs_lib_path) == NULL) {
+         fprintf(stderr, "Error resolving path %s: %s\n", abs_lib_path, strerror(errno));
+@@ -84,7 +84,7 @@
+     }
+ 
+     // Construct the absolute DSP library path
+-    snprintf(dsp_lib_path, sizeof(dsp_lib_path), "%s", arch_version);
++    snprintf(dsp_lib_path, sizeof(dsp_lib_path), "/usr/share/fastrpc_test/%s", arch_version);
+ 
+     if (realpath(dsp_lib_path, dsp_lib_path) == NULL) {
+         fprintf(stderr, "Error resolving path %s: %s\n", dsp_lib_path, strerror(errno));
+@@ -147,4 +147,4 @@
+     }
+ 
+     return nErr;
+-}
+\ No newline at end of file
++}
