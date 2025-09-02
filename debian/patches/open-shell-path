@@ -1,0 +1,55 @@
+Author: Robie Basak <robie.basak@oss.qualcomm.com>
+Description: Use env var DSP_LIBRARY_PATH to find libraries
+ This is set by guess-dsp.sh (currently in packaging) according to the DSP
+ found on the hardware to the appropriate FHS path as provided by the
+ hexagon-dsp-binaries package.
+Forwarded: no
+Last-Update: 2025-09-02
+
+--- a/src/fastrpc_apps_user.c
++++ b/src/fastrpc_apps_user.c
+@@ -3452,6 +3452,12 @@
+   int nErr = AEE_SUCCESS;
+   int domain = GET_DOMAIN_FROM_EFFEC_DOMAIN_ID(domain_id);
+   const char *shell_name = SIGNED_SHELL;
++  const char *vendor_dsp_location = NULL;
++
++  vendor_dsp_location = getenv("DSP_LIBRARY_PATH");
++  if (!vendor_dsp_location) {
++    vendor_dsp_location = VENDOR_DSP_LOCATION;
++  }
+ 
+   if (1 == unsigned_shell) {
+     shell_name = UNSIGNED_SHELL;
+@@ -3491,11 +3497,11 @@
+     nErr = apps_std_fopen(absName, "r", fh);
+   }
+   if (nErr) {
+-    absNameLen = strlen(VENDOR_DSP_LOCATION) + shell_absNameLen + 1;
++    absNameLen = strlen(vendor_dsp_location) + shell_absNameLen + 1;
+     VERIFYC(NULL !=
+                 (absName = (char *)realloc(absName, sizeof(char) * absNameLen)),
+             AEE_ENOMEMORY);
+-    strlcpy(absName, VENDOR_DSP_LOCATION, absNameLen);
++    strlcpy(absName, vendor_dsp_location, absNameLen);
+     strlcat(absName, shell_absName, absNameLen);
+ 
+     nErr = apps_std_fopen(absName, "r", fh);
+@@ -3504,7 +3510,7 @@
+       VERIFYC(NULL != (absName =
+                            (char *)realloc(absName, sizeof(char) * absNameLen)),
+               AEE_ENOMEMORY);
+-      strlcpy(absName, VENDOR_DSP_LOCATION, absNameLen);
++      strlcpy(absName, vendor_dsp_location, absNameLen);
+       strlcat(absName, SUBSYSTEM_NAME[domain], absNameLen);
+       strlcat(absName, "/", absNameLen);
+       strlcat(absName, shell_absName, absNameLen);
+@@ -3535,7 +3541,7 @@
+       FARF(ERROR,
+            "Error 0x%x: %s failed for domain %d search paths used are %s, %s, "
+            "%s (errno %s)\n",
+-           nErr, __func__, domain, DSP_MOUNT_LOCATION, VENDOR_DSP_LOCATION,
++           nErr, __func__, domain, DSP_MOUNT_LOCATION, vendor_dsp_location ? vendor_dsp_location : "(null)",
+            VENDOR_DOM_LOCATION, strerror(errno));
+     }
+   }
