@@ -24,6 +24,9 @@
 #ifndef SDSP_DEFAULT_LISTENER_NAME
 #define SDSP_DEFAULT_LISTENER_NAME "libsdsp_default_listener.so"
 #endif
+#ifndef GDSP_DEFAULT_LISTENER_NAME
+#define GDSP_DEFAULT_LISTENER_NAME "libcdsp_default_listener.so.1"
+#endif
 
 typedef int (*dsp_default_listener_start_t)(int argc, char *argv[]);
 
@@ -43,6 +46,9 @@ int main(int argc, char *argv[]) {
   #elif defined(USE_CDSP)
     lib_name = CDSP_DEFAULT_LISTENER_NAME;
     dsp_name = "CDSP";
+  #elif defined(USE_GDSP)
+    lib_name = GDSP_DEFAULT_LISTENER_NAME;
+    dsp_name = "GDSP";
   #else
     goto bail;
   #endif

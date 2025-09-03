@@ -122,6 +122,8 @@ extern "C" {
 #define SDSP_DOMAIN_ID    2
 #define CDSP_DOMAIN_ID    3
 #define CDSP1_DOMAIN_ID   4
+#define GDSP0_DOMAIN_ID   5
+#define GDSP1_DOMAIN_ID   6
 
 /** Supported Domain Names */
 #define ADSP_DOMAIN_NAME "adsp"
@@ -129,6 +131,8 @@ extern "C" {
 #define SDSP_DOMAIN_NAME "sdsp"
 #define CDSP_DOMAIN_NAME "cdsp"
 #define CDSP1_DOMAIN_NAME "cdsp1"
+#define GDSP0_DOMAIN_NAME "gdsp0"
+#define GDSP1_DOMAIN_NAME "gdsp1"
 
 /** Defines to prepare URI for multi-domain calls */
 #define ADSP_DOMAIN "&_dom=adsp"
@@ -136,6 +140,8 @@ extern "C" {
 #define SDSP_DOMAIN "&_dom=sdsp"
 #define CDSP_DOMAIN "&_dom=cdsp"
 #define CDSP1_DOMAIN "&_dom=cdsp1"
+#define GDSP0_DOMAIN "&_dom=gdsp0"
+#define GDSP1_DOMAIN "&_dom=gdsp1"
 
 /** Internal transport prefix */
 #define ITRANSPORT_PREFIX "'\":;./\\"
@@ -280,7 +286,7 @@ struct remote_rpc_control_latency {
  * @brief Argument to query DSP capability with request ID DSPRPC_GET_DSP_INFO
  */
 typedef struct remote_dsp_capability {
-    uint32_t domain;       /** @param[in]: DSP domain ADSP_DOMAIN_ID, SDSP_DOMAIN_ID, or CDSP_DOMAIN_ID */
+    uint32_t domain;       /** @param[in]: DSP domain ADSP_DOMAIN_ID, SDSP_DOMAIN_ID, CDSP_DOMAIN_ID, or GDSP_DOMAIN_ID */
     uint32_t attribute_ID; /** @param[in]: One of the DSP/kernel attributes from enum remote_dsp_attributes */
     uint32_t capability;   /** @param[out]: Result of the DSP/kernel capability query based on attribute_ID */
 }fastrpc_capability;
@@ -493,7 +499,7 @@ typedef int (*fastrpc_notif_fn_t)(void *context, int domain, int session, remote
 **/
 typedef struct remote_rpc_notif_register {
     void *context;                    /** @param[in]: Context of the client */
-    int domain;                       /** @param[in]: DSP domain ADSP_DOMAIN_ID, SDSP_DOMAIN_ID, or CDSP_DOMAIN_ID */
+    int domain;                       /** @param[in]: DSP domain ADSP_DOMAIN_ID, SDSP_DOMAIN_ID, CDSP_DOMAIN_ID, or GDSP_DOMAIN_ID */
     fastrpc_notif_fn_t notifier_fn;   /** @param[in]: Notification function pointer */
 } remote_rpc_notif_register_t;
 
@@ -1080,7 +1086,7 @@ __QAIC_REMOTE_EXPORT __QAIC_RETURN int __QAIC_REMOTE(remote_munmap)(__QAIC_IN ui
  *
  * @param domain [in] DSP domain ID to map memory to. Use -1 for default domain based on
  *                   linked library (lib(a/m/s/c)dsprpc.so).
- *                   Valid domains: ADSP_DOMAIN_ID, MDSP_DOMAIN_ID, SDSP_DOMAIN_ID, CDSP_DOMAIN_ID
+ *                   Valid domains: ADSP_DOMAIN_ID, MDSP_DOMAIN_ID, SDSP_DOMAIN_ID, CDSP_DOMAIN_ID, GDSP_DOMAIN_ID
  * @param fd [in] File descriptor of DMA memory to map
  * @param flags [in] Mapping flags from enum remote_mem_map_flags
  * @param virtAddr [in] Virtual address of buffer on CPU side
@@ -1167,7 +1173,7 @@ __QAIC_REMOTE_EXPORT __QAIC_RETURN int __QAIC_REMOTE(remote_munmap64)(__QAIC_IN 
  * and CACHE WRITEBACK configuration. Driver will clean cache when buffer is passed in a FastRPC call.
  *
  * @param domain [in] DSP domain ID of a fastrpc session. Use -1 for default domain based on linked library.
- *                    Valid domains are ADSP_DOMAIN_ID, MDSP_DOMAIN_ID, SDSP_DOMAIN_ID, or CDSP_DOMAIN_ID.
+ *                    Valid domains are ADSP_DOMAIN_ID, MDSP_DOMAIN_ID, SDSP_DOMAIN_ID, CDSP_DOMAIN_ID, or GDSP_DOMAIN_ID.
  * @param fd [in] DMA memory file descriptor obtained from dma_alloc_fd() or similar DMA allocation APIs.
  * @param addr [in] Virtual address of the buffer on CPU side. Must be the same address returned by mmap()
  *                  when mapping the DMA fd.
@@ -1199,7 +1205,7 @@ __QAIC_REMOTE_EXPORT __QAIC_RETURN int __QAIC_REMOTE(fastrpc_mmap)(__QAIC_IN int
  * The mapping must be removed before closing the DMA file descriptor.
  *
  * @param domain [in] DSP domain ID of a fastrpc session. Use -1 for default domain based on linked library.
- *                    Valid domains are ADSP_DOMAIN_ID, MDSP_DOMAIN_ID, SDSP_DOMAIN_ID, or CDSP_DOMAIN_ID.
+ *                    Valid domains are ADSP_DOMAIN_ID, MDSP_DOMAIN_ID, SDSP_DOMAIN_ID, CDSP_DOMAIN_ID, or GDSP_DOMAIN_ID.
  * @param fd [in] DMA memory file descriptor that was used to create the mapping.
  * @param addr [in] Virtual address of the buffer on CPU side. Must match the address used in fastrpc_mmap().
  * @param length [in] Size of buffer in bytes to unmap. Must match the length used in fastrpc_mmap().
