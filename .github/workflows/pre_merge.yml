@@ -1,0 +1,45 @@
+name: pre_merge
+on:
+  push:
+    branches:
+    - 'main'
+    - 'development'
+  pull_request:
+    types: [opened, synchronize, reopened]
+    branches:
+    - 'main'
+    - 'development'
+  workflow_dispatch:
+
+jobs:
+
+  # The loading job will load the build matrix from MACHINES.json
+  loading:
+    uses: qualcomm/fastrpc/.github/workflows/loading.yml@main
+    secrets: inherit
+
+  # Each job in build and test will run for every {machine, firmware} pair
+  # The build job will run on the machines specified in the build_matrix output
+  # from the loading job. It will use the build.yml workflow to build the code.
+  build:
+    needs: loading
+    strategy:
+      matrix:
+        include: ${{ fromJSON(needs.loading.outputs.build_matrix) }}
+    uses: qualcomm/fastrpc/.github/workflows/sync_build.yml@main
+    secrets: inherit
+    with:
+      docker_image: fastrpc-image:latest
+      machine: ${{ matrix.machine }}
+      firmware: ${{ matrix.firmware }}
+
+  # The test job will run on the machines specified in the full_matrix output
+  # from the loading job. It will use the test.yml workflow to run tests.
+  test:
+    needs: [loading, build]
+    uses: qualcomm/fastrpc/.github/workflows/test.yml@main
+    secrets: inherit
+    with:
+      docker_image: fastrpc-image:latest
+      build_matrix: ${{ needs.loading.outputs.build_matrix }}
+      full_matrix: ${{ needs.loading.outputs.full_matrix }}

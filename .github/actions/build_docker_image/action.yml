@@ -1,0 +1,71 @@
+name: Build fastrpc docker image
+description: |
+  Build fastrpc docker image
+  This GitHub Action builds the fastrpc Docker image using a multi-step process:
+  Checks out the fastrpc-image repository to obtain the Dockerfile.
+  Sets up Docker Buildx for advanced build capabilities.
+  Captures the current user's UID, GID, and username for use as Docker build arguments.
+  Builds the Docker image with caching enabled, tagging it as 'fastrpc-image:latest'.
+  Outputs a success message and the image name after the build.
+  Re-checks out the main repository for any subsequent workflow steps.
+
+inputs:
+  image:
+    description: The docker image to Build
+    required: true
+    default: fastrpc-image:latest
+
+runs:
+    using: "composite"
+    steps:
+      # Checkout fastrpc-image repository to get the Dockerfile
+      - name: Checkout fastrpc-image repo for Dockerfile
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          repository: qualcomm/fastrpc-image
+          ref: main
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Pre-Build Docker Image
+        id: pre-build
+        shell: bash
+        run: |
+          uid=$(id -u)
+          gid=$(id -g)
+          user=$(whoami)
+          echo "uid=$uid" >> "$GITHUB_OUTPUT"
+          echo "gid=$gid" >> "$GITHUB_OUTPUT"
+          echo "user=$user" >> "$GITHUB_OUTPUT"
+          echo "Running as user: $user (UID: $uid, GID: $gid)"
+
+      - name: Build fastrpc Docker Image
+        id: build
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: false
+          load: true
+          tags: fastrpc-image:latest
+          build-args: |
+            "USER=${{ steps.pre-build.outputs.user }}"
+            "UID=${{ steps.pre-build.outputs.uid }}"
+            "GID=${{ steps.pre-build.outputs.gid }}"
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Post-Build Docker Image
+        id: post-build
+        shell: bash
+        run: |
+          echo "Docker image fastrpc-image:latest built successfully."
+          echo "image_name=fastrpc-image:latest" >> $GITHUB_OUTPUT
+
+      # Checkout the main repo again for later steps
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ github.ref }}
