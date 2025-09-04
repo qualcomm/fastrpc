@@ -1,5 +1,4 @@
----
-name: _loading
+name: loading
 description: Load required parameters for the subsequent jobs
 
 on:
@@ -25,4 +24,4 @@ jobs:
 
       - name: Load Parameters
         id: loading
-        uses: qualcomm/fastrpc/.github/actions/loading@main
+        uses: qualcomm/fastrpc/.github/actions/loading@development
