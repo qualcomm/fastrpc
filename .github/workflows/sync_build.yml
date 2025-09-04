@@ -1,5 +1,10 @@
-name: Sync and build 
-description: sync and builds fastrpc code for a specified machine using a Docker image
+name: Sync and build
+description: |
+  This reusable workflow syncs and builds FastRPC code for a specified machine and firmware 
+  using a Docker image. It performs code checkout, Docker image build, workspace sync, 
+  kernel compilation, and artifact packaging. Key build outputs (Image, ramdisk, modules, DTB) 
+  are uploaded to S3, and the runner workspace is cleaned to manage disk usage. A summary of 
+  the build status is added to the GitHub Actions summary.
 
 on:
   workflow_call:
@@ -31,20 +36,20 @@ jobs:
           fetch-depth: 1
 
       - name: Build fastrpc docker image
-        uses: qualcomm/fastrpc/.github/actions/build_docker_image@main
+        uses: qualcomm/fastrpc/.github/actions/build_docker_image@development
         with:
           image: ${{ inputs.docker_image }}
 
       - name: Sync codebase
         id: sync
-        uses: qualcomm/fastrpc/.github/actions/sync@main
+        uses: qualcomm/fastrpc/.github/actions/sync@development
         with:
           machine: ${{ inputs.machine }}
           firmware: ${{ inputs.firmware }}
 
       - name: Build workspace
         id: build_workspace
-        uses: qualcomm/fastrpc/.github/actions/build@main
+        uses: qualcomm/fastrpc/.github/actions/build@development
         with:
           docker_image: ${{ inputs.docker_image }}
           workspace_path: ${{ steps.sync.outputs.workspace_path }}
@@ -70,7 +75,7 @@ jobs:
           cat "$workspace/artifacts/file_list.txt"
 
       - name: Upload artifacts
-        uses: qualcomm/fastrpc/.github/actions/aws_s3_helper@main
+        uses: qualcomm/fastrpc/.github/actions/aws_s3_helper@development
         with:
           s3_bucket: qli-prd-fastrpc-gh-artifacts
           # local_file points to the list of files to upload

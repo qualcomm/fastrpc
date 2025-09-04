@@ -80,7 +80,7 @@ runs:
 
     - name: Upload metadata.json
       id: upload_metadata
-      uses: qualcomm/fastrpc/.github/actions/aws_s3_helper@main
+      uses: qualcomm/fastrpc/.github/actions/aws_s3_helper@development
       with:
         local_file: ../job_render/data/metadata.json
         s3_bucket: qli-prd-fastrpc-gh-artifacts
