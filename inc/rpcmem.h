@@ -4,7 +4,6 @@
 #ifndef RPCMEM_H
 #define RPCMEM_H
 
-#include "AEEStdDef.h"
 #include "stddef.h"
 
 /**
