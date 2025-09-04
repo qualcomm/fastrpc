@@ -76,15 +76,14 @@
 #include "fastrpc_process_attributes.h"
 #include "fastrpc_trace.h"
 
-#ifndef ENABLE_UPSTREAM_DRIVER_INTERFACE
-#define DSP_MOUNT_LOCATION "/dsp/"
-#define DSP_DOM_LOCATION "/dsp/xdsp"
-#else
-#define DSP_MOUNT_LOCATION "/usr/lib/dsp/"
-#define DSP_DOM_LOCATION "/usr/lib/dsp/xdspn"
-#endif
+#define MACHINE_DSP_FILE_PATH "/usr/share/qcom/machine_dsp_paths.ini"
+#define DEFAULT_DSP_MOUNT_LOCATION ";/usr/lib/dsp/;"
+#define DEFAULT_DSP_SEARCH_PATH ";/usr/lib/rfsa/adsp;/vendor/lib/rfsa/adsp;/vendor/dsp/;/usr/lib/dsp/;"
 #define VENDOR_DSP_LOCATION "/vendor/dsp/"
 #define VENDOR_DOM_LOCATION "/vendor/dsp/xdsp/"
+
+#define MAX_PATH_LEN 256
+#define SUBSYS_NAME_LEN 6
 
 #ifdef LE_ENABLE
 #define PROPERTY_VALUE_MAX                                                     \
@@ -3433,15 +3432,17 @@ static void get_process_testsig(apps_std_FILE *fp, uint64_t *ptrlen) {
   return;
 }
 
+void update_dsp_dom_location(const char *suffix);
+
 static int open_shell(int domain_id, apps_std_FILE *fh, int unsigned_shell) {
   char *absName = NULL;
   char *shell_absName = NULL;
   char *domain_str = NULL;
   uint16_t shell_absNameLen = 0, absNameLen = 0;
-  ;
   int nErr = AEE_SUCCESS;
   int domain = GET_DOMAIN_FROM_EFFEC_DOMAIN_ID(domain_id);
   const char *shell_name = SIGNED_SHELL;
+  char subsys_name[SUBSYS_NAME_LEN] = {0};
 
   if (1 == unsigned_shell) {
     shell_name = UNSIGNED_SHELL;
@@ -3462,23 +3463,12 @@ static int open_shell(int domain_id, apps_std_FILE *fh, int unsigned_shell) {
 
   strlcat(shell_absName, domain_str, shell_absNameLen);
 
-  absNameLen = strlen(DSP_MOUNT_LOCATION) + shell_absNameLen + 1;
-  VERIFYC(NULL != (absName = (char *)malloc(sizeof(char) * absNameLen)),
-          AEE_ENOMEMORY);
-  strlcpy(absName, DSP_MOUNT_LOCATION, absNameLen);
-  strlcat(absName, shell_absName, absNameLen);
-
-  nErr = apps_std_fopen(absName, "r", fh);
+  nErr = apps_std_fopen_with_env("DSP_MOUNT_LOCATION", ";", shell_absName, "r", fh);
   if (nErr) {
-    absNameLen = strlen(DSP_DOM_LOCATION) + shell_absNameLen + 1;
-    VERIFYC(NULL !=
-                (absName = (char *)realloc(absName, sizeof(char) * absNameLen)),
-            AEE_ENOMEMORY);
-    strlcpy(absName, DSP_MOUNT_LOCATION, absNameLen);
-    strlcat(absName, SUBSYSTEM_NAME[domain], absNameLen);
-    strlcat(absName, "/", absNameLen);
-    strlcat(absName, shell_absName, absNameLen);
-    nErr = apps_std_fopen(absName, "r", fh);
+    strlcpy(subsys_name, SUBSYSTEM_NAME[domain], sizeof(subsys_name));
+    strlcat(subsys_name, "/", sizeof(subsys_name));
+    update_dsp_dom_location(subsys_name);
+    nErr = apps_std_fopen_with_env("DSP_DOMAIN_LOCATION", ";", shell_absName, "r", fh);
   }
   if (nErr) {
     absNameLen = strlen(VENDOR_DSP_LOCATION) + shell_absNameLen + 1;
@@ -3503,7 +3493,7 @@ static int open_shell(int domain_id, apps_std_FILE *fh, int unsigned_shell) {
     }
   }
   if (!nErr)
-    FARF(RUNTIME_RPC_HIGH, "Successfully opened %s, domain %d", absName, domain);
+    FARF(RUNTIME_RPC_HIGH, "Successfully opened %s, domain %d", shell_absName, domain);
 bail:
   if (domain_str) {
     free(domain_str);
@@ -3525,7 +3515,7 @@ bail:
       FARF(ERROR,
            "Error 0x%x: %s failed for domain %d search paths used are %s, %s, "
            "%s (errno %s)\n",
-           nErr, __func__, domain, DSP_MOUNT_LOCATION, VENDOR_DSP_LOCATION,
+           nErr, __func__, domain, getenv("DSP_MOUNT_LOCATION"), VENDOR_DSP_LOCATION,
            VENDOR_DOM_LOCATION, strerror(errno));
     }
   }
@@ -4157,6 +4147,79 @@ static void exit_thread(void *value) {
   pthread_setspecific(tlsKey, (void *)NULL);
 }
 
+const char* get_dsp_search_path() {
+  return getenv("DSP_SEARCH_PATH");
+}
+
+void update_dsp_dom_location(const char *suffix) {
+    char *token, dsp_dom[MAX_PATH_LEN] = "", dsp_mount[MAX_PATH_LEN] = "";
+
+    strlcpy(dsp_mount, getenv("DSP_MOUNT_LOCATION"), sizeof(dsp_mount));
+    token = strtok(dsp_mount, ";");
+    while (token) {
+        strlcat(dsp_dom, ";", sizeof(dsp_dom));
+        strlcat(dsp_dom, token, sizeof(dsp_dom));
+        strlcat(dsp_dom, suffix, sizeof(dsp_dom));
+        token = strtok(NULL, ";");
+    }
+    strlcat(dsp_dom, ";", sizeof(dsp_dom));
+    setenv("DSP_DOMAIN_LOCATION", dsp_dom, 1);
+}
+
+static void update_dsp_search_path(char *buffer) {
+  char dsp_search_paths[MAX_PATH_LEN];
+
+  strlcpy(dsp_search_paths, getenv("DSP_SEARCH_PATH"), sizeof(dsp_search_paths));
+  strlcat(dsp_search_paths, buffer, sizeof(dsp_search_paths));
+  strlcat(dsp_search_paths, ";", sizeof(dsp_search_paths));
+  setenv("DSP_SEARCH_PATH", dsp_search_paths, 1);
+}
+
+static void update_dsp_mount_path(char *buffer) {
+  char line[MAX_PATH_LEN], key[MAX_PATH_LEN], value[MAX_PATH_LEN],
+    section[MAX_PATH_LEN], dsp_mount_location[MAX_PATH_LEN];
+  int section_found = 0;
+
+  FILE *file = fopen(MACHINE_DSP_FILE_PATH, "r");
+  if (!file)
+    return;
+
+  while (fgets(line, sizeof(line), file)) {
+    if (sscanf(line, "[%[^]]]", section) == 1) {
+      if (section_found)
+        break;
+      section_found = strcmp(section, buffer) == 0;
+    } else if (section_found && sscanf(line, " %[^=]= \"%[^\"]\"", key, value) == 2) {
+      if (strcmp(key, "path") == 0)
+        break;
+    }
+  }
+  fclose(file);
+
+  strlcpy(dsp_mount_location, getenv("DSP_MOUNT_LOCATION"), sizeof(dsp_mount_location));
+  strlcat(dsp_mount_location, value, sizeof(dsp_mount_location));
+  strlcat(dsp_mount_location, ";", sizeof(dsp_mount_location));
+  setenv("DSP_MOUNT_LOCATION", dsp_mount_location, 1);
+  update_dsp_search_path(value);
+}
+
+static void configure_dsp_paths() {
+  char buffer[MAX_PATH_LEN] = {0};
+  setenv("DSP_MOUNT_LOCATION", DEFAULT_DSP_MOUNT_LOCATION, 1);
+  setenv("DSP_SEARCH_PATH", DEFAULT_DSP_SEARCH_PATH, 1);
+  FILE *file = fopen("/sys/firmware/devicetree/base/model", "r");
+
+  if (file == NULL)
+    return;
+
+  if (fgets(buffer, sizeof(buffer), file) != NULL)
+    // Remove trailing newline if present
+    buffer[strcspn(buffer, "\n")] = '\0';
+
+  fclose(file);
+  update_dsp_mount_path(buffer);
+}
+
 /*
  * Called only once by fastrpc_init_once
  * Initializes the data structures
@@ -4171,6 +4234,7 @@ static int fastrpc_apps_user_init(void) {
 
   VERIFY(AEE_SUCCESS == (nErr = PL_INIT(gpls)));
   VERIFY(AEE_SUCCESS == (nErr = PL_INIT(rpcmem)));
+  configure_dsp_paths();
   fastrpc_mem_init();
   fastrpc_context_table_init();
   fastrpc_log_init();

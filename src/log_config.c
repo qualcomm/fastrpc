@@ -391,9 +391,10 @@ static void *file_watcher_thread(void *arg) {
   int len = 0;
   remote_handle64 handle;
   int file_found = 0;
-  char *data_paths = NULL;
+  char *data_paths = NULL, *dsp_search_path = NULL;
 
   FARF(ALWAYS, "%s starting for domain %d\n", __func__, dom);
+  dsp_search_path = get_dsp_search_path();
   // Check for the presence of the <process_name>.farf file at bootup
   for (i = 0; i < (int)log_config_watcher[dom].numPaths; ++i) {
     if (0 == readLogConfigFromPath(dom, log_config_watcher[dom].paths[i].data,
@@ -416,7 +417,7 @@ static void *file_watcher_thread(void *arg) {
       errno = current_errno;
       // User has not set the env variable. Get default search paths.
       if (ret != 0)
-        memmove(data_paths, DSP_SEARCH_PATH, strlen(DSP_SEARCH_PATH));
+        memmove(data_paths, dsp_search_path, strlen(dsp_search_path));
       VERIFY_WPRINTF("%s: Couldn't find file %s, errno (%s) at %s\n", __func__,
                      log_config_watcher[dom].fileToWatch, strerror(errno),
                      data_paths);
