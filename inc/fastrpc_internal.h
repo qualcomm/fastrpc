@@ -15,7 +15,6 @@
 #include "AEEstd.h"
 #include "AEEQList.h"
 #include "AEEStdErr.h"
-#include "fastrpc_latency.h"
 #include "fastrpc_common.h"
 
 // Aligns the memory
@@ -308,7 +307,7 @@ struct handle_list {
 	remote_handle64 remotectlhandle;
 	remote_handle64 adspperfhandle;
 	int procattrs;
-	struct fastrpc_latency qos;
+	int adaptive_qos;
 	struct fastrpc_thread_params th_params;
 	int unsigned_module;
 	bool pd_dump;
@@ -366,16 +365,6 @@ int fastrpc_get_cap(uint32_t domain, uint32_t attributeID, uint32_t *capability)
   *
   **/
 int check_rpc_error(int err);
-
-/**
-  * @brief Notify the FastRPC QoS logic of activity outside of the invoke code path
-  * that should still be considered in QoS timeout calculations.
-  * Note that the function will silently fail on errors such as the domain
-  * not having a valid QoS mode.
-  *
-  * @param[in] domain DSP domain
-  **/
-void fastrpc_qos_activity(int domain);
 
 /**
   * @brief Make IOCTL call to exit async thread

@@ -219,7 +219,6 @@ AEEResult dspsignal_wait(int domain, uint32_t id, uint32_t timeout_usec) {
   domain = get_domain(domain);
   VERIFYC(IS_VALID_EFFECTIVE_DOMAIN_ID(domain), AEE_EBADPARM);
   VERIFYC((ds = (struct dspsignal_domain_signals *)signals->domain_signals[domain]) != NULL, AEE_EBADSTATE);
-  fastrpc_qos_activity(domain);
 
   FARF(MEDIUM, "%s: Wait signal %u timeout %u", __func__, id, timeout_usec);
   errno = 0;

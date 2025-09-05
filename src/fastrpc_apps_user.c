@@ -57,7 +57,6 @@
 #include "fastrpc_common.h"
 #include "fastrpc_config.h"
 #include "fastrpc_internal.h"
-#include "fastrpc_latency.h"
 #include "fastrpc_log.h"
 #include "fastrpc_mem.h"
 #include "fastrpc_notif.h"
@@ -220,6 +219,7 @@ extern int perf_v2_dsp;
 #define MIN_PD_INITMEM_SIZE (3 * 1024 * 1024)
 #define MAX_PD_INITMEM_SIZE (200 * 1024 * 1024)
 
+#define FASTRPC_QOS_MAX_LATENCY_USEC (10000)
 #define PM_TIMEOUT_MS 5
 
 enum handle_list_id {
@@ -1327,7 +1327,6 @@ int remote_handle_invoke_domain(int domain, remote_handle handle,
   }
 
   if (!IS_STATIC_HANDLE(handle)) {
-    fastrpc_latency_invoke_incr(&hlist[domain].qos);
     if ((rpc_timeout = fastrpc_config_get_rpctimeout()) > 0) {
       frpc_timer.domain = domain;
       frpc_timer.sc = sc;
@@ -1974,18 +1973,13 @@ bail:
   return nErr;
 }
 
-static int manage_pm_qos(int domain, remote_handle64 h, uint32_t enable,
-                         uint32_t latency) {
-  return fastrpc_set_pm_qos(&hlist[domain].qos, enable, latency);
-}
-
 static int manage_adaptive_qos(int domain, uint32_t enable) {
   int nErr = AEE_SUCCESS;
   remote_handle64 handle = INVALID_HANDLE;
 
   /* If adaptive QoS is already enabled/disabled, then just return */
-  if ((enable && hlist[domain].qos.adaptive_qos) ||
-      (!enable && !hlist[domain].qos.adaptive_qos))
+  if ((enable && hlist[domain].adaptive_qos) ||
+      (!enable && !hlist[domain].adaptive_qos))
     return nErr;
 
   if (hlist[domain].dev != -1) {
@@ -2016,11 +2010,11 @@ static int manage_adaptive_qos(int domain, uint32_t enable) {
            __func__, enable, domain);
       goto bail;
     } else {
-      hlist[domain].qos.adaptive_qos = ((enable == RPC_ADAPTIVE_QOS) ? 1 : 0);
+      hlist[domain].adaptive_qos = ((enable == RPC_ADAPTIVE_QOS) ? 1 : 0);
     }
   } else {
     /* If session is not created already, then just set process attribute */
-    hlist[domain].qos.adaptive_qos = ((enable == RPC_ADAPTIVE_QOS) ? 1 : 0);
+    hlist[domain].adaptive_qos = ((enable == RPC_ADAPTIVE_QOS) ? 1 : 0);
   }
 
   if (enable)
@@ -2083,14 +2077,6 @@ bail:
          nErr, errno, __func__, domain, h, enable, latency, strerror(errno));
   }
   return nErr;
-}
-
-// Notify FastRPC QoS logic of activity outside of the invoke code path.
-// This function needs to be in this file to be able to access hlist.
-void fastrpc_qos_activity(int domain) {
-  if (IS_VALID_EFFECTIVE_DOMAIN_ID(domain) && hlist) {
-    fastrpc_latency_invoke_incr(&hlist[domain].qos);
-  }
 }
 
 static inline int enable_process_state_notif_on_dsp(int domain) {
@@ -2281,7 +2267,6 @@ bail:
 int remote_handle_control_domain(int domain, remote_handle64 h, uint32_t req,
                                  void *data, uint32_t len) {
   int nErr = AEE_SUCCESS;
-  const unsigned int POLL_MODE_PM_QOS_LATENCY = 100;
 
   FARF(RUNTIME_RPC_HIGH, "Entering %s, domain %d, handle %llu, req %d, data %p, size %d\n",
        __func__, domain, h, req, data, len);
@@ -2299,28 +2284,14 @@ int remote_handle_control_domain(int domain, remote_handle64 h, uint32_t req,
       VERIFY(AEE_SUCCESS ==
              (nErr = manage_adaptive_qos(domain, RPC_DISABLE_QOS)));
       VERIFY(AEE_SUCCESS ==
-             (nErr = manage_pm_qos(domain, h, RPC_DISABLE_QOS, lp->latency)));
-      VERIFY(AEE_SUCCESS ==
              (nErr = manage_poll_qos(domain, h, RPC_DISABLE_QOS, lp->latency)));
       /* Error ignored, currently meeting qos requirement is optional. Consider
        * to error out in later targets */
       fastrpc_set_qos_latency(domain, h, FASTRPC_QOS_MAX_LATENCY_USEC);
       break;
     }
-    case RPC_PM_QOS: {
-      VERIFY(AEE_SUCCESS ==
-             (nErr = manage_adaptive_qos(domain, RPC_DISABLE_QOS)));
-      VERIFY(AEE_SUCCESS ==
-             (nErr = manage_pm_qos(domain, h, RPC_PM_QOS, lp->latency)));
-      /* Error ignored, currently meeting qos requirement is optional. Consider
-       * to error out in later targets */
-      fastrpc_set_qos_latency(domain, h, lp->latency);
-      break;
-    }
     case RPC_ADAPTIVE_QOS: {
-      /* Disable PM QoS if enabled and then enable adaptive QoS */
-      VERIFY(AEE_SUCCESS ==
-             (nErr = manage_pm_qos(domain, h, RPC_DISABLE_QOS, lp->latency)));
+      /* Enable adaptive QoS */
       VERIFY(AEE_SUCCESS ==
              (nErr = manage_adaptive_qos(domain, RPC_ADAPTIVE_QOS)));
       /* Error ignored, currently meeting qos requirement is optional. Consider
@@ -2331,13 +2302,6 @@ int remote_handle_control_domain(int domain, remote_handle64 h, uint32_t req,
     case RPC_POLL_QOS: {
       VERIFY(AEE_SUCCESS ==
              (nErr = manage_poll_qos(domain, h, RPC_POLL_QOS, lp->latency)));
-
-      /*
-       * Poll QoS option also enables PM QoS to enable early response from DSP
-       * and stop the CPU cores from going into deep sleep low power modes.
-       */
-      VERIFY(AEE_SUCCESS == (nErr = manage_pm_qos(domain, h, RPC_PM_QOS,
-                                                  POLL_MODE_PM_QOS_LATENCY)));
       break;
     }
     default:
@@ -3196,7 +3160,6 @@ static void domain_deinit(int domain) {
       fastrpc_clear_handle_list(NON_DOMAIN_HANDLE_LIST_ID, domain);
     }
     fastrpc_perf_deinit();
-    fastrpc_latency_deinit(&hlist[domain].qos);
     trace_marker_deinit(domain);
     deinitFileWatcher(domain);
     adspmsgd_stop(domain);
@@ -3343,7 +3306,7 @@ static int get_process_attrs(int domain) {
   attrs = fastrpc_get_property_int(FASTRPC_PROCESS_ATTRS, 0);
   attrs |= fastrpc_get_property_int(FASTRPC_PROCESS_ATTRS_PERSISTENT, 0);
   fastrpc_trace = fastrpc_get_property_int(FASTRPC_DEBUG_TRACE, 0);
-  attrs |= hlist[domain].qos.adaptive_qos ? FASTRPC_MODE_ADAPTIVE_QOS : 0;
+  attrs |= hlist[domain].adaptive_qos ? FASTRPC_MODE_ADAPTIVE_QOS : 0;
   attrs |= hlist[domain].unsigned_module ? FASTRPC_MODE_UNSIGNED_MODULE : 0;
   attrs |= (hlist[domain].pd_dump | fastrpc_config_is_pddump_enabled())
                ? FASTRPC_MODE_ENABLE_PDDUMP
@@ -3565,7 +3528,7 @@ void print_process_attrs(int domain) {
     signedMd = true;
     pd_initmem_size = hlist[domain].pd_initmem_size;
   }
-  if (hlist[domain].qos.adaptive_qos)
+  if (hlist[domain].adaptive_qos)
     qos = true;
   if (hlist[domain].pd_dump | fastrpc_config_is_pddump_enabled())
     configPDdump = true;
@@ -4021,8 +3984,6 @@ static int domain_init(int domain, int *dev) {
   }
 #endif
   fastrpc_perf_init(hlist[domain].dev, domain);
-  VERIFY(AEE_SUCCESS ==
-         (nErr = fastrpc_latency_init(hlist[domain].dev, &hlist[domain].qos)));
   get_dsp_dma_reverse_rpc_map_capability(domain);
   hlist[domain].state = FASTRPC_DOMAIN_STATE_INIT;
   hlist[domain].ref = 0;

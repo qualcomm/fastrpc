@@ -44,7 +44,6 @@ noinst_HEADERS = \
 	fastrpc_hash_table.h \
 	fastrpc_internal.h \
 	fastrpc_ioctl.h \
-	fastrpc_latency.h \
 	fastrpc_log.h \
 	fastrpc_mem.h \
 	fastrpc_notif.h \
