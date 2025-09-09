@@ -87,9 +87,7 @@ runs:
         cp -rf src/adsprpcd src/cdsprpcd src/sdsprpcd ${{ inputs.workspace_path }}/artifacts/ramdisk_fastrpc/usr/bin/
 
         echo "Copy fastrpc test files"
-        cp -rf test/fastrpc_test ${{ inputs.workspace_path }}/artifacts/ramdisk_fastrpc/usr/bin
-        cp -rf test/linux/* ${{ inputs.workspace_path }}/artifacts/ramdisk_fastrpc/usr/bin
-        cp -rf test/v75/* ${{ inputs.workspace_path }}/artifacts/ramdisk_fastrpc/usr/bin
+        cp -rf test/* ${{ inputs.workspace_path }}/artifacts/ramdisk_fastrpc/usr/bin
 
         echo "Package FastRPC firmware files"
         cp -r ${{ inputs.workspace_path }}/firmware_dir/* ${{ inputs.workspace_path }}/artifacts/ramdisk_fastrpc/
@@ -100,7 +98,9 @@ runs:
         ls -la ${{ inputs.workspace_path }}/artifacts/ramdisk_fastrpc/usr/lib/
 
         cd ${{ inputs.workspace_path }}/artifacts/
-        find ramdisk_fastrpc | cpio -o -H newc > ramdisk_fastrpc.cpio
+        cd ramdisk_fastrpc
+        find . | cpio -o -H newc > ../ramdisk_fastrpc.cpio
+        cd ..
         gzip -9 ramdisk_fastrpc.cpio
         mv ramdisk_fastrpc.cpio.gz ramdisk_fastrpc.gz
 
@@ -109,8 +109,7 @@ runs:
       run: |
         echo "Unpack and mount ramdisk"
         cd ${{ inputs.workspace_path }}/artifacts
-
-        # Decompress the ramdisk.gz safely
+        mkdir -p ramdisk_test
         gunzip -c ramdisk_fastrpc.gz > ramdisk_test/ramdisk
 
         echo "Unpacking ramdisk"

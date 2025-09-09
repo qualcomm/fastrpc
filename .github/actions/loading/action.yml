@@ -39,12 +39,12 @@ runs:
             core.setFailed(`Failed to load or parse MACHINES.json: ${err.message}`);
             return;
           }
-          # Slim matrix for better job visibility
+          // Slim matrix for better job visibility
           const slim_matrix = Object.entries(file).map(([machine, [firmware]]) => ({ machine, firmware }));
           core.setOutput('build_matrix', JSON.stringify(slim_matrix));
           console.log(slim_matrix);
 
-          # Full matrix to pass to test jobs
+          // Full matrix to pass to test jobs
           const complete_matrix = Object.entries(file).map(([machine, [firmware, lavaname]]) => ({
             machine,
             firmware,
