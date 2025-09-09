@@ -19,7 +19,7 @@ LIBDSPRPC_SOURCES = \
 		dspsignal.c \
 		dspqueue/dspqueue_cpu.c \
 		dspqueue/dspqueue_rpc_stub.c \
-		listener_android.c \
+		listener.c \
 		apps_std_imp.c \
 		apps_mem_imp.c \
 		apps_mem_skel.c \

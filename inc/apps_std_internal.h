@@ -39,16 +39,9 @@
 #endif
 #endif /* ENABLE_UPSTREAM_DRIVER_INTERFACE */
 
-#ifndef VENDOR_DSP_LOCATION
-#define VENDOR_DSP_LOCATION "/vendor/dsp/"
-#endif
-#ifndef VENDOR_DOM_LOCATION
-#define VENDOR_DOM_LOCATION "/vendor/dsp/xdsp/"
-#endif
-
 // Search path used by fastRPC to search skel library, .debugconfig and .farf files
 #ifndef DSP_SEARCH_PATH
-#define DSP_SEARCH_PATH ";/usr/lib/rfsa/adsp;/vendor/lib/rfsa/adsp;/vendor/dsp/;/usr/lib/dsp/;"
+#define DSP_SEARCH_PATH ";/usr/lib/rfsa/adsp;/usr/lib/dsp/;"
 #endif
 
 // Search path used by fastRPC for acdb path

@@ -1088,7 +1088,7 @@ __QAIC_IMPL_EXPORT int __QAIC_IMPL(apps_std_fopen_with_env)(
     }
     FREEIF(absName);
 
-    // fallback: If not found in domain path /vendor/dsp/adsp try in /vendor/dsp
+    // fallback to open the file without domain
     absNameLen = strlen(dirName) + strlen(name) + 2;
     VERIFYC(NULL != (absName = (char *)malloc(sizeof(char) * absNameLen)),
             AEE_ENOMEMORY);
@@ -1157,14 +1157,7 @@ __QAIC_IMPL_EXPORT int __QAIC_IMPL(apps_std_fopen_with_env_fd)(
   VERIFYC(NULL != delim, AEE_EBADPARM);
   VERIFYC(NULL != name, AEE_EBADPARM);
   VERIFYC(NULL != envvarname, AEE_EBADPARM);
-#if 0 //TODO: Bharath
-  char *tempName = name;
-  tempName += 2;
-  if (tempName[0] == '\0') {
-    nErr = AEE_EBADPARM;
-    goto bail;
-  }
-#endif
+
   FASTRPC_ATRACE_BEGIN_L("%s for %s in %s mode from path in environment "
                          "variable %s delimited with %s",
                          __func__, name, mode, envvarname, delim);
@@ -1223,7 +1216,7 @@ __QAIC_IMPL_EXPORT int __QAIC_IMPL(apps_std_fopen_with_env_fd)(
     }
     FREEIF(absName);
 
-    // fallback: If not found in domain path /vendor/dsp/adsp try in /vendor/dsp
+    // fallback to open the file without domain
     absNameLen = strlen(dirName) + strlen(name) + 2;
     VERIFYC(NULL != (absName = (char *)malloc(sizeof(char) * absNameLen)),
             AEE_ENOMEMORY);

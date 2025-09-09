@@ -1,8 +1,8 @@
 // Copyright (c) 2024, Qualcomm Innovation Center, Inc. All rights reserved.
 // SPDX-License-Identifier: BSD-3-Clause
 
-#ifndef FASTRPC_ANDROID_USER_H
-#define FASTRPC_ANDROID_USER_H
+#ifndef FASTRPC_USER_H
+#define FASTRPC_USER_H
 
 #include <assert.h>
 #include <fcntl.h>
@@ -134,4 +134,4 @@ int get_unsigned_pd_attribute(uint32_t domain, int *unsigned_module);
  */
 int is_userspace_allocation_supported();
 
-#endif //FASTRPC_ANDROID_USER_H
+#endif //FASTRPC_USER_H

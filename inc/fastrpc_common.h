@@ -126,7 +126,6 @@
 	 FASTRPC_ENABLE_SYSTRACE = 6, //to enable tracing using Systrace
 	 FASTRPC_DEBUG_PDDUMP = 7, // to enable pd dump debug data collection on rooted device for signed/unsigned pd
 	 FASTRPC_PROCESS_ATTRS_PERSISTENT = 8, // to set proc attr as persistent
-	 FASTRPC_BUILD_TYPE = 9 // Fetch build type of firmware image. It gives the details if its debug or prod build
  }fastrpc_properties;
 
 /**

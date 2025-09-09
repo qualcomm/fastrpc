@@ -279,28 +279,14 @@ void HAP_debug(const char *msg, int level, const char *filename, int line) {
 }
 
 void fastrpc_log_init() {
-  bool debug_build_type = false;
   int nErr = AEE_SUCCESS, fd = -1;
   char build_type[PROPERTY_VALUE_MAX];
   char *logfilename;
 
   pthread_mutex_init(&persist_buf.mut, 0);
   pthread_mutex_lock(&persist_buf.mut);
-  /*
-   * Get build type by reading the target properties,
-   * if buuid type is eng or userdebug allocate 1 MB persist buf.
-   */
-  if (fastrpc_get_property_string(FASTRPC_BUILD_TYPE, build_type, NULL)) {
-#if !defined(LE_ENABLE)
-    if (!strncmp(build_type, "eng", PROPERTY_VALUE_MAX) ||
-        !strncmp(build_type, "userdebug", PROPERTY_VALUE_MAX))
-      debug_build_type = true;
-#else
-    if (atoi(build_type))
-      debug_build_type = true;
-#endif
-  }
-  if (persist_buf.buf == NULL && debug_build_type) {
+
+  if (persist_buf.buf == NULL) {
     /* Create a debug buffer to append DEBUG FARF level message. */
     persist_buf.buf = (char *)rpcmem_alloc_internal(
         RPCMEM_HEAP_ID_SYSTEM, RPCMEM_DEFAULT_FLAGS | RPCMEM_TRY_MAP_STATIC,

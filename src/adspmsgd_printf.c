@@ -20,27 +20,6 @@ typedef struct __attribute__((packed)) {
   char file[LOG_FILENAME_SIZE];
 } LogNode;
 
-#if 0
-static inline android_LogPriority convert_level_to_android_priority(
-    enum adspmsgd_apps_Level level)
-{
-    switch (level) {
-        case LOW:
-            return LOW;
-        case MEDIUM:
-            return MEDIUM;
-        case HIGH:
-            return HIGH;
-        case ERROR:
-            return ERROR;
-        case FATAL:
-            return FATAL;
-        default:
-            return 0;
-        }
-}
-#endif
-
 int adspmsgd_apps_log(const unsigned char *log_message_buffer,
                       int log_message_bufferLen) {
   LogNode *logMessage = (LogNode *)log_message_buffer;

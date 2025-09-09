@@ -377,13 +377,13 @@ bail:
   return (void *)(uintptr_t)nErr;
 }
 
-void listener_android_deinit(void) {
+void listener_deinit(void) {
   HASH_TABLE_CLEANUP(listener_config);
   PL_DEINIT(mod_table);
   PL_DEINIT(apps_std);
 }
 
-int listener_android_init(void) {
+int listener_init(void) {
   int nErr = 0;
 
   HASH_TABLE_INIT(listener_config);
@@ -400,13 +400,13 @@ int listener_android_init(void) {
                              "adspmsgd_apps", adspmsgd_apps_skel_invoke)));
 bail:
   if (nErr != AEE_SUCCESS) {
-    listener_android_deinit();
+    listener_deinit();
     VERIFY_EPRINTF("Error %x: fastrpc listener initialization error", nErr);
   }
   return nErr;
 }
 
-void listener_android_domain_deinit(int domain) {
+void listener_domain_deinit(int domain) {
   listener_config *me = NULL;
 
   GET_HASH_NODE(listener_config, domain, me);
@@ -428,7 +428,7 @@ void listener_android_domain_deinit(int domain) {
   }
 }
 
-int listener_android_domain_init(int domain, int update_requested,
+int listener_domain_init(int domain, int update_requested,
                                  sem_t *r_sem) {
   listener_config *me = NULL;
   int nErr = AEE_SUCCESS;
@@ -463,7 +463,7 @@ bail:
   if (nErr != AEE_SUCCESS) {
     VERIFY_EPRINTF("Error 0x%x: %s failed for domain %d\n", nErr, __func__,
                    domain);
-    listener_android_domain_deinit(domain);
+    listener_domain_deinit(domain);
   }
   return nErr;
 }
@@ -473,7 +473,7 @@ int close_reverse_handle(remote_handle64 h, char *dlerr, int dlerrorLen,
   return apps_remotectl_close((uint32_t)h, dlerr, dlerrorLen, dlErr);
 }
 
-int listener_android_geteventfd(int domain, int *fd) {
+int listener_geteventfd(int domain, int *fd) {
   listener_config *me = NULL;
   int nErr = 0;
 
@@ -483,11 +483,11 @@ int listener_android_geteventfd(int domain, int *fd) {
   *fd = me->eventfd;
 bail:
   if (nErr != AEE_SUCCESS) {
-    VERIFY_EPRINTF("Error %x: listener android getevent file descriptor failed "
+    VERIFY_EPRINTF("Error %x: listener getevent file descriptor failed "
                    "for domain %d\n",
                    nErr, domain);
   }
   return nErr;
 }
 
-PL_DEFINE(listener_android, listener_android_init, listener_android_deinit)
+PL_DEFINE(listener, listener_init, listener_deinit)
