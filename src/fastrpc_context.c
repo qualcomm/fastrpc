@@ -296,7 +296,7 @@ int fastrpc_context_table_init(void) {
 	if (nErr)
 		FARF(ERROR, "Error 0x%x: %s failed\n", nErr, __func__);
 	else
-		FARF(ALWAYS, "%s done", __func__);
+		FARF(RUNTIME_RPC_HIGH, "%s done", __func__);
 
 	return nErr;
 }
@@ -322,7 +322,7 @@ bail:
 	if (nErr)
 		FARF(ERROR, "Error 0x%x: %s failed\n", nErr, __func__);
 	else
-		FARF(ALWAYS, "%s done", __func__);
+		FARF(RUNTIME_RPC_HIGH, "%s done", __func__);
 
 	return nErr;
 }

@@ -321,6 +321,7 @@ bail:
         "Error 0x%x : Writing to listener event_fd %d failed (errno %s)", nErr,
         me->eventfd, strerror(errno));
   }
+  FARF(ALWAYS, "%s thread exiting\n", __func__);
   dlerror();
 }
 

@@ -462,7 +462,6 @@ AEEResult dspqueue_create(int domain, uint32_t flags, uint32_t req_queue_size,
   errno = 0;
 
   if (domain == -1) {
-    PRINT_WARN_USE_DOMAINS();
     domain = get_current_domain();
     if (!IS_VALID_EFFECTIVE_DOMAIN_ID(domain)) {
       return AEE_ERPC;

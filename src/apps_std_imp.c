@@ -378,7 +378,7 @@ bail:
                        "us, rpc_alloc:%" PRIu64 "us, mmap:%" PRIu64 "us",
                        __func__, name, fopen_time, read_time, rpc_alloc_time,
                        mmap_time);
-  FARF(CRITICAL,
+  FARF(RUNTIME_RPC_CRITICAL,
        "%s: done for %s with fopen:%" PRIu64 "us, read:%" PRIu64
        "us, rpc_alloc:%" PRIu64 "us, mmap:%" PRIu64 "us, fd 0x%x error_code 0x%x",
        __func__, name, fopen_time, read_time, rpc_alloc_time, mmap_time, *fd, nErr);
@@ -1032,7 +1032,7 @@ __QAIC_IMPL_EXPORT int __QAIC_IMPL(apps_std_fopen_with_env)(
   uint16_t absNameLen = 0;
   int domain = GET_DOMAIN_FROM_EFFEC_DOMAIN_ID(get_current_domain());
 
-  FARF(LOW, "Entering %s", __func__);
+  FARF(RUNTIME_RPC_LOW, "Entering %s", __func__);
   VERIFYC(NULL != mode, AEE_EBADPARM);
   VERIFYC(NULL != delim, AEE_EBADPARM);
   VERIFYC(NULL != name, AEE_EBADPARM);
