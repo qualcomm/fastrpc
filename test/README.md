@@ -12,28 +12,20 @@ After building the application, the following files and directories need to be p
 4. **v68 Directory**: Contains skeletons for the v68 architecture version.
 5. **v75 Directory**: Contains skeletons for the v75 architecture version.
 
-Copy the following files and directories to `/usr/bin` on the target device:
+### Installing the Test
 
-- `/path/to/your/fastrpc/test/.libs/fastrpc_test`
-- `/path/to/your/fastrpc/test/android` (if using Android)
-- `/path/to/your/fastrpc/test/linux` (if using Linux)
-- `/path/to/your/fastrpc/test/v68`
-- `/path/to/your/fastrpc/test/v75`
+Use `make install` to install the libraries and the executable to the appropriate directories:
 
-**Note**: Push the `android` directory if you are using the Android platform, and the `linux` directory if you are using the Linux platform.
+```bash
+make install
+```
 
 ## Running the Test
 
-To run the test application, follow these steps:
-
-1. Navigate to the `/usr/bin` directory on the device.
-2. Execute the `fastrpc_test` binary with the appropriate options.
-
-Example command:
+To run the test application, use the following command:
 
 ```bash
-cd /usr/bin
-./fastrpc_test -d 3 -U 1 -t linux -a v68
+fastrpc_test -d 3 -U 1 -t linux -a v68
 ```
 
 ### Options
