@@ -116,6 +116,28 @@ sudo make install
 
 For detailed instructions on testing FastRPC, please refer to the [README.md](test/README.md) in the `test` directory.
 
+**Testing status:**
+
+| Platform   | Testing Status | Kernel Used   | Library Used   | DSP Used         |
+|------------|----------------|---------------|----------------|------------------|
+| RB1        | Pending        | Linux next    | Dev :57f7e64   | Hexagon DSP bin  |
+| RB2        | Pending        | Linux next    | Dev :57f7e64   | Hexagon DSP bin  |
+| RB3        | Pending        | Linux next    | Dev :57f7e64   | Hexagon DSP bin  |
+| RB3Gen2    | Passed         | Linux next    | Dev :57f7e64   | Hexagon DSP bin  |
+| QCS9100    | Passed         | Linux next    | Dev :57f7e64   | Hexagon DSP bin  |
+| QCS8300    | Passed         | Linux next    | Dev :57f7e64   | Hexagon DSP bin  |
+| DB410C     | Pending        | Linux next    | Dev :57f7e64   | Hexagon DSP bin  |
+| DB820C     | Pending        | Linux next    | Dev :57f7e64   | Hexagon DSP bin  |
+| SC8280xp   | Pending        | Linux next    | Dev :57f7e64   | To be upstreamed |
+| X-Elite    | Passed         | Linux next    | Dev :57f7e64   | To be upstreamed |
+| X-Plus     | Passed         | Linux next    | Dev :57f7e64   | To be upstreamed |
+| SM8150     | In Progress    | Linux next    | Dev :57f7e64   | To be upstreamed |
+| SM8250     | In Progress    | Linux next    | Dev :57f7e64   | To be upstreamed |
+| SM8350     | Passed         | Linux next    | Dev :57f7e64   | To be upstreamed |
+| SM8450     | Passed         | Linux next    | Dev :57f7e64   | To be upstreamed |
+| SM8550     | Passed         | Linux next    | Dev :57f7e64   | To be upstreamed |
+| SM8650     | Passed         | Linux next    | Dev :57f7e64   | To be upstreamed |
+
 ## Logging Control and Verbosity
 
 Both VERIFY and FARF are logging mechanisms used in fastRPC. While VERIFY is a legacy module, FARF is commonly utilized on both DSP (Digital Signal Processor) and HLOS (High-Level Operating System).
