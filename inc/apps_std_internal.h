@@ -7,12 +7,12 @@
 #include "apps_std.h"
 
 /**
-  * @brief Macros used in apps_std
-  * defines the search paths where fastRPC library should 
-  * look for skel libraries, .debugconfig, .farf files.  
-  * Could be overloaded from build system.
-  **/
- 
+ * @brief Macros used in apps_std
+ * defines the search paths where fastRPC library should
+ * look for skel libraries, .debugconfig, .farf files.
+ * Could be overloaded from build system.
+ **/
+
 #define RETRY_WRITE (3) // number of times to retry write operation
 
 // Environment variable name, that can be used to override the search paths
@@ -46,9 +46,12 @@
 #define VENDOR_DOM_LOCATION "/vendor/dsp/xdsp/"
 #endif
 
-// Search path used by fastRPC to search skel library, .debugconfig and .farf files
+// Search path used by fastRPC to search skel library, .debugconfig and .farf
+// files
 #ifndef DSP_SEARCH_PATH
-#define DSP_SEARCH_PATH ";/usr/lib/rfsa/adsp;/vendor/lib/rfsa/adsp;/vendor/dsp/;/usr/lib/dsp/;"
+#define DSP_SEARCH_PATH                                                       \
+	";/usr/lib/rfsa/adsp;/vendor/lib/rfsa/adsp;/vendor/dsp/;/usr/lib/"    \
+	"dsp/;"
 #endif
 
 // Search path used by fastRPC for acdb path

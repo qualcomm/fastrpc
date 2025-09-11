@@ -15,7 +15,7 @@ extern "C" {
 
 /**
  * @file adsp_pls
- * 
+ *
  * adsp process local storage is local storage for the fastrpc hlos
  * process context.
 
@@ -40,7 +40,9 @@ extern "C" {
  * @param ppo, output data
  * @retval, 0 for success
  */
-int adsp_pls_add(uintptr_t type, uintptr_t key, int size, int (*ctor)(void* ctx, void* data), void* ctx, void (*dtor)(void*), void** ppo);
+int adsp_pls_add(uintptr_t type, uintptr_t key, int size,
+                 int (*ctor)(void *ctx, void *data), void *ctx,
+                 void (*dtor)(void *), void **ppo);
 
 /**
  * Like add, but will only add 1 item, and return the same item on the
@@ -51,7 +53,9 @@ int adsp_pls_add(uintptr_t type, uintptr_t key, int size, int (*ctor)(void* ctx,
  * ctor may be called twice
  * callers should avoid calling pls_add which will override the singleton
  */
-int adsp_pls_add_lookup(uintptr_t type, uintptr_t key, int size, int (*ctor)(void* ctx, void* data), void* ctx, void (*dtor)(void*), void** ppo);
+int adsp_pls_add_lookup(uintptr_t type, uintptr_t key, int size,
+                        int (*ctor)(void *ctx, void *data), void *ctx,
+                        void (*dtor)(void *), void **ppo);
 
 /**
  * finds the last data pointer added for key to the local storage
@@ -60,7 +64,7 @@ int adsp_pls_add_lookup(uintptr_t type, uintptr_t key, int size, int (*ctor)(voi
  * @param ppo, output data
  * @retval, 0 for success
  */
-int adsp_pls_lookup(uintptr_t type, uintptr_t key, void** ppo);
+int adsp_pls_lookup(uintptr_t type, uintptr_t key, void **ppo);
 
 /**
  * force init/deinit
@@ -71,4 +75,4 @@ void gpls_deinit(void);
 #ifdef __cplusplus
 }
 #endif
-#endif //ADSP_PLS_H
+#endif // ADSP_PLS_H

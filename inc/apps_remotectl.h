@@ -36,13 +36,19 @@ extern "C" {
 #define __QAIC_STRING1_OBJECT_DEFINED__
 #define __STRING1_OBJECT__
 typedef struct _cstring1_s {
-   char* data;
-   int dataLen;
+	char *data;
+	int dataLen;
 } _cstring1_t;
 
 #endif /* __QAIC_STRING1_OBJECT_DEFINED__ */
-__QAIC_HEADER_EXPORT int __QAIC_HEADER(apps_remotectl_open)(const char* name, int* handle, char* dlerror, int dlerrorLen, int* nErr) __QAIC_HEADER_ATTRIBUTE;
-__QAIC_HEADER_EXPORT int __QAIC_HEADER(apps_remotectl_close)(int handle, char* dlerror, int dlerrorLen, int* nErr) __QAIC_HEADER_ATTRIBUTE;
+__QAIC_HEADER_EXPORT int
+    __QAIC_HEADER(apps_remotectl_open)(const char *name, int *handle,
+                                       char *dlerror, int dlerrorLen,
+                                       int *nErr) __QAIC_HEADER_ATTRIBUTE;
+__QAIC_HEADER_EXPORT int
+    __QAIC_HEADER(apps_remotectl_close)(int handle, char *dlerror,
+                                        int dlerrorLen,
+                                        int *nErr) __QAIC_HEADER_ATTRIBUTE;
 #ifdef __cplusplus
 }
 #endif

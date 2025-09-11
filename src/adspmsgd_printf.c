@@ -8,16 +8,16 @@
 
 #define LOG_NODE_SIZE 256
 #define LOG_FILENAME_SIZE 30
-#define LOG_MSG_SIZE                                                           \
-  LOG_NODE_SIZE - LOG_FILENAME_SIZE - sizeof(enum adspmsgd_apps_Level) -       \
-      (2 * sizeof(unsigned short))
+#define LOG_MSG_SIZE                                                          \
+	LOG_NODE_SIZE - LOG_FILENAME_SIZE - sizeof(enum adspmsgd_apps_Level)  \
+	    - (2 * sizeof(unsigned short))
 
 typedef struct __attribute__((packed)) {
-  enum adspmsgd_apps_Level level;
-  unsigned short line;
-  unsigned short thread_id;
-  char str[LOG_MSG_SIZE];
-  char file[LOG_FILENAME_SIZE];
+	enum adspmsgd_apps_Level level;
+	unsigned short line;
+	unsigned short thread_id;
+	char str[LOG_MSG_SIZE];
+	char file[LOG_FILENAME_SIZE];
 } LogNode;
 
 #if 0
@@ -41,18 +41,23 @@ static inline android_LogPriority convert_level_to_android_priority(
 }
 #endif
 
-int adspmsgd_apps_log(const unsigned char *log_message_buffer,
-                      int log_message_bufferLen) {
-  LogNode *logMessage = (LogNode *)log_message_buffer;
-  while ((log_message_bufferLen > 0) && (logMessage != NULL)) {
-    printf("adsprpc: %s:%d:0x%x:%s", logMessage->file, logMessage->line,
-           logMessage->thread_id, logMessage->str);
-    logMessage++;
-    log_message_bufferLen -= sizeof(LogNode);
-  };
+int
+adspmsgd_apps_log(const unsigned char *log_message_buffer,
+                  int log_message_bufferLen)
+{
+	LogNode *logMessage = (LogNode *)log_message_buffer;
+	while((log_message_bufferLen > 0) && (logMessage != NULL)) {
+		printf("adsprpc: %s:%d:0x%x:%s", logMessage->file,
+		       logMessage->line, logMessage->thread_id,
+		       logMessage->str);
+		logMessage++;
+		log_message_bufferLen -= sizeof(LogNode);
+	};
 
-  return 0;
+	return 0;
 }
-void adspmsgd_log_message(char *format, char *msg) {
-  printf("adsprpc:dsp: %s\n", msg);
+void
+adspmsgd_log_message(char *format, char *msg)
+{
+	printf("adsprpc:dsp: %s\n", msg);
 }

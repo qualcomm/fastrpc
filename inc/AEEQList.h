@@ -11,222 +11,221 @@ GENERAL DESCRIPTION:  Doubly-linked circular list implementation
 #ifndef _AEEQLIST_H_
 #define _AEEQLIST_H_
 
-
 typedef struct QNode QNode;
 struct QNode {
-   QNode *pNext;
-   QNode *pPrev;
+	QNode *pNext;
+	QNode *pPrev;
 };
 
 #define QLIST_DEFINE_INIT(f) QList f = { { &f.n, &f.n } }
 
 typedef struct QList QList;
 struct QList {
-   QNode n;
+	QNode n;
 };
 
-
-
-static __inline void QNode_InsPrev(QNode *me, QNode *pn)
+static __inline void
+QNode_InsPrev(QNode *me, QNode *pn)
 {
-   QNode *pPrev = me->pPrev;
+	QNode *pPrev = me->pPrev;
 
-   pn->pNext    = me;
-   pn->pPrev    = pPrev;
-   pPrev->pNext = pn;
-   me->pPrev    = pn;
+	pn->pNext = me;
+	pn->pPrev = pPrev;
+	pPrev->pNext = pn;
+	me->pPrev = pn;
 }
 
-
-static __inline void QNode_InsNext(QNode *me, QNode *pn)
+static __inline void
+QNode_InsNext(QNode *me, QNode *pn)
 {
-   QNode *pNext = me->pNext;
+	QNode *pNext = me->pNext;
 
-   pn->pPrev    = me;
-   pn->pNext    = pNext;
-   pNext->pPrev = pn;
-   me->pNext    = pn;
+	pn->pPrev = me;
+	pn->pNext = pNext;
+	pNext->pPrev = pn;
+	me->pNext = pn;
 }
 
-
-
-static __inline void QNode_Dequeue(QNode *me)
+static __inline void
+QNode_Dequeue(QNode *me)
 {
-   QNode *pNext = me->pNext;
-   QNode *pPrev = me->pPrev;
+	QNode *pNext = me->pNext;
+	QNode *pPrev = me->pPrev;
 
-   pPrev->pNext = pNext;
-   pNext->pPrev = pPrev;
+	pPrev->pNext = pNext;
+	pNext->pPrev = pPrev;
 }
 
-static __inline void QNode_CtorZ(QNode *me)
+static __inline void
+QNode_CtorZ(QNode *me)
 {
-   me->pNext = me->pPrev = 0;
+	me->pNext = me->pPrev = 0;
 }
 
-static __inline int QNode_IsQueuedZ(QNode *me)
+static __inline int
+QNode_IsQueuedZ(QNode *me)
 {
-   return (0 != me->pNext);
+	return (0 != me->pNext);
 }
 
-static __inline void QNode_DequeueZ(QNode *me)
+static __inline void
+QNode_DequeueZ(QNode *me)
 {
-   if (QNode_IsQueuedZ(me)) {
-      QNode_Dequeue(me);
-      me->pNext = me->pPrev = 0;
-   }
+	if(QNode_IsQueuedZ(me)) {
+		QNode_Dequeue(me);
+		me->pNext = me->pPrev = 0;
+	}
 }
 
 //--------------------------------------------------------------------
 //--  QList functions  ----------------------------------------------
 //--------------------------------------------------------------------
 
-
-static __inline void QList_Zero(QList *me)
+static __inline void
+QList_Zero(QList *me)
 {
-   me->n.pNext = me->n.pPrev = &me->n;
+	me->n.pNext = me->n.pPrev = &me->n;
 }
 
-
-static __inline void QList_Ctor(QList *me)
+static __inline void
+QList_Ctor(QList *me)
 {
-   QList_Zero(me);
+	QList_Zero(me);
 }
 
-
-static __inline int QList_IsEmpty(QList *me)
+static __inline int
+QList_IsEmpty(QList *me)
 {
-   return me->n.pNext == &me->n;
+	return me->n.pNext == &me->n;
 }
 
-static __inline int QList_IsNull(QList *me)
+static __inline int
+QList_IsNull(QList *me)
 {
-   return ((0 == me->n.pNext) && (0 == me->n.pPrev));
+	return ((0 == me->n.pNext) && (0 == me->n.pPrev));
 }
 
-
-static __inline void QList_AppendNode(QList *me, QNode *pn)
+static __inline void
+QList_AppendNode(QList *me, QNode *pn)
 {
-   QNode_InsPrev(&me->n, pn);
+	QNode_InsPrev(&me->n, pn);
 }
 
-
-static __inline void QList_PrependNode(QList *me, QNode *pn)
+static __inline void
+QList_PrependNode(QList *me, QNode *pn)
 {
-   QNode_InsNext(&me->n, pn);
+	QNode_InsNext(&me->n, pn);
 }
 
-
-static __inline void QList_CtorFrom(QList *me, QList *psrc)
+static __inline void
+QList_CtorFrom(QList *me, QList *psrc)
 {
-   QNode *s = &psrc->n;
-   QNode *d = &me->n;
+	QNode *s = &psrc->n;
+	QNode *d = &me->n;
 
-   s->pNext->pPrev = d;
-   d->pPrev        = s->pPrev;
-   d->pNext        = s->pNext;
-   s->pPrev->pNext = d;
+	s->pNext->pPrev = d;
+	d->pPrev = s->pPrev;
+	d->pNext = s->pNext;
+	s->pPrev->pNext = d;
 
-   QList_Zero(psrc);
+	QList_Zero(psrc);
 }
 
-
-
-static __inline void QList_AppendList(QList *me, QList *psrc)
+static __inline void
+QList_AppendList(QList *me, QList *psrc)
 {
-   QNode *s = &psrc->n;
-   QNode *d = &me->n;
-   QNode *dp = d->pPrev;
-   QNode *sn = s->pNext;
-   QNode *sp;
+	QNode *s = &psrc->n;
+	QNode *d = &me->n;
+	QNode *dp = d->pPrev;
+	QNode *sn = s->pNext;
+	QNode *sp;
 
-   sn->pPrev   = dp;
-   dp->pNext   = sn;
-   d->pPrev    = (sp = s->pPrev);
-   sp->pNext   = d;
+	sn->pPrev = dp;
+	dp->pNext = sn;
+	d->pPrev = (sp = s->pPrev);
+	sp->pNext = d;
 
-   QList_Zero(psrc);
+	QList_Zero(psrc);
 }
 
+#define QLIST_FOR_ALL(pList, pNode)                                           \
+	for((pNode) = (pList)->n.pNext; (pNode) != &(pList)->n;               \
+	    (pNode) = (pNode)->pNext)
 
-#define QLIST_FOR_ALL(pList, pNode) \
-   for ((pNode) = (pList)->n.pNext; \
-        (pNode) != &(pList)->n; \
-        (pNode) = (pNode)->pNext)
+#define QLIST_FOR_REST(pList, pNode)                                          \
+	for(; (pNode) != &(pList)->n; (pNode) = (pNode)->pNext)
 
-#define QLIST_FOR_REST(pList, pNode) \
-   for (; \
-        (pNode) != &(pList)->n; \
-        (pNode) = (pNode)->pNext)
+#define QLIST_REV_FOR_ALL(pList, pNode)                                       \
+	for((pNode) = (pList)->n.pPrev; (pNode) != &(pList)->n;               \
+	    (pNode) = (pNode)->pPrev)
 
-#define QLIST_REV_FOR_ALL(pList, pNode) \
-   for ((pNode) = (pList)->n.pPrev; \
-        (pNode) != &(pList)->n; \
-        (pNode) = (pNode)->pPrev)
-
-#define QLIST_REV_FOR_REST(pList, pNode) \
-   for (; \
-        (pNode) != &(pList)->n; \
-        (pNode) = (pNode)->pPrev)
+#define QLIST_REV_FOR_REST(pList, pNode)                                      \
+	for(; (pNode) != &(pList)->n; (pNode) = (pNode)->pPrev)
 
 /* Allows dequeing QNodes during iteration */
-#define QLIST_NEXTSAFE_FOR_ALL(pList, pNode, pNodeNext) \
-    for ((pNode) = (pList)->n.pNext, (pNodeNext) = (pNode)->pNext; \
-         (pNode) != &(pList)->n; \
-         (pNode) = (pNodeNext), (pNodeNext) = (pNode)->pNext)
+#define QLIST_NEXTSAFE_FOR_ALL(pList, pNode, pNodeNext)                       \
+	for((pNode) = (pList)->n.pNext, (pNodeNext) = (pNode)->pNext;         \
+	    (pNode) != &(pList)->n;                                           \
+	    (pNode) = (pNodeNext), (pNodeNext) = (pNode)->pNext)
 
-static __inline QNode *QList_GetFirst(QList *me)
+static __inline QNode *
+QList_GetFirst(QList *me)
 {
-   QNode *pn = me->n.pNext;
+	QNode *pn = me->n.pNext;
 
-   return (pn == &me->n ? 0 : pn);
+	return (pn == &me->n ? 0 : pn);
 }
 
-static __inline QNode *QList_GetLast(QList *me)
+static __inline QNode *
+QList_GetLast(QList *me)
 {
-   QNode *pn = me->n.pPrev;
+	QNode *pn = me->n.pPrev;
 
-   return (pn == &me->n ? 0 : pn);
+	return (pn == &me->n ? 0 : pn);
 }
 
-static __inline QNode *QList_Pop(QList *me)
+static __inline QNode *
+QList_Pop(QList *me)
 {
-   QNode *pn = me->n.pNext;
-   QNode *pnn = pn->pNext;
+	QNode *pn = me->n.pNext;
+	QNode *pnn = pn->pNext;
 
-   me->n.pNext = pnn;
-   pnn->pPrev   = &me->n;
+	me->n.pNext = pnn;
+	pnn->pPrev = &me->n;
 
-   return (pn == &me->n ? 0 : pn);
+	return (pn == &me->n ? 0 : pn);
 }
 
-static __inline QNode *QList_PopZ(QList *me)
+static __inline QNode *
+QList_PopZ(QList *me)
 {
-   QNode *pn = QList_Pop(me);
-   if (0 != pn) {
-      QNode_CtorZ(pn);
-   }
-   return pn;
+	QNode *pn = QList_Pop(me);
+	if(0 != pn) {
+		QNode_CtorZ(pn);
+	}
+	return pn;
 }
 
-static __inline QNode *QList_PopLast(QList *me)
+static __inline QNode *
+QList_PopLast(QList *me)
 {
-   QNode *pp = me->n.pPrev;
-   QNode *ppp = pp->pPrev;
+	QNode *pp = me->n.pPrev;
+	QNode *ppp = pp->pPrev;
 
-   me->n.pPrev = ppp;
-   ppp->pNext  = &me->n;
+	me->n.pPrev = ppp;
+	ppp->pNext = &me->n;
 
-   return (pp == &me->n ? 0 : pp);
+	return (pp == &me->n ? 0 : pp);
 }
 
-static __inline QNode *QList_PopLastZ(QList *me)
+static __inline QNode *
+QList_PopLastZ(QList *me)
 {
-   QNode *pn = QList_PopLast(me);
-   if (0 != pn) {
-      QNode_CtorZ(pn);
-   }
-   return pn;
+	QNode *pn = QList_PopLast(me);
+	if(0 != pn) {
+		QNode_CtorZ(pn);
+	}
+	return pn;
 }
 
 /*=====================================================================
@@ -373,14 +372,14 @@ See Also:
 QNode_InsPrev()
 
 Description:
-	insert a node before this one.
+        insert a node before this one.
 
 Prototype:
-	static __inline void QNode_InsPrev(QNode *me, QNode *pn)
+        static __inline void QNode_InsPrev(QNode *me, QNode *pn)
 
 Parameters:
-	me: the QNode
-	pn: the node to be inserted.
+        me: the QNode
+        pn: the node to be inserted.
 Return Value:
    None
 
@@ -398,14 +397,14 @@ See Also:
 QNode_InsNext()
 
 Description:
-	insert a node after this one.
+        insert a node after this one.
 
 Prototype:
-	static __inline void QNode_InsNext(QNode *me, QNode *pn)
+        static __inline void QNode_InsNext(QNode *me, QNode *pn)
 
 Parameters:
-	me: the QNode
-	pn: the node to be inserted.
+        me: the QNode
+        pn: the node to be inserted.
 
 Return Value:
    None
@@ -423,13 +422,13 @@ See Also:
 QNode_Dequeue()
 
 Description:
-	dequeue this node.
+        dequeue this node.
 
 Prototype:
-	static __inline void QNode_Dequeue(QNode *me)
+        static __inline void QNode_Dequeue(QNode *me)
 
 Parameters:
-	me: the QNode to be dequeued
+        me: the QNode to be dequeued
 
 Return Value:
    None
@@ -584,8 +583,8 @@ QList_CtorFrom()
 Description:
    Move nodes from one queue to a newly constructed queue.
    Weird aliasing voodoo allows this to work without conditional branches, even
-   when psrc is empty.  In that case, "s->pNext->pPrev = d" overwrites s->pPrev with d,
-   so that "s->pPrev->pNext = d" will later overwrite d->pNext with d.
+   when psrc is empty.  In that case, "s->pNext->pPrev = d" overwrites s->pPrev
+with d, so that "s->pPrev->pNext = d" will later overwrite d->pNext with d.
 
 Prototype:
 
@@ -713,8 +712,8 @@ Side Effects:
    None
 
 See Also:
-   QNode_PopZ, QNode_PopLast(), QNode_PopLastZ, QNode_CtorZ(), QNode_IsQueued(),
-   QNode_DequeueZ()
+   QNode_PopZ, QNode_PopLast(), QNode_PopLastZ, QNode_CtorZ(),
+QNode_IsQueued(), QNode_DequeueZ()
 
 =======================================================================
 QList_PopZ()
@@ -792,7 +791,7 @@ Side Effects:
    None
 
 See Also:
-	None
+        None
 
 =======================================================================
 

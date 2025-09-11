@@ -31,7 +31,8 @@
 #ifdef __cplusplus
 extern "C" {
 #endif
-__QAIC_HEADER_EXPORT int __QAIC_HEADER(adsp_default_listener_register)(void) __QAIC_HEADER_ATTRIBUTE;
+__QAIC_HEADER_EXPORT int __QAIC_HEADER(adsp_default_listener_register)(void)
+    __QAIC_HEADER_ATTRIBUTE;
 #ifdef __cplusplus
 }
 #endif

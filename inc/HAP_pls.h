@@ -13,8 +13,8 @@ extern "C" {
 /**
  * Process local storage is local storage for the hlos process context.
  *
- * Warning, this API should only be called from within a thread started by FastRPC, and not from
- * any user created threads via the qurt apis.
+ * Warning, this API should only be called from within a thread started by
+ * FastRPC, and not from any user created threads via the qurt apis.
  *
  * When used from within a FastRPC started thread this will attach
  * desturctors to the lifetime of the HLOS process that is making the
@@ -30,30 +30,29 @@ extern "C" {
  * For example:
  *
  *    static int my_instance(struct my_struct* me)  {
- *       return HAP_pls_add_lookup((uintptr_t)my_ctor,   //type, some unique static address
- *                                  0,                //key, for different type instances
+ *       return HAP_pls_add_lookup((uintptr_t)my_ctor,   //type, some unique
+ * static address 0,                //key, for different type instances
  *                                  sizeof(*me),      //size of our struture
  *                                  my_ctor,          //structure ctor
- *                                  0,                //aditional user context for ctor
- *                                  my_dtor,          //desturctor
- *                                  &me);             //result
+ *                                  0,                //aditional user context
+ * for ctor my_dtor,          //desturctor &me);             //result
  *    }
  *
- * First call to my_instance will initialize the structure by allocating it and calling my_ctor.
- * Second call to my_instance will return the created instance.
- * This API is thread safe, but when two threads try to intialize the structure the first
- * time they may both create an instance, but only 1 will be returned.
- * The destructor will be called when the HLOS process exits.
+ * First call to my_instance will initialize the structure by allocating it and
+ * calling my_ctor. Second call to my_instance will return the created
+ * instance. This API is thread safe, but when two threads try to intialize the
+ * structure the first time they may both create an instance, but only 1 will
+ * be returned. The destructor will be called when the HLOS process exits.
  *
  * See HAP_pls_add and HAP_pls_add_lookup.
  *
  * Exit Hooks
  * ----------
  *
- * Users can use either HAP_pls_add_lookup or HAP_pls_add to add a destructor that will be
- * called when the HLOS process exits.  The main difference between the two functions is that
- * HAP_pls_add will always add, and the last instance added will be the one returned by
- * HAP_pls_lookup.
+ * Users can use either HAP_pls_add_lookup or HAP_pls_add to add a destructor
+ * that will be called when the HLOS process exits.  The main difference
+ * between the two functions is that HAP_pls_add will always add, and the last
+ * instance added will be the one returned by HAP_pls_lookup.
  *
  *
  */
@@ -74,7 +73,9 @@ extern "C" {
  * @param ppo, output data
  * @retval, 0 for success
  */
-int HAP_pls_add(uintptr_t type, uintptr_t key, int size, int (*ctor)(void* ctx, void* data), void* ctx, void (*dtor)(void*), void** ppo);
+int HAP_pls_add(uintptr_t type, uintptr_t key, int size,
+                int (*ctor)(void *ctx, void *data), void *ctx,
+                void (*dtor)(void *), void **ppo);
 
 /**
  * Like add, but will only add 1 item, and return the same item on the
@@ -83,9 +84,12 @@ int HAP_pls_add(uintptr_t type, uintptr_t key, int size, int (*ctor)(void* ctx, 
  * may be called twice.
  * item if its already there, otherwise tries to add.
  * ctor may be called twice
- * callers should avoid calling pls_add for the same type/key which will override the singleton
+ * callers should avoid calling pls_add for the same type/key which will
+ * override the singleton
  */
-int HAP_pls_add_lookup(uintptr_t type, uintptr_t key, int size, int (*ctor)(void* ctx, void* data), void* ctx, void (*dtor)(void*), void** ppo);
+int HAP_pls_add_lookup(uintptr_t type, uintptr_t key, int size,
+                       int (*ctor)(void *ctx, void *data), void *ctx,
+                       void (*dtor)(void *), void **ppo);
 
 /**
  * finds the last data pointer added for key to the local storage
@@ -94,10 +98,9 @@ int HAP_pls_add_lookup(uintptr_t type, uintptr_t key, int size, int (*ctor)(void
  * @param ppo, output data
  * @retval, 0 for success
  */
-int HAP_pls_lookup(uintptr_t type, uintptr_t key, void** ppo);
-
+int HAP_pls_lookup(uintptr_t type, uintptr_t key, void **ppo);
 
 #ifdef __cplusplus
 }
 #endif
-#endif //HAP_PLS_H
+#endif // HAP_PLS_H

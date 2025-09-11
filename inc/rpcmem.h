@@ -8,7 +8,8 @@
 
 /**
  *  @file rpcmem.h
- *  @brief APIs used to manage memory allocated by the application processor and shared with the DSP.
+ *  @brief APIs used to manage memory allocated by the application processor
+ * and shared with the DSP.
  */
 
 /** @defgroup rpcmem_const RPCMEM API macros and enumerations
@@ -25,13 +26,16 @@
 #endif
 
 /**
- * The FastRPC library tries to map buffers allocated with this flag to the remote process of all current and new
- * FastRPC sessions. In case of failure to map, the FastRPC library ignores the error and continues to open the session
- * without pre-mapping the buffer. In case of success, buffers allocated with this flag will be pre-mapped to reduce
- * the latency of upcoming FastRPC calls. This flag is recommended only for buffers that are used with latency-critical
- * FastRPC methods. Pre-mapped buffers will be unmapped during either buffer free or session close.
+ * The FastRPC library tries to map buffers allocated with this flag to the
+ * remote process of all current and new FastRPC sessions. In case of failure
+ * to map, the FastRPC library ignores the error and continues to open the
+ * session without pre-mapping the buffer. In case of success, buffers
+ * allocated with this flag will be pre-mapped to reduce the latency of
+ * upcoming FastRPC calls. This flag is recommended only for buffers that are
+ * used with latency-critical FastRPC methods. Pre-mapped buffers will be
+ * unmapped during either buffer free or session close.
  */
-#define RPCMEM_TRY_MAP_STATIC   0x04000000
+#define RPCMEM_TRY_MAP_STATIC 0x04000000
 
 /**
  *  Supported RPCMEM heap IDs.
@@ -41,25 +45,26 @@
  * a valid ION heap ID.
  */
 enum rpc_heap_ids {
-/**
- *  Memory for secure use cases only.
- *  * Secure heap is to be used only by clients migrating to CPZ
- */
-       RPCMEM_HEAP_ID_SECURE   = 9,
-/**
- *  Contiguous physical memory:
- *  * Very limited memory is available (< 8 MB)
- *  * Recommended for subsystems without SMMU (sDSP and mDSP)
- *  * Contiguous heap memory will be deprecated from archs after v73
- */
-       RPCMEM_HEAP_ID_CONTIG   = 22,
-/**
- *  Non-contiguous system physical memory.
- *  * Recommended for all use cases that do not require using a specific heap
- *  * Used with subsystems with SMMU (cDSP and aDSP)
- */
-       RPCMEM_HEAP_ID_SYSTEM   = 25,
- };
+	/**
+	 *  Memory for secure use cases only.
+	 *  * Secure heap is to be used only by clients migrating to CPZ
+	 */
+	RPCMEM_HEAP_ID_SECURE = 9,
+	/**
+	 *  Contiguous physical memory:
+	 *  * Very limited memory is available (< 8 MB)
+	 *  * Recommended for subsystems without SMMU (sDSP and mDSP)
+	 *  * Contiguous heap memory will be deprecated from archs after v73
+	 */
+	RPCMEM_HEAP_ID_CONTIG = 22,
+	/**
+	 *  Non-contiguous system physical memory.
+	 *  * Recommended for all use cases that do not require using a
+	 * specific heap
+	 *  * Used with subsystems with SMMU (cDSP and aDSP)
+	 */
+	RPCMEM_HEAP_ID_SYSTEM = 25,
+};
 
 /**
  * Use uncached memory.
@@ -155,7 +160,7 @@ void rpcmem_deinit(void);
  *    rpcmem_alloc(18, RPCMEM_DEFAULT_FLAGS, 4096);
  * @endcode
  */
-void* rpcmem_alloc(int heapid, uint32_t flags, int size);
+void *rpcmem_alloc(int heapid, uint32_t flags, int size);
 
 /**
  * Allocate a zero-copy buffer with the FastRPC framework.
@@ -168,31 +173,33 @@ void* rpcmem_alloc(int heapid, uint32_t flags, int size);
  *
  * * The usage examples are same as rpcmem_alloc.
  */
-void* rpcmem_alloc2(int heapid, uint32_t flags, size_t size);
+void *rpcmem_alloc2(int heapid, uint32_t flags, size_t size);
 
 /**
  * Allocate a buffer with default settings.
  * @param[in] size  Size of the buffer to be allocated.
  * @return          Pointer to the allocated memory buffer.
  */
- #if !defined(WINNT) && !defined (_WIN32_WINNT)
+#if !defined(WINNT) && !defined(_WIN32_WINNT)
 __attribute__((unused))
 #endif
-static __inline void* rpcmem_alloc_def(int size) {
-   return rpcmem_alloc(RPCMEM_HEAP_ID_SYSTEM, RPCMEM_DEFAULT_FLAGS, size);
+static __inline void *
+rpcmem_alloc_def(int size)
+{
+	return rpcmem_alloc(RPCMEM_HEAP_ID_SYSTEM, RPCMEM_DEFAULT_FLAGS, size);
 }
 
 /**
  * Free a buffer and ignore invalid buffers.
  */
-void rpcmem_free(void* po);
+void rpcmem_free(void *po);
 
 /**
  * Return an associated file descriptor.
  * @param[in] po  Data pointer for an RPCMEM-allocated buffer.
  * @return        Buffer file descriptor.
  */
-int rpcmem_to_fd(void* po);
+int rpcmem_to_fd(void *po);
 
 /**
  * @}
@@ -205,16 +212,16 @@ int rpcmem_to_fd(void* po);
 //! @cond Doxygen_Suppress
 /** These macros are deprecated.
  */
-#define RPCMEM_DEFAULT_HEAP     -1
-#define RPCMEM_HEAP_DEFAULT     0x80000000
-#define RPCMEM_HEAP_NOREG       0x40000000
-#define RPCMEM_HEAP_UNCACHED    0x20000000
-#define RPCMEM_HEAP_NOVA        0x10000000
+#define RPCMEM_DEFAULT_HEAP -1
+#define RPCMEM_HEAP_DEFAULT 0x80000000
+#define RPCMEM_HEAP_NOREG 0x40000000
+#define RPCMEM_HEAP_UNCACHED 0x20000000
+#define RPCMEM_HEAP_NOVA 0x10000000
 #define RPCMEM_HEAP_NONCOHERENT 0x08000000
-#define RPCMEM_FORCE_NOFLUSH    0x01000000
-#define RPCMEM_FORCE_NOINVALIDATE    0x02000000
+#define RPCMEM_FORCE_NOFLUSH 0x01000000
+#define RPCMEM_FORCE_NOINVALIDATE 0x02000000
 // Use macros from libion instead
-#define ION_SECURE_FLAGS    ((1 << 31) | (1 << 19))
+#define ION_SECURE_FLAGS ((1 << 31) | (1 << 19))
 //! @endcond
 
-#endif //RPCMEM_H
+#endif // RPCMEM_H

@@ -4,10 +4,10 @@
 #ifndef FASTRPC_CONTEXT_H
 #define FASTRPC_CONTEXT_H
 
-#include <pthread.h>
-#include <stdbool.h>
 #include "remote.h"
 #include "uthash.h"
+#include <pthread.h>
+#include <stdbool.h>
 
 typedef struct fastrpc_context {
 	/* Hash table handle */
@@ -41,7 +41,7 @@ typedef struct fastrpc_context_table {
 
 	/* Flag to indicate context table init is done */
 	bool init;
-}  fastrpc_context_table;
+} fastrpc_context_table;
 
 /**
  * Initialize the fastrpc-context table
@@ -92,7 +92,7 @@ int fastrpc_destroy_context(uint64_t uctx);
  *
  * Returns 0 on success
  */
-int fastrpc_context_get_domains(uint64_t uctx,
-	unsigned int **effec_domain_ids, unsigned int *num_domain_ids);
+int fastrpc_context_get_domains(uint64_t uctx, unsigned int **effec_domain_ids,
+                                unsigned int *num_domain_ids);
 
 #endif // FASTRPC_CONTEXT_H
