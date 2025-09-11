@@ -34,10 +34,6 @@
       rpcmem_alloc2;
       rpcmem_free;
       rpcmem_to_fd;
-      remote_handle_invoke_async;
-      remote_handle64_invoke_async;
-      fastrpc_async_get_status;
-      fastrpc_release_async_job;
       dspqueue_create;
       dspqueue_close;
       dspqueue_export;

@@ -289,8 +289,6 @@
 
 #define AEE_DEFAULT_PROCESS           (AEE_EOFFSET + 0x180)     ///<  Default process in Guest OS is not present
 #define AEE_ENULLCONTEXT              (AEE_EOFFSET + 0x181)     ///<  User NULL context vote
-#define AEE_EINVALIDJOB               (AEE_EOFFSET + 0x182)     ///<  AsyncRPC Invalid job
-#define AEE_EBUSY                     (AEE_EOFFSET + 0x183)     ///<  AsyncRPC Pending job
 
  /** @defgroup heaperror Heap error codes
  *  @{

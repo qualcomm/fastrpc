@@ -43,8 +43,6 @@
  * Update these values for any additions to
  * the corresponding enums.
  **/
-/* Max value of fastrpc_async_notify_type, used to validate the user input */
-#define FASTRPC_ASYNC_TYPE_MAX FASTRPC_ASYNC_POLL + 1
 
 /* Max value of remote_dsp_attributes, used to validate the attribute ID*/
 #define FASTRPC_MAX_DSP_ATTRIBUTES MCID_MULTICAST + 1
@@ -190,7 +188,6 @@ enum fastrpc_control_type {
 	FASTRPC_CONTROL_WAKELOCK		=	4,
 	FASTRPC_CONTROL_PM				=	5,
 	FASTRPC_CONTROL_RPC_POLL		=	7,
-	FASTRPC_CONTROL_ASYNC_WAKE		=	8,
 	FASTRPC_CONTROL_NOTIF_WAKE		=	9,
 };
 
@@ -316,11 +313,8 @@ struct handle_list {
 	int disable_exit_logs;
 	struct fastrpc_dsp_capabilities cap_info;
 	int trace_marker_fd;
-	uint64_t jobid;
 	/* Capability flag to check if mapping DMA handle through reverse RPC is supported */
 	int dma_handle_reverse_rpc_map_capability;
-	/* Mutex to synchronize ASync init and deinit */
-	pthread_mutex_t async_init_deinit_mut;
 	uint32_t pd_initmem_size;  /** Initial memory allocated for remote userPD */
 	uint32_t refs;       // Number of multi-domain handles + contexts on session
 	bool is_session_reserved;   /** Set if session is reserved or used */
@@ -376,11 +370,6 @@ int check_rpc_error(int err);
   * @param[in] domain DSP domain
   **/
 void fastrpc_qos_activity(int domain);
-
-/**
-  * @brief Make IOCTL call to exit async thread
-  */
-int fastrpc_exit_async_thread(int domain);
 
 /**
   * @brief Make IOCTL call to exit notif thread
@@ -502,8 +491,7 @@ int fastrpc_update_module_list(uint32_t req, int domain, remote_handle64 handle,
   * @brief functions to wrap ioctl syscalls for downstream and upstream kernel
   **/
 int ioctl_init(int dev, uint32_t flags, int attr, unsigned char* shell, int shelllen, int shellfd, char* initmem, int initmemlen, int initmemfd, int tessiglen);
-int ioctl_invoke(int dev, int req, remote_handle handle, uint32_t sc, void* pra, int* fds, unsigned int* attrs, void *job, unsigned int* crc, uint64_t* perf_kernel, uint64_t* perf_dsp);
-int ioctl_invoke2_response(int dev, fastrpc_async_jobid *jobid, remote_handle *handle, uint32_t *sc, int* result, uint64_t *perf_kernel, uint64_t *perf_dsp);
+int ioctl_invoke(int dev, int req, remote_handle handle, uint32_t sc, void* pra, int* fds, unsigned int* attrs, unsigned int* crc, uint64_t* perf_kernel, uint64_t* perf_dsp);
 int ioctl_invoke2_notif(int dev, int *domain, int *session, int *status);
 int ioctl_mmap(int dev, int req, uint32_t flags, int attr, int fd, int offset, size_t len, uintptr_t vaddrin, uint64_t* vaddr_out);
 int ioctl_munmap(int dev, int req, int attr, void* buf, int fd, int len, uint64_t vaddr);
@@ -539,7 +527,6 @@ int ioctl_mdctx_manage(int dev, int req, void *user_ctx,
 	unsigned int *domain_ids, unsigned int num_domain_ids, uint64_t *ctx);
 
 const char* get_secure_domain_name(int domain_id);
-int is_async_fastrpc_supported(void);
 
 #include "fastrpc_ioctl.h"
 

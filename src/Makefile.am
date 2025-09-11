@@ -7,7 +7,6 @@ LIBDSPRPC_SOURCES = \
 		fastrpc_perf.c \
 		fastrpc_pm.c \
 		fastrpc_config.c \
-		fastrpc_async.c \
 		fastrpc_mem.c \
 		fastrpc_notif.c \
 		fastrpc_latency.c \

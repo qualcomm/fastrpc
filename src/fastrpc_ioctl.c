@@ -5,17 +5,10 @@
 
 #include "AEEStdErr.h"
 #include "HAP_farf.h"
-#include "fastrpc_async.h"
 #include "fastrpc_internal.h"
 #include "fastrpc_notif.h"
 #include "remote.h"
 #include <sys/ioctl.h>
-
-/* check async support */
-int is_async_fastrpc_supported(void) {
-  /* async not supported by upstream driver */
-  return 0;
-}
 
 /* Returns the name of the domain based on the following
  ADSP/SLPI/MDSP/CDSP - Return Secure node
@@ -91,7 +84,7 @@ int ioctl_init(int dev, uint32_t flags, int attr, unsigned char *shell, int shel
 }
 
 int ioctl_invoke(int dev, int req, remote_handle handle, uint32_t sc, void *pra,
-                 int *fds, unsigned int *attrs, void *job, unsigned int *crc,
+                 int *fds, unsigned int *attrs, unsigned int *crc,
                  uint64_t *perf_kernel, uint64_t *perf_dsp) {
   int ioErr = AEE_SUCCESS;
   struct fastrpc_ioctl_invoke invoke = {0};
@@ -105,12 +98,6 @@ int ioctl_invoke(int dev, int req, remote_handle handle, uint32_t sc, void *pra,
     return AEE_EUNSUPPORTED;
 
   return ioErr;
-}
-
-int ioctl_invoke2_response(int dev, fastrpc_async_jobid *jobid,
-                           remote_handle *handle, uint32_t *sc, int *result,
-                           uint64_t *perf_kernel, uint64_t *perf_dsp) {
-  return AEE_EUNSUPPORTED;
 }
 
 int ioctl_invoke2_notif(int dev, int *domain, int *session, int *status) {
