@@ -14,26 +14,19 @@ on:
 jobs:
   build:
 
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-latest
 
     steps:
     - name: Git checkout
       uses: actions/checkout@v4
 
-    - name: Install auto tools
+    - name: Install build dependencies
       run: |
-        sudo apt-get install automake
+        sudo apt-get install automake g++-aarch64-linux-gnu binutils-aarch64-linux-gnu
     
-    - name: Download Linaro tools and untar
-      run: |
-        wget -c https://releases.linaro.org/components/toolchain/binaries/latest-7/aarch64-linux-gnu/gcc-linaro-7.5.0-2019.12-i686_aarch64-linux-gnu.tar.xz
-        tar xf gcc-linaro-7.5.0-2019.12-i686_aarch64-linux-gnu.tar.xz
-
     - name: Set Up Build Environment and compile code for LE platform
       run: |
-  
         # Set Up Build Environment
-        export PATH="$PWD/gcc-linaro-7.5.0-2019.12-i686_aarch64-linux-gnu/bin/:$PATH"
         export CC=aarch64-linux-gnu-gcc
         export CXX=aarch64-linux-gnu-g++
         export AS=aarch64-linux-gnu-as
