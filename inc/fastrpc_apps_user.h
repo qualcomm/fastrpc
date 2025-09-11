@@ -4,15 +4,15 @@
 #ifndef FASTRPC_ANDROID_USER_H
 #define FASTRPC_ANDROID_USER_H
 
-#include <assert.h>
-#include <fcntl.h>
 #include <asm/ioctl.h>
+#include <assert.h>
 #include <errno.h>
-#include <sys/time.h>
+#include <fcntl.h>
 #include <stdbool.h>
+#include <sys/time.h>
 
-#include "remote.h"
 #include "fastrpc_common.h"
+#include "remote.h"
 
 #ifdef __LE_TVM__
 #define __CONSTRUCTOR_ATTRIBUTE__
@@ -29,13 +29,13 @@
  * and the range for staticPD handles is <256,512>
  */
 typedef enum {
-	 OISPD_HANDLE			=	256,
-	 AUDIOPD_HANDLE			=	257,
-	 SENSORPD_HANDLE		=	258,
-	 ATTACHGUESTOS_HANDLE		=	259,
-	 ROOTPD_HANDLE			=	260,
-	 SECUREPD_HANDLE		=	261
- } static_pd_handle;
+	OISPD_HANDLE = 256,
+	AUDIOPD_HANDLE = 257,
+	SENSORPD_HANDLE = 258,
+	ATTACHGUESTOS_HANDLE = 259,
+	ROOTPD_HANDLE = 260,
+	SECUREPD_HANDLE = 261
+} static_pd_handle;
 /*
  * API to initialize rpcmem data structures for ION allocation
  */
@@ -51,13 +51,13 @@ void rpcmem_deinit_internal();
  * Returns NULL if allocation fails
  *
  */
-void* rpcmem_alloc_internal(int heapid, uint32_t flags, size_t size);
+void *rpcmem_alloc_internal(int heapid, uint32_t flags, size_t size);
 
 /*
  * API to free internally allocated ION memory
  *
  */
-void rpcmem_free_internal(void* po);
+void rpcmem_free_internal(void *po);
 
 /*
  * API to get fd of internally allocated ION buffer
@@ -69,8 +69,8 @@ int rpcmem_to_fd_internal(void *po);
 // API to get domain from handle
 int get_domain_from_handle(remote_handle64 local, int *domain);
 
-
-/* fastrpc initialization function to call from global functions exported to user */
+/* fastrpc initialization function to call from global functions exported to
+ * user */
 int __CONSTRUCTOR_ATTRIBUTE__ fastrpc_init_once(void);
 
 /* Utility function to find session opened or not for a given domain
@@ -116,8 +116,8 @@ void fastrpc_session_unlock(int domain);
  * @returns: 0 on success, valid non-zero error code on failure
  *
  */
-int close_reverse_handle(remote_handle64 handle, char* errStr, int errStrLen, int* pdlErr);
-
+int close_reverse_handle(remote_handle64 handle, char *errStr, int errStrLen,
+                         int *pdlErr);
 
 /*
  * API to get unsigned PD attribute for a given domain
@@ -134,4 +134,4 @@ int get_unsigned_pd_attribute(uint32_t domain, int *unsigned_module);
  */
 int is_userspace_allocation_supported();
 
-#endif //FASTRPC_ANDROID_USER_H
+#endif // FASTRPC_ANDROID_USER_H

@@ -12,55 +12,58 @@
 extern "C" {
 #endif
 
-#define MAX_FARF_LEN 256 
+#define MAX_FARF_LEN 256
 
-#define HAP_LEVEL_LOW       0
-#define HAP_LEVEL_MEDIUM    1
-#define HAP_LEVEL_HIGH      2
-#define HAP_LEVEL_ERROR     3
-#define HAP_LEVEL_FATAL     4
+#define HAP_LEVEL_LOW 0
+#define HAP_LEVEL_MEDIUM 1
+#define HAP_LEVEL_HIGH 2
+#define HAP_LEVEL_ERROR 3
+#define HAP_LEVEL_FATAL 4
 
-#define HAP_LEVEL_CRITICAL     5
+#define HAP_LEVEL_CRITICAL 5
 
-#define HAP_LEVEL_RPC_LOW       16
-#define HAP_LEVEL_RPC_MEDIUM    17
-#define HAP_LEVEL_RPC_HIGH      18
-#define HAP_LEVEL_RPC_ERROR     19
-#define HAP_LEVEL_RPC_FATAL     20
+#define HAP_LEVEL_RPC_LOW 16
+#define HAP_LEVEL_RPC_MEDIUM 17
+#define HAP_LEVEL_RPC_HIGH 18
+#define HAP_LEVEL_RPC_ERROR 19
+#define HAP_LEVEL_RPC_FATAL 20
 
-#define HAP_LEVEL_RPC_CRITICAL     21
+#define HAP_LEVEL_RPC_CRITICAL 21
 
-#define HAP_LEVEL_RUNTIME   (1 << 5)
+#define HAP_LEVEL_RUNTIME (1 << 5)
 
-//Add a weak reference so shared objects work with older images
+// Add a weak reference so shared objects work with older images
 #pragma weak HAP_debug_v2
 
-//Add a weak reference for enabling FARF in autogen stub files
+// Add a weak reference for enabling FARF in autogen stub files
 #pragma weak HAP_debug
 
-//Add a weak reference so runtime FARFs are ignored on older images
+// Add a weak reference so runtime FARFs are ignored on older images
 #pragma weak HAP_debug_runtime
 
 /**************************************************************************
     These HAP_debug* functions are not meant to be called directly.
     Please use the FARF() macros to call them instead
 **************************************************************************/
-void HAP_debug_v2(int level, const char* file, int line, const char* format, ...);
-void HAP_debug_runtime(int level, const char* file, int line, const char* format, ...);
-int HAP_setFARFRuntimeLoggingParams(unsigned int mask, const char* files[],
+void HAP_debug_v2(int level, const char *file, int line, const char *format,
+                  ...);
+void HAP_debug_runtime(int level, const char *file, int line,
+                       const char *format, ...);
+int HAP_setFARFRuntimeLoggingParams(unsigned int mask, const char *files[],
                                     unsigned short numberOfFiles);
 
 // Keep these around to support older shared objects and older images
 void HAP_debug(const char *msg, int level, const char *filename, int line);
 
-static __inline void _HAP_debug_v2(int level, const char* file, int line,
-                          const char* format, ...){
-   char buf[256];
-   va_list args;
-   va_start(args, format);
-   vsnprintf(buf, sizeof(buf), format, args);
-   va_end(args);
-   HAP_debug(buf, level, file, line);
+static __inline void
+_HAP_debug_v2(int level, const char *file, int line, const char *format, ...)
+{
+	char buf[256];
+	va_list args;
+	va_start(args, format);
+	vsnprintf(buf, sizeof(buf), format, args);
+	va_end(args);
+	HAP_debug(buf, level, file, line);
 }
 
 /*!
@@ -78,15 +81,14 @@ Returns
 
 */
 bool HAP_log_data_packet(unsigned short log_code_type, unsigned int dataLen,
-                    unsigned char* data);
+                         unsigned char *data);
 
 #define HAP_DEBUG_TRACEME 0
 
-long HAP_debug_ptrace(int req, unsigned int pid, void* addr, void* data);
+long HAP_debug_ptrace(int req, unsigned int pid, void *addr, void *data);
 
 #ifdef __cplusplus
 }
 #endif
 
 #endif // HAP_DEBUG_H
-

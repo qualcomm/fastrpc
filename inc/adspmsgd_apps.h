@@ -33,21 +33,24 @@
 extern "C" {
 #endif
 enum adspmsgd_apps_Level {
-   LOW,
-   MEDIUM,
-   HIGH,
-   ERROR,
-   FATAL,
-   _32BIT_PLACEHOLDER_adspmsgd_apps_Level = 0x7fffffff
+	LOW,
+	MEDIUM,
+	HIGH,
+	ERROR,
+	FATAL,
+	_32BIT_PLACEHOLDER_adspmsgd_apps_Level = 0x7fffffff
 };
 typedef enum adspmsgd_apps_Level adspmsgd_apps_Level;
-typedef struct _adspmsgd_apps_octetSeq__seq_octet _adspmsgd_apps_octetSeq__seq_octet;
+typedef struct _adspmsgd_apps_octetSeq__seq_octet
+    _adspmsgd_apps_octetSeq__seq_octet;
 typedef _adspmsgd_apps_octetSeq__seq_octet adspmsgd_apps_octetSeq;
 struct _adspmsgd_apps_octetSeq__seq_octet {
-   unsigned char* data;
-   int dataLen;
+	unsigned char *data;
+	int dataLen;
 };
-__QAIC_HEADER_EXPORT int __QAIC_HEADER(adspmsgd_apps_log)(const unsigned char* log_message_buffer, int log_message_bufferLen) __QAIC_HEADER_ATTRIBUTE;
+__QAIC_HEADER_EXPORT int __QAIC_HEADER(adspmsgd_apps_log)(
+    const unsigned char *log_message_buffer,
+    int log_message_bufferLen) __QAIC_HEADER_ATTRIBUTE;
 #ifdef __cplusplus
 }
 #endif

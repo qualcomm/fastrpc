@@ -16,8 +16,8 @@
 
 /*
  * enum represents the unique id corresponding to hlos id.
- * Do not modify the existing id. Add new ids for sending any new parameters from hlos
- * and ensure that it is matching with dsp param id.
+ * Do not modify the existing id. Add new ids for sending any new parameters
+ * from hlos and ensure that it is matching with dsp param id.
  */
 
 enum proc_param_id {
@@ -36,7 +36,8 @@ enum proc_param_id {
 	/* HLOS process effective domain id */
 	HLOS_PROC_EFFEC_DOM_ID,
 
-	/*Get list of the .so's present in the custom DSP_LIBRARY_PATH set by user*/
+	/*Get list of the .so's present in the custom DSP_LIBRARY_PATH set by
+	   user*/
 	CUSTOM_DSP_SEARCH_PATH_LIBS_ID,
 
 	/* HLOS process session id */

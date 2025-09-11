@@ -36,16 +36,25 @@ extern "C" {
 #define __QAIC_STRING1_OBJECT_DEFINED__
 #define __STRING1_OBJECT__
 typedef struct _cstring1_s {
-   char* data;
-   int dataLen;
+	char *data;
+	int dataLen;
 } _cstring1_t;
 
 #endif /* __QAIC_STRING1_OBJECT_DEFINED__ */
 #define _const_remotectl_handle 0
-__QAIC_HEADER_EXPORT int __QAIC_HEADER(remotectl_open)(const char* name, int* handle, char* dlerror, int dlerrorLen, int* nErr) __QAIC_HEADER_ATTRIBUTE;
-__QAIC_HEADER_EXPORT int __QAIC_HEADER(remotectl_close)(int handle, char* dlerror, int dlerrorLen, int* nErr) __QAIC_HEADER_ATTRIBUTE;
-__QAIC_HEADER_EXPORT int __QAIC_HEADER(remotectl_grow_heap)(uint32_t phyAddr, uint32_t nSize) __QAIC_HEADER_ATTRIBUTE;
-__QAIC_HEADER_EXPORT int __QAIC_HEADER(remotectl_set_param)(int reqID, const uint32_t* params, int paramsLen) __QAIC_HEADER_ATTRIBUTE;
+__QAIC_HEADER_EXPORT int
+    __QAIC_HEADER(remotectl_open)(const char *name, int *handle, char *dlerror,
+                                  int dlerrorLen,
+                                  int *nErr) __QAIC_HEADER_ATTRIBUTE;
+__QAIC_HEADER_EXPORT int
+    __QAIC_HEADER(remotectl_close)(int handle, char *dlerror, int dlerrorLen,
+                                   int *nErr) __QAIC_HEADER_ATTRIBUTE;
+__QAIC_HEADER_EXPORT int
+    __QAIC_HEADER(remotectl_grow_heap)(uint32_t phyAddr,
+                                       uint32_t nSize) __QAIC_HEADER_ATTRIBUTE;
+__QAIC_HEADER_EXPORT int
+    __QAIC_HEADER(remotectl_set_param)(int reqID, const uint32_t *params,
+                                       int paramsLen) __QAIC_HEADER_ATTRIBUTE;
 #ifdef __cplusplus
 }
 #endif

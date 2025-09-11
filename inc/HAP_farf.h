@@ -19,9 +19,9 @@
  * `Compile time logging options:`
  *
  * Logging is controlled via conditional compilation.
- * The FARF level allows the user to selectively enable or disable certain types
- * of messages according to their priority level.
- * The following levels are supported and listed in increasing priority:
+ * The FARF level allows the user to selectively enable or disable certain
+ *types of messages according to their priority level. The following levels are
+ *supported and listed in increasing priority:
  *
  *   LOW
  *
@@ -54,7 +54,8 @@
  * will be compiled in.
  *
  * If both HIGH and LOW messages are used but only FARF_LOW is defined
- * as shown in below example then only LOW message will be compiled in and sent to DIAG.
+ * as shown in below example then only LOW message will be compiled in and sent
+ *to DIAG.
  *
  * @code
  *    #define FARF_LOW 1
@@ -94,11 +95,11 @@
  *
  * @endcode
  *
- * @param[in] x the FARF level defined to either 0 to disable compilation or 1 to enable.
+ * @param[in] x the FARF level defined to either 0 to disable compilation or 1
+ *to enable.
  * @param[in] ... the format string and arguments.
  */
-#define FARF(x, ...) _FARF_PASTE(_FARF_,_FARF_VAL(FARF_##x))(x, ##__VA_ARGS__)
-
+#define FARF(x, ...) _FARF_PASTE(_FARF_, _FARF_VAL(FARF_##x))(x, ##__VA_ARGS__)
 
 /**
 *   @defgroup static_FARF Compile-time macros
@@ -135,141 +136,144 @@
  * The FARF_ALWAYS macro causes log messages to be ALWAYS compiled in
  */
 #ifndef FARF_ALWAYS
-#define FARF_ALWAYS        1
+#define FARF_ALWAYS 1
 #endif
 
 /**
- * The FARF_LOW macro causes log messages to be compiled in when FARF_LOW is defined to 1
-*/
+ * The FARF_LOW macro causes log messages to be compiled in when FARF_LOW is
+ * defined to 1
+ */
 #ifndef FARF_LOW
-#define FARF_LOW           0
+#define FARF_LOW 0
 #endif
 
 /**
-* The FARF_MEDIUM macro causes log messages to be compiled in when FARF_MEDIUM is defined to 1
-*/
+ * The FARF_MEDIUM macro causes log messages to be compiled in when FARF_MEDIUM
+ * is defined to 1
+ */
 #ifndef FARF_MEDIUM
-#define FARF_MEDIUM        0
+#define FARF_MEDIUM 0
 #endif
 
 /**
-* The FARF_HIGH macro causes log messages to be compiled in when FARF_HIGH is defined to 1
-*/
+ * The FARF_HIGH macro causes log messages to be compiled in when FARF_HIGH is
+ * defined to 1
+ */
 #ifndef FARF_HIGH
-#define FARF_HIGH          0
+#define FARF_HIGH 0
 #endif
 
 /**
-* The FARF_ERROR macro causes log messages to be compiled in when FARF_ERROR is defined to 1
-*/
+ * The FARF_ERROR macro causes log messages to be compiled in when FARF_ERROR
+ * is defined to 1
+ */
 #ifndef FARF_ERROR
-#define FARF_ERROR         1
+#define FARF_ERROR 1
 #endif
 
 /**
-* The FARF_FATAL macro causes log messages to be compiled in when FARF_FATAL is defined to 1
-*/
+ * The FARF_FATAL macro causes log messages to be compiled in when FARF_FATAL
+ * is defined to 1
+ */
 #ifndef FARF_FATAL
-#define FARF_FATAL         1
+#define FARF_FATAL 1
 #endif
 
 #ifndef FARF_CRITICAL
-#define FARF_CRITICAL         0    /* 0 turns me off */
+#define FARF_CRITICAL 0 /* 0 turns me off */
 #endif
 
-
 //! @cond Doxygen_Suppress
-#define FARF_ALWAYS_LEVEL  		HAP_LEVEL_HIGH
-#define FARF_LOW_LEVEL     		HAP_LEVEL_LOW
-#define FARF_MEDIUM_LEVEL  		HAP_LEVEL_MEDIUM
-#define FARF_HIGH_LEVEL    		HAP_LEVEL_HIGH
-#define FARF_ERROR_LEVEL   		HAP_LEVEL_ERROR
-#define FARF_FATAL_LEVEL   		HAP_LEVEL_FATAL
-#define FARF_CRITICAL_LEVEL   	HAP_LEVEL_CRITICAL
+#define FARF_ALWAYS_LEVEL HAP_LEVEL_HIGH
+#define FARF_LOW_LEVEL HAP_LEVEL_LOW
+#define FARF_MEDIUM_LEVEL HAP_LEVEL_MEDIUM
+#define FARF_HIGH_LEVEL HAP_LEVEL_HIGH
+#define FARF_ERROR_LEVEL HAP_LEVEL_ERROR
+#define FARF_FATAL_LEVEL HAP_LEVEL_FATAL
+#define FARF_CRITICAL_LEVEL HAP_LEVEL_CRITICAL
 //! @endcond
 
 /* @} */
 
-
 /**
-*   @defgroup Runtime_FARF Runtime macros
-*
-*   Runtime FARF macros can be enabled at runtime.
-*   They are turned OFF by default.
-*
-*   Usage Example:
-*   @code
-*
-*   FARF(RUNTIME_HIGH,"Log message");
-*
-*   @endcode
-*/
+ *   @defgroup Runtime_FARF Runtime macros
+ *
+ *   Runtime FARF macros can be enabled at runtime.
+ *   They are turned OFF by default.
+ *
+ *   Usage Example:
+ *   @code
+ *
+ *   FARF(RUNTIME_HIGH,"Log message");
+ *
+ *   @endcode
+ */
 /*  @{ */
 //! @cond Doxygen_Suppress
 #ifndef FARF_RUNTIME_LOW
-#define FARF_RUNTIME_LOW           1
+#define FARF_RUNTIME_LOW 1
 #endif
-#define FARF_RUNTIME_LOW_LEVEL     (HAP_LEVEL_RUNTIME | HAP_LEVEL_LOW)
+#define FARF_RUNTIME_LOW_LEVEL (HAP_LEVEL_RUNTIME | HAP_LEVEL_LOW)
 
 #ifndef FARF_RUNTIME_MEDIUM
-#define FARF_RUNTIME_MEDIUM        1
+#define FARF_RUNTIME_MEDIUM 1
 #endif
-#define FARF_RUNTIME_MEDIUM_LEVEL  (HAP_LEVEL_RUNTIME | HAP_LEVEL_MEDIUM)
+#define FARF_RUNTIME_MEDIUM_LEVEL (HAP_LEVEL_RUNTIME | HAP_LEVEL_MEDIUM)
 
 #ifndef FARF_RUNTIME_HIGH
-#define FARF_RUNTIME_HIGH          1
+#define FARF_RUNTIME_HIGH 1
 #endif
-#define FARF_RUNTIME_HIGH_LEVEL    (HAP_LEVEL_RUNTIME | HAP_LEVEL_HIGH)
+#define FARF_RUNTIME_HIGH_LEVEL (HAP_LEVEL_RUNTIME | HAP_LEVEL_HIGH)
 
 #ifndef FARF_RUNTIME_ERROR
-#define FARF_RUNTIME_ERROR         1
+#define FARF_RUNTIME_ERROR 1
 #endif
-#define FARF_RUNTIME_ERROR_LEVEL   (HAP_LEVEL_RUNTIME | HAP_LEVEL_ERROR)
+#define FARF_RUNTIME_ERROR_LEVEL (HAP_LEVEL_RUNTIME | HAP_LEVEL_ERROR)
 
 #ifndef FARF_RUNTIME_FATAL
-#define FARF_RUNTIME_FATAL         1
+#define FARF_RUNTIME_FATAL 1
 #endif
-#define FARF_RUNTIME_FATAL_LEVEL   (HAP_LEVEL_RUNTIME | HAP_LEVEL_FATAL)
+#define FARF_RUNTIME_FATAL_LEVEL (HAP_LEVEL_RUNTIME | HAP_LEVEL_FATAL)
 
 #ifndef FARF_RUNTIME_RPC_LOW
-#define FARF_RUNTIME_RPC_LOW           1    /* 0 turns me off */
+#define FARF_RUNTIME_RPC_LOW 1 /* 0 turns me off */
 #endif
-#define FARF_RUNTIME_RPC_LOW_LEVEL     (HAP_LEVEL_RUNTIME | HAP_LEVEL_RPC_LOW)
+#define FARF_RUNTIME_RPC_LOW_LEVEL (HAP_LEVEL_RUNTIME | HAP_LEVEL_RPC_LOW)
 
 #ifndef FARF_RUNTIME_RPC_MEDIUM
-#define FARF_RUNTIME_RPC_MEDIUM        1    /* 0 turns me off */
+#define FARF_RUNTIME_RPC_MEDIUM 1 /* 0 turns me off */
 #endif
-#define FARF_RUNTIME_RPC_MEDIUM_LEVEL  (HAP_LEVEL_RUNTIME | HAP_LEVEL_RPC_MEDIUM)
+#define FARF_RUNTIME_RPC_MEDIUM_LEVEL                                         \
+	(HAP_LEVEL_RUNTIME | HAP_LEVEL_RPC_MEDIUM)
 
 #ifndef FARF_RUNTIME_RPC_HIGH
-#define FARF_RUNTIME_RPC_HIGH          1    /* 0 turns me off */
+#define FARF_RUNTIME_RPC_HIGH 1 /* 0 turns me off */
 #endif
-#define FARF_RUNTIME_RPC_HIGH_LEVEL    (HAP_LEVEL_RUNTIME | HAP_LEVEL_RPC_HIGH)
+#define FARF_RUNTIME_RPC_HIGH_LEVEL (HAP_LEVEL_RUNTIME | HAP_LEVEL_RPC_HIGH)
 
 #ifndef FARF_RUNTIME_RPC_ERROR
-#define FARF_RUNTIME_RPC_ERROR         1    /* 0 turns me off */
+#define FARF_RUNTIME_RPC_ERROR 1 /* 0 turns me off */
 #endif
-#define FARF_RUNTIME_RPC_ERROR_LEVEL   (HAP_LEVEL_RUNTIME | HAP_LEVEL_RPC_ERROR)
+#define FARF_RUNTIME_RPC_ERROR_LEVEL (HAP_LEVEL_RUNTIME | HAP_LEVEL_RPC_ERROR)
 
 #ifndef FARF_RUNTIME_RPC_FATAL
-#define FARF_RUNTIME_RPC_FATAL         1    /* 0 turns me off */
+#define FARF_RUNTIME_RPC_FATAL 1 /* 0 turns me off */
 #endif
-#define FARF_RUNTIME_RPC_FATAL_LEVEL   (HAP_LEVEL_RUNTIME | HAP_LEVEL_RPC_FATAL)
+#define FARF_RUNTIME_RPC_FATAL_LEVEL (HAP_LEVEL_RUNTIME | HAP_LEVEL_RPC_FATAL)
 
 #ifndef FARF_RUNTIME_RPC_CRITICAL
-#define FARF_RUNTIME_RPC_CRITICAL         1    /* 0 turns me off */
+#define FARF_RUNTIME_RPC_CRITICAL 1 /* 0 turns me off */
 #endif
-#define FARF_RUNTIME_RPC_CRITICAL_LEVEL   (HAP_LEVEL_RUNTIME | HAP_LEVEL_RPC_CRITICAL)
+#define FARF_RUNTIME_RPC_CRITICAL_LEVEL                                       \
+	(HAP_LEVEL_RUNTIME | HAP_LEVEL_RPC_CRITICAL)
 //! @endcond
 /* @} */
 
-
 //! @cond Doxygen_Suppress
 
-#define _FARF_PASTE(a,b) _FARF_PASTE_(a,b)
-#define _FARF_PASTE_(a,b) a##b
+#define _FARF_PASTE(a, b) _FARF_PASTE_(a, b)
+#define _FARF_PASTE_(a, b) a##b
 #define _FARF_VAL(a) a
-
 
 #define _FARF_0(x, ...)
 
@@ -277,22 +281,28 @@
 #define __FILENAME__ __FILE__
 #endif
 
-#define _FARF_1(x, ...) \
-    do { \
-            if(0 == (HAP_debug_v2)) { \
-                _HAP_debug_v2(FARF_##x##_LEVEL, __FILENAME__, __LINE__, ##__VA_ARGS__); \
-            } else { \
-                if (FARF_##x##_LEVEL & HAP_LEVEL_RUNTIME) { \
-                    if (0 != HAP_debug_runtime) { \
-                        HAP_debug_runtime(FARF_##x##_LEVEL ^ HAP_LEVEL_RUNTIME , __FILENAME__, __LINE__, ##__VA_ARGS__); \
-                    } else { \
-                        break; \
-                    } \
-                } else { \
-                    HAP_debug_v2(FARF_##x##_LEVEL, __FILENAME__, __LINE__, ##__VA_ARGS__); \
-                } \
-            } \
-        } while (0)
+#define _FARF_1(x, ...)                                                       \
+	do {                                                                  \
+		if(0 == (HAP_debug_v2)) {                                     \
+			_HAP_debug_v2(FARF_##x##_LEVEL, __FILENAME__,         \
+			              __LINE__, ##__VA_ARGS__);               \
+		} else {                                                      \
+			if(FARF_##x##_LEVEL & HAP_LEVEL_RUNTIME) {            \
+				if(0 != HAP_debug_runtime) {                  \
+					HAP_debug_runtime(                    \
+					    FARF_##x##_LEVEL                  \
+						^ HAP_LEVEL_RUNTIME,          \
+					    __FILENAME__, __LINE__,           \
+					    ##__VA_ARGS__);                   \
+				} else {                                      \
+					break;                                \
+				}                                             \
+			} else {                                              \
+				HAP_debug_v2(FARF_##x##_LEVEL, __FILENAME__,  \
+				             __LINE__, ##__VA_ARGS__);        \
+			}                                                     \
+		}                                                             \
+	} while(0)
 
 #endif /* #ifndef HAP_FARF_H */
 //! @endcond

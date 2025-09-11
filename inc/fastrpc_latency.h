@@ -19,18 +19,18 @@
 
 /* FastRPC latency voting data for QoS handler of a session */
 struct fastrpc_latency {
-  int adaptive_qos;
-  int state; //! latency thread handler running state
-  int exit;
-  int invoke;    //! invoke count in tacking window
-  int vote;      //! current pm_qos vote status
-  int dev;       //! associated device node
-  int wait_time; //! wait time for review next voting
-  int latency;   //! user requested fastrpc latency in us
-  pthread_t thread;
-  pthread_mutex_t mut;
-  pthread_mutex_t wmut;
-  pthread_cond_t cond;
+	int adaptive_qos;
+	int state; //! latency thread handler running state
+	int exit;
+	int invoke;    //! invoke count in tacking window
+	int vote;      //! current pm_qos vote status
+	int dev;       //! associated device node
+	int wait_time; //! wait time for review next voting
+	int latency;   //! user requested fastrpc latency in us
+	pthread_t thread;
+	pthread_mutex_t mut;
+	pthread_mutex_t wmut;
+	pthread_cond_t cond;
 };
 
 /* Increment RPC invoke count for activity detection in a window of time

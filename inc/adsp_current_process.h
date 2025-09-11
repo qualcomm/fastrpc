@@ -35,20 +35,33 @@ extern "C" {
 #define __QAIC_STRING1_OBJECT_DEFINED__
 #define __STRING1_OBJECT__
 typedef struct _cstring1_s {
-   char* data;
-   int dataLen;
+	char *data;
+	int dataLen;
 } _cstring1_t;
 
 #endif /* __QAIC_STRING1_OBJECT_DEFINED__ */
-__QAIC_HEADER_EXPORT int __QAIC_HEADER(adsp_current_process_exit)(void) __QAIC_HEADER_ATTRIBUTE;
-__QAIC_HEADER_EXPORT int __QAIC_HEADER(adsp_current_process_thread_exit)(void) __QAIC_HEADER_ATTRIBUTE;
-__QAIC_HEADER_EXPORT int __QAIC_HEADER(adsp_current_process_set_logging_params)(unsigned short mask, const _cstring1_t* filesToLog, int filesToLogLen) __QAIC_HEADER_ATTRIBUTE;
-__QAIC_HEADER_EXPORT int __QAIC_HEADER(adsp_current_process_getASID)(unsigned int* asid) __QAIC_HEADER_ATTRIBUTE;
-__QAIC_HEADER_EXPORT int __QAIC_HEADER(adsp_current_process_setQoS)(unsigned int latency) __QAIC_HEADER_ATTRIBUTE;
-__QAIC_HEADER_EXPORT int __QAIC_HEADER(adsp_current_process_exception)(void) __QAIC_HEADER_ATTRIBUTE;
-__QAIC_HEADER_EXPORT int __QAIC_HEADER(adsp_current_process_set_logging_params2)(unsigned int mask, const _cstring1_t* filesToLog, int filesToLogLen) __QAIC_HEADER_ATTRIBUTE;
-__QAIC_HEADER_EXPORT int __QAIC_HEADER(adsp_current_process_poll_mode)(unsigned int enable, unsigned int timeout) __QAIC_HEADER_ATTRIBUTE;
-__QAIC_HEADER_EXPORT int __QAIC_HEADER(adsp_current_process_enable_notifications)(void) __QAIC_HEADER_ATTRIBUTE;
+__QAIC_HEADER_EXPORT int
+    __QAIC_HEADER(adsp_current_process_exit)(void) __QAIC_HEADER_ATTRIBUTE;
+__QAIC_HEADER_EXPORT int __QAIC_HEADER(adsp_current_process_thread_exit)(void)
+    __QAIC_HEADER_ATTRIBUTE;
+__QAIC_HEADER_EXPORT int
+    __QAIC_HEADER(adsp_current_process_set_logging_params)(
+	unsigned short mask, const _cstring1_t *filesToLog,
+	int filesToLogLen) __QAIC_HEADER_ATTRIBUTE;
+__QAIC_HEADER_EXPORT int __QAIC_HEADER(adsp_current_process_getASID)(
+    unsigned int *asid) __QAIC_HEADER_ATTRIBUTE;
+__QAIC_HEADER_EXPORT int __QAIC_HEADER(adsp_current_process_setQoS)(
+    unsigned int latency) __QAIC_HEADER_ATTRIBUTE;
+__QAIC_HEADER_EXPORT int __QAIC_HEADER(adsp_current_process_exception)(void)
+    __QAIC_HEADER_ATTRIBUTE;
+__QAIC_HEADER_EXPORT int
+    __QAIC_HEADER(adsp_current_process_set_logging_params2)(
+	unsigned int mask, const _cstring1_t *filesToLog,
+	int filesToLogLen) __QAIC_HEADER_ATTRIBUTE;
+__QAIC_HEADER_EXPORT int __QAIC_HEADER(adsp_current_process_poll_mode)(
+    unsigned int enable, unsigned int timeout) __QAIC_HEADER_ATTRIBUTE;
+__QAIC_HEADER_EXPORT int __QAIC_HEADER(
+    adsp_current_process_enable_notifications)(void) __QAIC_HEADER_ATTRIBUTE;
 #ifdef __cplusplus
 }
 #endif

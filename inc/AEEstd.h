@@ -11,55 +11,65 @@ DESCRIPTION:  Standard library; general-purpose utility functions.
 #include "AEEStdDef.h"
 #include "string.h"
 
-#define STD_CONSTRAIN( val, min, max ) (((val) < (min)) ? (min) : ((val) > (max)) ? (max) : (val))
-#define STD_BETWEEN( val, minGE, maxLT ) \
-                   ( ((unsigned long)(minGE) <= (unsigned long)(val)) && \
-                   ( (unsigned long)((unsigned long)(val) - (unsigned long)(minGE)) < \
-                   (unsigned long)((unsigned long)(maxLT) - (unsigned long)(minGE))) )
-#define STD_ARRAY_SIZE(a)             ((int)((sizeof((a))/sizeof((a)[0]))))
-#define STD_ARRAY_MEMBER(p,a) (((p) >= (a)) && ((p) < ((a) + STD_ARRAY_SIZE(a))))
+#define STD_CONSTRAIN(val, min, max)                                          \
+	(((val) < (min)) ? (min) : ((val) > (max)) ? (max) : (val))
+#define STD_BETWEEN(val, minGE, maxLT)                                        \
+	(((unsigned long)(minGE) <= (unsigned long)(val))                     \
+	 && ((unsigned long)((unsigned long)(val) - (unsigned long)(minGE))   \
+	     < (unsigned long)((unsigned long)(maxLT)                         \
+	                       - (unsigned long)(minGE))))
+#define STD_ARRAY_SIZE(a) ((int)((sizeof((a)) / sizeof((a)[0]))))
+#define STD_ARRAY_MEMBER(p, a)                                                \
+	(((p) >= (a)) && ((p) < ((a) + STD_ARRAY_SIZE(a))))
 
-#define STD_SIZEOF(x)                 ((int)sizeof(x))
-#define STD_OFFSETOF(type,member)     (((char*)(&((type*)1)->member))-((char*)1))
+#define STD_SIZEOF(x) ((int)sizeof(x))
+#define STD_OFFSETOF(type, member)                                            \
+	(((char *)(&((type *)1)->member)) - ((char *)1))
 
-#define STD_RECOVER_REC(type,member,p) ((void)((p)-&(((type*)1)->member)),\
-                                        (type*)(void*)(((char*)(void*)(p))-STD_OFFSETOF(type,member)))
-#define STD_MIN(a,b)   ((a)<(b)?(a):(b))
-#define STD_MAX(a,b)   ((a)>(b)?(a):(b))
-//lint -emacro(545,STD_ZEROAT)
-#define STD_ZEROAT(p)  memset((p), 0, sizeof(*p))
+#define STD_RECOVER_REC(type, member, p)                                      \
+	((void)((p) - &(((type *)1)->member)),                                \
+	 (type *)(void *)(((char *)(void *)(p))                               \
+	                  - STD_OFFSETOF(type, member)))
+#define STD_MIN(a, b) ((a) < (b) ? (a) : (b))
+#define STD_MAX(a, b) ((a) > (b) ? (a) : (b))
+// lint -emacro(545,STD_ZEROAT)
+#define STD_ZEROAT(p) memset((p), 0, sizeof(*p))
 
-#define _STD_BITS_PER(bits)     (8*sizeof((bits)[0]))
+#define _STD_BITS_PER(bits) (8 * sizeof((bits)[0]))
 
-#define STD_BIT_SET(bits, ix)     ((bits)[(ix)/_STD_BITS_PER((bits))] |= 0x1<<((ix) & (_STD_BITS_PER((bits))-1)))
-#define STD_BIT_CLEAR(bits, ix)   ((bits)[(ix)/_STD_BITS_PER((bits))] &= ~(0x1<<((ix) & (_STD_BITS_PER((bits))-1))))
-#define STD_BIT_TEST(bits, ix)    ((bits)[(ix)/_STD_BITS_PER((bits))] & (0x1<<((ix) & (_STD_BITS_PER((bits))-1))))
+#define STD_BIT_SET(bits, ix)                                                 \
+	((bits)[(ix) / _STD_BITS_PER((bits))]                                 \
+	 |= 0x1 << ((ix) & (_STD_BITS_PER((bits)) - 1)))
+#define STD_BIT_CLEAR(bits, ix)                                               \
+	((bits)[(ix) / _STD_BITS_PER((bits))]                                 \
+	 &= ~(0x1 << ((ix) & (_STD_BITS_PER((bits)) - 1))))
+#define STD_BIT_TEST(bits, ix)                                                \
+	((bits)[(ix) / _STD_BITS_PER((bits))]                                 \
+	 & (0x1 << ((ix) & (_STD_BITS_PER((bits)) - 1))))
 
 //
 // Error codes
 //
-#define STD_NODIGITS   1
-#define STD_NEGATIVE   2
-#define STD_OVERFLOW   3
-#define STD_BADPARAM   4
-#define STD_UNDERFLOW  5
+#define STD_NODIGITS 1
+#define STD_NEGATIVE 2
+#define STD_OVERFLOW 3
+#define STD_BADPARAM 4
+#define STD_UNDERFLOW 5
 
 #ifdef __cplusplus
 extern "C" {
 #endif /* #ifdef __cplusplus */
 
-//Path functions
-extern int           std_makepath(const char *cpszDir,
-                                  const char *cpszFile,
-                                  char *pszDest, int nDestSize);
-extern char *        std_splitpath(const char *cpszPath, const char *cpszDir);
-extern char *        std_cleanpath(char *pszPath);
-extern char *        std_basename(const char *pszPath);
+// Path functions
+extern int std_makepath(const char *cpszDir, const char *cpszFile,
+                        char *pszDest, int nDestSize);
+extern char *std_splitpath(const char *cpszPath, const char *cpszDir);
+extern char *std_cleanpath(char *pszPath);
+extern char *std_basename(const char *pszPath);
 
 #ifdef __cplusplus
 }
 #endif /* #ifdef __cplusplus */
-
 
 /*
 =======================================================================
@@ -108,7 +118,8 @@ Evaluation Value:
 STD_ARRAY_SIZE()
 
 Description:
-   STD_ARRAY_SIZE() gives the number of elements in a statically allocated array.
+   STD_ARRAY_SIZE() gives the number of elements in a statically allocated
+array.
 
 Definition:
     STD_ARRAY_SIZE(a) (sizeof((a))/sizeof((a)[0]))
@@ -124,7 +135,8 @@ Evaluation Value:
 STD_ARRAY_MEMBER()
 
 Description:
-   STD_ARRAY_MEMBER() tests whether an item is a member of a statically allocated array.
+   STD_ARRAY_MEMBER() tests whether an item is a member of a statically
+allocated array.
 
 Definition:
    STD_ARRAY_MEMBER(p,a) (((p) >= (a)) && ((p) < ((a) + STD_ARRAY_SIZE(a))))
@@ -162,7 +174,8 @@ Description:
     of a struct to a pointer to the containing struct
 
 Definition:
-  STD_RECOVER_REC(type,member,p) ((type*)(((char*)(p))-STD_OFFSETOF(type,member)))
+  STD_RECOVER_REC(type,member,p)
+((type*)(((char*)(p))-STD_OFFSETOF(type,member)))
 
 Parameters:
     type: structured type
@@ -586,4 +599,3 @@ Examples:
 =======================================================================*/
 
 #endif // AEESTD_H
-

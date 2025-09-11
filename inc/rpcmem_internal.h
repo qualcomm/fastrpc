@@ -20,8 +20,8 @@
  * @rpcflags: Memory flags describing attributes of allocation
  * Return   : 0 on success, valid non-zero error code on failure
  */
-int rpcmem_set_dmabuf_name(const char *name, int fd, int heapid,
-				void *buf, uint32_t rpc_flags);
+int rpcmem_set_dmabuf_name(const char *name, int fd, int heapid, void *buf,
+                           uint32_t rpc_flags);
 /*
  * returns an file descriptor associated with the address
  */

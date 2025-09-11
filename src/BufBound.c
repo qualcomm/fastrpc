@@ -18,9 +18,9 @@ REVISION HISTORY:
         Sun Mar 06 11:23:10 2005 Created
 
 ==============================================================================*/
-#include <limits.h>
 #include "AEEBufBound.h"
 #include "AEEstd.h"
+#include <limits.h>
 
 // Note on bounds-checking logic and saturation:
 //
@@ -44,8 +44,7 @@ REVISION HISTORY:
 //    pcWrite:      (a)          (b)
 //
 
-#define PCSAT(me)   ((me)->pcBuf + INT_MAX)
-
+#define PCSAT(me) ((me)->pcBuf + INT_MAX)
 
 // Advance me->pcWrite, saturating.
 //
@@ -58,119 +57,130 @@ REVISION HISTORY:
 static char *
 BufBound_ValidateWrite(BufBound *me, int *pnLen)
 {
-   int nLen = *pnLen;
-   char *pcWrite = me->pcWrite;
-   int nMaxCopy = me->pcEnd - pcWrite;        // could be negative!
+	int nLen = *pnLen;
+	char *pcWrite = me->pcWrite;
+	int nMaxCopy = me->pcEnd - pcWrite; // could be negative!
 
-   if ( nMaxCopy < nLen ) {
-      // Must check PCSAT to validate advance
-      int nMaxAdvance = PCSAT(me) - pcWrite;      // max amount to advance
+	if(nMaxCopy < nLen) {
+		// Must check PCSAT to validate advance
+		int nMaxAdvance = PCSAT(me) - pcWrite; // max amount to advance
 
-      if (nLen > nMaxAdvance) {
-         nLen = nMaxAdvance;
-      }
-      if (nMaxCopy < 0) {
-         nMaxCopy = 0;
-      }
-   } else {
-      // Simple case: all fits in the buffer
-      nMaxCopy = nLen;
-   }
+		if(nLen > nMaxAdvance) {
+			nLen = nMaxAdvance;
+		}
+		if(nMaxCopy < 0) {
+			nMaxCopy = 0;
+		}
+	} else {
+		// Simple case: all fits in the buffer
+		nMaxCopy = nLen;
+	}
 
-   *pnLen = nMaxCopy;
-   me->pcWrite = pcWrite + nLen;
-   return pcWrite;
+	*pnLen = nMaxCopy;
+	me->pcWrite = pcWrite + nLen;
+	return pcWrite;
 }
 
-void BufBound_Write(BufBound *me, const char *pc, int nLen)
+void
+BufBound_Write(BufBound *me, const char *pc, int nLen)
 {
-   if (nLen > 0) {
-      char *pcDest = BufBound_ValidateWrite(me, &nLen);
+	if(nLen > 0) {
+		char *pcDest = BufBound_ValidateWrite(me, &nLen);
 
-      while (--nLen >= 0) {
-         pcDest[nLen] = pc[nLen];
-      }
-   }
+		while(--nLen >= 0) {
+			pcDest[nLen] = pc[nLen];
+		}
+	}
 }
 
-void BufBound_Putnc(BufBound *me, char c, int nLen)
+void
+BufBound_Putnc(BufBound *me, char c, int nLen)
 {
-   if (nLen > 0) {
-      char *pcDest = BufBound_ValidateWrite(me, &nLen);
+	if(nLen > 0) {
+		char *pcDest = BufBound_ValidateWrite(me, &nLen);
 
-      while (--nLen >= 0) {
-         pcDest[nLen] = c;
-      }
-   }
+		while(--nLen >= 0) {
+			pcDest[nLen] = c;
+		}
+	}
 }
 
-void BufBound_Advance(BufBound *me, int nLen)
+void
+BufBound_Advance(BufBound *me, int nLen)
 {
-   uint32_t uOffset = (uint32_t)((me->pcWrite - me->pcBuf) + nLen);
+	uint32_t uOffset = (uint32_t)((me->pcWrite - me->pcBuf) + nLen);
 
-   if (uOffset > INT_MAX) {
-      uOffset = INT_MAX;
-      if (nLen < 0) {
-         uOffset = 0;
-      }
-   }
-   me->pcWrite = me->pcBuf + uOffset;
+	if(uOffset > INT_MAX) {
+		uOffset = INT_MAX;
+		if(nLen < 0) {
+			uOffset = 0;
+		}
+	}
+	me->pcWrite = me->pcBuf + uOffset;
 }
 
-void BufBound_Init(BufBound *me, char *pBuf, int nLen)
+void
+BufBound_Init(BufBound *me, char *pBuf, int nLen)
 {
-   if (nLen < 0) {
-      nLen = 0;
-   }
-   me->pcWrite = me->pcBuf = pBuf;
-   me->pcEnd   = pBuf + nLen;
+	if(nLen < 0) {
+		nLen = 0;
+	}
+	me->pcWrite = me->pcBuf = pBuf;
+	me->pcEnd = pBuf + nLen;
 }
 
-void BufBound_Putc(BufBound *me, char c)
+void
+BufBound_Putc(BufBound *me, char c)
 {
-   if ( (me->pcEnd - me->pcWrite) > 0) {
-      *me->pcWrite++ = c;
-   } else if (me->pcWrite != PCSAT(me)) {
-      ++me->pcWrite;
-   }
+	if((me->pcEnd - me->pcWrite) > 0) {
+		*me->pcWrite++ = c;
+	} else if(me->pcWrite != PCSAT(me)) {
+		++me->pcWrite;
+	}
 }
 
-void BufBound_ForceNullTerm(BufBound *me)
+void
+BufBound_ForceNullTerm(BufBound *me)
 {
-   if ( (me->pcEnd - me->pcWrite) > 0) {
-      *me->pcWrite++ = '\0';
-   } else {
-      if (me->pcWrite != PCSAT(me)) {
-         ++me->pcWrite;
-      }
-      // ensure null termination if non-empty buffer
-      if (me->pcEnd != me->pcBuf) {
-         me->pcEnd[-1] = '\0';
-      }
-   }
+	if((me->pcEnd - me->pcWrite) > 0) {
+		*me->pcWrite++ = '\0';
+	} else {
+		if(me->pcWrite != PCSAT(me)) {
+			++me->pcWrite;
+		}
+		// ensure null termination if non-empty buffer
+		if(me->pcEnd != me->pcBuf) {
+			me->pcEnd[-1] = '\0';
+		}
+	}
 }
 
-void BufBound_Puts(BufBound *me, const char* cpsz)
+void
+BufBound_Puts(BufBound *me, const char *cpsz)
 {
-   BufBound_Write(me, cpsz, strlen(cpsz));
+	BufBound_Write(me, cpsz, strlen(cpsz));
 }
 
-int BufBound_BufSize(BufBound* me)
+int
+BufBound_BufSize(BufBound *me)
 {
-   return me->pcEnd - me->pcBuf;
+	return me->pcEnd - me->pcBuf;
 }
 
-int BufBound_Left(BufBound* me)
+int
+BufBound_Left(BufBound *me)
 {
-   return (me->pcEnd - me->pcWrite);
+	return (me->pcEnd - me->pcWrite);
 }
 
-int BufBound_ReallyWrote(BufBound* me)
+int
+BufBound_ReallyWrote(BufBound *me)
 {
-   return STD_MIN(me->pcEnd - me->pcBuf, me->pcWrite - me->pcBuf);
+	return STD_MIN(me->pcEnd - me->pcBuf, me->pcWrite - me->pcBuf);
 }
 
-int BufBound_Wrote(BufBound* me)
+int
+BufBound_Wrote(BufBound *me)
 {
-   return (me->pcWrite - me->pcBuf);
+	return (me->pcWrite - me->pcBuf);
 }

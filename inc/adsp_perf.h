@@ -35,13 +35,13 @@ extern "C" {
 /**
  * Interface for querying the adsp for counter data
  * For example, to enable all the perf numbers:
- * 
+ *
  *     int perf_on(void) {
  *       int nErr = 0;
  *       int numKeys = 0, maxLen = 0, ii;
  *       char keys[512];
  *       char* buf = &keys[0];
- *       VERIFY(0 == adsp_perf_get_keys(keys, 512, &maxLen, &numKeys)); 
+ *       VERIFY(0 == adsp_perf_get_keys(keys, 512, &maxLen, &numKeys));
  *       assert(maxLen < 512);
  *       for(ii = 0; ii < numKeys; ++ii) {
  *          char* name = buf;
@@ -61,7 +61,7 @@ extern "C" {
  *       char keys[512];
  *       char* buf = &keys[0];
  *       long long usecs[16];
- *       VERIFY(0 == adsp_perf_get_keys(keys, 512, &maxLen, &numKeys)); 
+ *       VERIFY(0 == adsp_perf_get_keys(keys, 512, &maxLen, &numKeys));
  *       printf("perf keys: %d\n", numKeys);
  *       VERIFY(0 == adsp_perf_get_usecs(usecs, 16));
  *       assert(maxLen < 512);
@@ -76,9 +76,14 @@ extern "C" {
  *    }
  */
 #define _const_adsp_perf_handle 6
-__QAIC_HEADER_EXPORT int __QAIC_HEADER(adsp_perf_enable)(int ix) __QAIC_HEADER_ATTRIBUTE;
-__QAIC_HEADER_EXPORT int __QAIC_HEADER(adsp_perf_get_usecs)(int64_t* dst, int dstLen) __QAIC_HEADER_ATTRIBUTE;
-__QAIC_HEADER_EXPORT int __QAIC_HEADER(adsp_perf_get_keys)(char* keys, int keysLen, int* maxLen, int* numKeys) __QAIC_HEADER_ATTRIBUTE;
+__QAIC_HEADER_EXPORT int
+    __QAIC_HEADER(adsp_perf_enable)(int ix) __QAIC_HEADER_ATTRIBUTE;
+__QAIC_HEADER_EXPORT int
+    __QAIC_HEADER(adsp_perf_get_usecs)(int64_t *dst,
+                                       int dstLen) __QAIC_HEADER_ATTRIBUTE;
+__QAIC_HEADER_EXPORT int
+    __QAIC_HEADER(adsp_perf_get_keys)(char *keys, int keysLen, int *maxLen,
+                                      int *numKeys) __QAIC_HEADER_ATTRIBUTE;
 #ifdef __cplusplus
 }
 #endif

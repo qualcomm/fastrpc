@@ -7,6 +7,7 @@
 #include "remote.h"
 
 /*
-All the functions declared here are moved to remote.h, remote64.h will be deleted in future.
+All the functions declared here are moved to remote.h, remote64.h will be
+deleted in future.
 */
 #endif // REMOTE64_H

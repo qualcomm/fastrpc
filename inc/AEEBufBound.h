@@ -21,11 +21,10 @@ REVISION HISTORY:
 
 ==============================================================================*/
 
-typedef struct BufBound
-{
-   char* pcBuf;   /* original buffer */
-   char* pcWrite; /* write pointer */
-   char* pcEnd;   /* first illegal write pointer */
+typedef struct BufBound {
+	char *pcBuf;   /* original buffer */
+	char *pcWrite; /* write pointer */
+	char *pcEnd;   /* first illegal write pointer */
 } BufBound;
 
 #ifdef __cplusplus
@@ -37,28 +36,29 @@ extern void BufBound_Write(BufBound *me, const char *pc, int nLen);
 extern void BufBound_Putc(BufBound *me, char c);
 extern void BufBound_Putnc(BufBound *me, char c, int nCount);
 extern void BufBound_ForceNullTerm(BufBound *me);
-extern void BufBound_Puts(BufBound *me, const char* cpsz);
+extern void BufBound_Puts(BufBound *me, const char *cpsz);
 extern void BufBound_Advance(BufBound *me, int nLen);
 extern int BufBound_BufSize(BufBound *me);
-extern int BufBound_Left(BufBound* me);
-extern int BufBound_ReallyWrote(BufBound* me);
-extern int BufBound_Wrote(BufBound* me);
+extern int BufBound_Left(BufBound *me);
+extern int BufBound_ReallyWrote(BufBound *me);
+extern int BufBound_Wrote(BufBound *me);
 
-static __inline int BufBound_IsFull(BufBound* me)
+static __inline int
+BufBound_IsFull(BufBound *me)
 {
-   return (BufBound_Left(me) <= 0);
+	return (BufBound_Left(me) <= 0);
 }
 
 // Deprecated:
-static __inline int BufBound_IsCounter(BufBound* me)
+static __inline int
+BufBound_IsCounter(BufBound *me)
 {
-   return BufBound_BufSize(me) == 0;
+	return BufBound_BufSize(me) == 0;
 }
 
 #ifdef __cplusplus
 }
 #endif /* #ifdef __cplusplus */
-
 
 /*=====================================================================
 =======================================================================
@@ -467,4 +467,3 @@ See Also:
 
 ======================================================================= */
 #endif /* #ifndef AEEBUFBOUND_H */
-

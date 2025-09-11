@@ -5,38 +5,38 @@
 #define FASTRPC_PM_H
 
 /*
-	fastrpc_wake_lock:
+        fastrpc_wake_lock:
 
-	Takes the wake-lock
-	Args: None
-	Returns: Integer - 0 on success
+        Takes the wake-lock
+        Args: None
+        Returns: Integer - 0 on success
 */
 int fastrpc_wake_lock();
 
 /*
-	fastrpc_wake_unlock:
+        fastrpc_wake_unlock:
 
-	Releases the wake-lock
-	Args: None
-	Returns: Integer - 0 on success
+        Releases the wake-lock
+        Args: None
+        Returns: Integer - 0 on success
 */
 int fastrpc_wake_unlock();
 
 /*
-	fastrpc_wake_lock_init:
+        fastrpc_wake_lock_init:
 
-	Initializes the fastrpc wakelock struct
-	Args: None
-	Returns: Integer - 0 on success
+        Initializes the fastrpc wakelock struct
+        Args: None
+        Returns: Integer - 0 on success
 */
 int fastrpc_wake_lock_init();
 
 /*
-	fastrpc_wake_lock_deinit:
+        fastrpc_wake_lock_deinit:
 
-	De-initializes the fastrpc wakelock struct
-	Args: None
-	Returns: Integer - 0 on success
+        De-initializes the fastrpc wakelock struct
+        Args: None
+        Returns: Integer - 0 on success
 */
 int fastrpc_wake_lock_deinit();
-#endif //FASTRPC_PM_H
+#endif // FASTRPC_PM_H

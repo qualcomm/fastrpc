@@ -6,7 +6,4 @@
 
 #include "HAP_farf.h"
 
-
-
-
 #endif /*__HAP_FARF_INTERNAL_H__*/
