@@ -932,11 +932,14 @@ static int get_dirlist_from_env(const char *envvarname, char **ppDirList) {
   char *dirList = NULL;
   char *dirListBuf = NULL;
   char *srcStr = NULL;
+  char *dsp_search_path = NULL;
   int nErr = AEE_SUCCESS;
   int envListLen = 0;
   int envListPrependLen = 0;
   int listLen = 0;
-  int envLenGuess = STD_MAX(ENV_LEN_GUESS, 1 + strlen(DSP_SEARCH_PATH));
+  int envLenGuess = 0;
+  dsp_search_path = get_dsp_search_path();
+  envLenGuess = STD_MAX(ENV_LEN_GUESS, 1 + strlen(dsp_search_path));
 
   FARF(RUNTIME_RPC_LOW, "Entering %s", __func__);
   VERIFYC(NULL != ppDirList, AEE_ERPC);
@@ -951,7 +954,7 @@ static int get_dirlist_from_env(const char *envvarname, char **ppDirList) {
         strncmp(envvarname, DSP_LIBRARY_PATH,
                     strlen(DSP_LIBRARY_PATH)) == 0) {
       // Calculate total length of env and DSP_SEARCH_PATH
-      envListPrependLen = envListLen + strlen(DSP_SEARCH_PATH);
+      envListPrependLen = envListLen + strlen(dsp_search_path);
       if (envLenGuess < envListPrependLen) {
         FREEIF(envListBuf);
         VERIFYC(envListBuf =
@@ -962,7 +965,7 @@ static int get_dirlist_from_env(const char *envvarname, char **ppDirList) {
                                             envListPrependLen, &listLen)));
       }
       // Append default DSP_SEARCH_PATH to user defined env
-      strlcat(envList, DSP_SEARCH_PATH, envListPrependLen);
+      strlcat(envList, dsp_search_path, envListPrependLen);
       envListLen = envListPrependLen;
     } else if (strncmp(envvarname, ADSP_AVS_PATH,
                            strlen(ADSP_AVS_PATH)) == 0) {
@@ -978,15 +981,13 @@ static int get_dirlist_from_env(const char *envvarname, char **ppDirList) {
       }
       strlcat(envList, ADSP_AVS_CFG_PATH, envListPrependLen);
       envListLen = envListPrependLen;
-    } else {
-      envListLen = listLen;
     }
   } else if (strncmp(envvarname, ADSP_LIBRARY_PATH,
                          strlen(ADSP_LIBRARY_PATH)) == 0 ||
              strncmp(envvarname, DSP_LIBRARY_PATH,
                          strlen(DSP_LIBRARY_PATH)) == 0) {
     envListLen = listLen =
-        1 + strlcpy(envListBuf, DSP_SEARCH_PATH, envLenGuess);
+        1 + strlcpy(envListBuf, dsp_search_path, envLenGuess);
   } else if (strncmp(envvarname, ADSP_AVS_PATH,
                          strlen(ADSP_AVS_PATH)) == 0) {
     envListLen = listLen =

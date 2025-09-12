@@ -334,7 +334,7 @@ struct handle_list {
   * @brief API to get the DSP_SEARCH_PATH stored locally as static.
   * @get_path : get_path will be updated with the path stored in DSP_SEARCH_PATH locally.
   **/
-void get_default_dsp_search_path(char* path);
+const char* get_dsp_search_path();
 
 /**
   * @brief API to map memory to the remote domain

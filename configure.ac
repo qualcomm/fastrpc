@@ -48,5 +48,6 @@ Makefile
 inc/Makefile
 src/Makefile
 test/Makefile
+files/Makefile
 ])
 AC_OUTPUT
