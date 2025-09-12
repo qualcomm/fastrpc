@@ -981,8 +981,6 @@ static int get_dirlist_from_env(const char *envvarname, char **ppDirList) {
       }
       strlcat(envList, ADSP_AVS_CFG_PATH, envListPrependLen);
       envListLen = envListPrependLen;
-    } else {
-      envListLen = listLen;
     }
   } else if (strncmp(envvarname, ADSP_LIBRARY_PATH,
                          strlen(ADSP_LIBRARY_PATH)) == 0 ||
