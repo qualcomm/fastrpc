@@ -27,7 +27,6 @@ LIBDSPRPC_SOURCES = \
 		adspmsgd.c \
 		adspmsgd_printf.c \
 		std_path.c \
-		std_dtoa.c \
 		BufBound.c \
 		platform_libs.c \
 		pl_list.c \

@@ -70,7 +70,6 @@
 #include "remotectl.h"
 #include "remotectl1.h"
 #include "rpcmem_internal.h"
-#include "shared.h"
 #include "verify.h"
 #include "fastrpc_context.h"
 #include "fastrpc_process_attributes.h"

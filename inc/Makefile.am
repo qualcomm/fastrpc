@@ -42,15 +42,11 @@ noinst_HEADERS = \
 	listener_buf.h \
 	log_config.h \
 	mod_table.h \
-	mutex.h \
 	platform_libs.h \
 	pls.h \
-	remote64.h \
+	pthread_rw_mutex.h \
 	rpcmem_internal.h \
 	sbuf.h \
 	sbuf_parser.h \
-	shared.h \
-	std_dtoa.h \
 	uthash.h \
-	verify.h \
-	version.h
+	verify.h

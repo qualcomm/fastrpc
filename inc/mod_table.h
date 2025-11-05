@@ -4,7 +4,7 @@
 #ifndef MOD_TABLE_H
 #define MOD_TABLE_H
 
-#include "remote64.h"
+#include "remote.h"
 #include "AEEStdDef.h"
 
 #ifdef __cplusplus

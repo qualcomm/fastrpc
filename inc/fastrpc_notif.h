@@ -4,7 +4,7 @@
 #ifndef FASTRPC_NOTIF_H
 #define FASTRPC_NOTIF_H
 
-#include "remote64.h"
+#include "remote.h"
 #include "fastrpc_internal.h"
 
 /*

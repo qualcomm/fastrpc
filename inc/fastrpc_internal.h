@@ -10,7 +10,7 @@
 
 #include "HAP_farf.h"
 #include "AEEStdErr.h"
-#include "remote64.h"
+#include "remote.h"
 #include "verify.h"
 #include "AEEstd.h"
 #include "AEEQList.h"

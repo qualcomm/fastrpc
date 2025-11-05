@@ -4,7 +4,7 @@
 #ifndef FASTRPC_ASYNC_H
 #define FASTRPC_ASYNC_H
 
-#include "remote64.h"
+#include "remote.h"
 #include "fastrpc_internal.h"
 
 #define POS_TO_MASK(pos)             ((1UL << pos) - 1)

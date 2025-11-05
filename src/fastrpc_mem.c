@@ -38,7 +38,6 @@
 #include "fastrpc_internal.h"
 #include "fastrpc_mem.h"
 #include "rpcmem.h"
-#include "shared.h"
 #include "verify.h"
 
 #ifdef LE_ENABLE
