@@ -98,10 +98,12 @@ libsdsp_default_listener_la_CFLAGS = $(SDSP_CFLAGS) -DUSE_SYSLOG
 
 GDSP_CFLAGS = $(LIBDSPRPC_CFLAGS) -DDEFAULT_DOMAIN_ID=5
 
+lib_LTLIBRARIES += libgdsprpc.la
 libgdsprpc_la_SOURCES = $(LIBDSPRPC_SOURCES)
 libgdsprpc_la_LDFLAGS = -ldl -lm $(USE_LOG) -version-number @LT_VERSION_NUMBER@
 libgdsprpc_la_CFLAGS = $(GDSP_CFLAGS)
 
+lib_LTLIBRARIES += libgdsp_default_listener.la
 libgdsp_default_listener_la_SOURCES = $(LIBDEFAULT_LISTENER_SOURCES)
 libgdsp_default_listener_la_DEPENDENCIES = libcdsprpc.la
 libgdsp_default_listener_la_LDFLAGS = libcdsprpc.la -shared -module $(USE_LOG) -version-number @LT_VERSION_NUMBER@
