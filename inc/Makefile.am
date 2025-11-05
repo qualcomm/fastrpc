@@ -5,6 +5,7 @@ fastrpc_include_HEADERS += $(top_srcdir)/inc/remote.h
 fastrpc_include_HEADERS += $(top_srcdir)/inc/rpcmem.h
 
 noinst_HEADERS = \
+	misc/fastrpc.h \
 	AEEBufBound.h \
 	AEEQList.h \
 	AEEStdDef.h \
