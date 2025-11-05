@@ -13,26 +13,11 @@ noinst_HEADERS = \
 	HAP_farf.h \
 	HAP_farf_internal.h \
 	HAP_pls.h \
-	adsp_current_process.h \
-	adsp_current_process1.h \
-	adsp_default_listener.h \
-	adsp_default_listener1.h \
-	adsp_listener.h \
-	adsp_listener1.h \
-	adsp_perf.h \
-	adsp_perf1.h \
 	adsp_pls.h \
-	adspmsgd_adsp.h \
-	adspmsgd_adsp1.h \
-	adspmsgd_apps.h \
 	adspmsgd_internal.h \
-	apps_mem.h \
 	apps_mem_internal.h \
-	apps_remotectl.h \
-	apps_std.h \
 	apps_std_internal.h \
 	dspqueue.h \
-	dspqueue_rpc.h \
 	dspsignal.h \
 	fastrpc_apps_user.h \
 	fastrpc_async.h \
@@ -60,8 +45,6 @@ noinst_HEADERS = \
 	platform_libs.h \
 	pls.h \
 	remote64.h \
-	remotectl.h \
-	remotectl1.h \
 	rpcmem_internal.h \
 	sbuf.h \
 	sbuf_parser.h \

@@ -25,6 +25,7 @@ stamp-h1
 
 .deps/
 .libs/
+.dirstamp
 
 # Compiled objects
 *.o
