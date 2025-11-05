@@ -52,9 +52,11 @@ static pthread_mutex_t update_notif_list_mut;
 /* List of all clients who registered for process status notification */
 static struct other_handle_list notif_list;
 
-void fastrpc_cleanup_notif_list();
+static void fastrpc_cleanup_notif_list();
 
 DECLARE_HASH_TABLE(fastrpc_notif, notif_config);
+
+static int get_remote_notif_response(int domain);
 
 static void *notif_fastrpc_thread(void *arg) {
   notif_config *me = (notif_config *)arg;
@@ -201,7 +203,7 @@ static int fastrpc_notify_status(int domain, int session, int status) {
   return nErr;
 }
 
-void fastrpc_cleanup_notif_list() {
+static void fastrpc_cleanup_notif_list() {
   QNode *pn = NULL, *pnn = NULL;
   struct fastrpc_notif *lnotif = NULL;
 
@@ -219,7 +221,7 @@ void fastrpc_cleanup_notif_list() {
 }
 
 /* Function to wait in kernel for an update in remote process status */
-int get_remote_notif_response(int domain) {
+static int get_remote_notif_response(int domain) {
   int nErr = AEE_SUCCESS, dev;
   int dom = -1, session = -1, status = -1;
 
