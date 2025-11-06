@@ -24,6 +24,7 @@
 #define FASTRPC_IOCTL_INIT_CREATE_STATIC	_IOWR('R', 9, struct fastrpc_ioctl_init_create_static)
 #define FASTRPC_IOCTL_MEM_MAP			_IOWR('R', 10, struct fastrpc_ioctl_mem_map)
 #define FASTRPC_IOCTL_MEM_UNMAP			_IOWR('R', 11, struct fastrpc_ioctl_mem_unmap)
+#define FASTRPC_IOCTL_SET_OPTION		_IOWR('R', 12, struct fastrpc_ioctl_set_option)
 #define FASTRPC_IOCTL_GET_DSP_INFO		_IOWR('R', 13, struct fastrpc_ioctl_capability)
 
 #define ADSPRPC_DEVICE "/dev/fastrpc-adsp"
@@ -99,6 +100,8 @@
 #ifndef FASTRPC_MAX_DSP_ATTRIBUTES_FALLBACK
 #define FASTRPC_MAX_DSP_ATTRIBUTES_FALLBACK  1
 #endif
+/* Set option IOCTL request ID to enable poll mode */
+#define FASTRPC_POLL_MODE	1
 
 struct fastrpc_invoke_args {
 	__u64 ptr; /* pointer to invoke address*/
@@ -164,6 +167,12 @@ struct fastrpc_ioctl_mem_unmap {
 	__u64 vaddr;		/* remote process (dsp) virtual address */
 	__u64 length;		/* buffer size */
 	__s32 reserved[5];
+};
+
+struct fastrpc_ioctl_set_option {
+	__u32 req;		/* request id */
+	__u32 value;	/* value */
+	__s32 reserved[6];
 };
 
 struct fastrpc_ioctl_capability {
