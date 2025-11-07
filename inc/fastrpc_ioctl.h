@@ -59,25 +59,9 @@
 						args[i].fd = filedesc;	\
 						args[i].attr = attrs;
 
-#define set_args_ptr(i, pra)		args[i].ptr = (uint64_t)pra
-#define set_args_len(i, len)		args[i].length = len
-#define set_args_attr(i, attrs)		args[i].attr = attrs
 #define set_args_fd(i, filedesc)	args[i].fd = filedesc
-#define get_args_ptr(i)			args[i].ptr
-#define get_args_len(i)			args[i].length
-#define get_args_attr(i)		args[i].attr
-#define get_args_fd(i)			args[i].fd
 #define append_args_attr(i, attrs)	args[i].attr |= attrs
-#define get_args()			args
-#define is_upstream()			1
 
-//Utility macros for reading the ioctl structure
-#define NOTIF_GETDOMAIN(response)	-1;
-#define NOTIF_GETSESSION(response)	-1;
-#define NOTIF_GETSTATUS(response)	-1;
-
-#define FASTRPC_INVOKE2_STATUS_NOTIF		2	//TODO: Temporary change (Bharath to fix)
-#define FASTRPC_INVOKE2_KERNEL_OPTIMIZATIONS	1	//TODO: Temporary change (Bharath to fix)
 #ifndef FASTRPC_MAX_DSP_ATTRIBUTES_FALLBACK
 #define FASTRPC_MAX_DSP_ATTRIBUTES_FALLBACK  1
 #endif

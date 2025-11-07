@@ -1349,7 +1349,7 @@ int remote_handle_invoke_domain(int domain, remote_handle handle,
     wake_lock = 0;
   }
   // Macros are initializing and destroying pfds and pattrs.
-  nErr = ioctl_invoke(dev, req, handle, sc, get_args(), pfds, pattrs, job,
+  nErr = ioctl_invoke(dev, req, handle, sc, args, pfds, pattrs, job,
                       crc_remote, perf_kernel, perf_dsp);
   if (nErr) {
     nErr = convert_kernel_to_user_error(nErr, errno);
