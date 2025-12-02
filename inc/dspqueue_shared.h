@@ -4,9 +4,9 @@
 #ifndef DSPQUEUE_SHARED_H
 #define DSPQUEUE_SHARED_H
 
-#include <stdint.h>
-#include <stdbool.h>
 #include "dspqueue.h"
+#include <stdbool.h>
+#include <stdint.h>
 
 /* Shared memory queue definitions.
 
@@ -24,37 +24,37 @@
        of the queue, the entire packet is written at the beginning. The 64-bit header is replicated.
 */
 
-
 /* Header structure for each one-way packet queue.
    All offsets are in bytes to the beginning of the shared memory queue block. */
 struct dspqueue_packet_queue_header {
-    uint32_t queue_offset; /* Queue offset */
-    uint32_t queue_length; /* Queue length in bytes */
-    uint32_t read_state_offset; /* Read state offset. Contains struct dspqueue_packet_queue_state,
-                                   describing the state of the reader of this queue. */
-    uint32_t write_state_offset; /* Write state offset. Contains a struct dspqueue_packet_queue_state,
-                                    describing the state of the writer of this queue. */
+	uint32_t queue_offset; /* Queue offset */
+	uint32_t queue_length; /* Queue length in bytes */
+	uint32_t
+	    read_state_offset; /* Read state offset. Contains struct dspqueue_packet_queue_state,
+	                          describing the state of the reader of this queue. */
+	uint32_t write_state_offset; /* Write state offset. Contains a struct
+	                                dspqueue_packet_queue_state, describing the state of the
+	                                writer of this queue. */
 };
 
 /* State structure, used to describe the state of the reader or writer of each queue.
    The state structure is at an offset from the start of the header as defined in
    struct dspqueue_packet_queue_header above, and must fit in a single cache line. */
 struct dspqueue_packet_queue_state {
-    volatile uint32_t position; /* Position within the queue in bytes */
-    volatile uint32_t packet_count; /* Number of packets read/written */
-    volatile uint32_t wait_count; /* Non-zero if the reader/writer is waiting for a signal
-                                     for a new packet or more space in the queue respectively */
+	volatile uint32_t position;     /* Position within the queue in bytes */
+	volatile uint32_t packet_count; /* Number of packets read/written */
+	volatile uint32_t wait_count;   /* Non-zero if the reader/writer is waiting for a signal
+	                                   for a new packet or more space in the queue respectively */
 };
-
 
 /* Userspace shared memory queue header */
 struct dspqueue_header {
-    uint32_t version; /* Initial version 1, 2 if any flags are set and need to be checked. */
-    int32_t error;
-    uint32_t flags;
-    struct dspqueue_packet_queue_header req_queue; /* CPU to DSP */
-    struct dspqueue_packet_queue_header resp_queue; /* DSP to CPU */
-    uint32_t queue_count;
+	uint32_t version; /* Initial version 1, 2 if any flags are set and need to be checked. */
+	int32_t error;
+	uint32_t flags;
+	struct dspqueue_packet_queue_header req_queue;  /* CPU to DSP */
+	struct dspqueue_packet_queue_header resp_queue; /* DSP to CPU */
+	uint32_t queue_count;
 };
 
 /* The version number currently expected if both CPU and DSP sides match */
@@ -69,8 +69,8 @@ struct dspqueue_header {
 #define DSPQUEUE_HEADER_FLAG_DRIVER_SIGNALING 2
 
 /* Unexpected flags */
-#define DSPQUEUE_HEADER_UNEXPECTED_FLAGS ~(DSPQUEUE_HEADER_FLAG_WAIT_COUNTS | DSPQUEUE_HEADER_FLAG_DRIVER_SIGNALING)
-
+#define DSPQUEUE_HEADER_UNEXPECTED_FLAGS                                                           \
+	~(DSPQUEUE_HEADER_FLAG_WAIT_COUNTS | DSPQUEUE_HEADER_FLAG_DRIVER_SIGNALING)
 
 /* Maximum queue size in bytes */
 #define DSPQUEUE_MAX_QUEUE_SIZE 16777216
@@ -85,11 +85,9 @@ struct dspqueue_header {
 #define DSPQUEUE_DEFAULT_REQ_SIZE 65536
 #define DSPQUEUE_DEFAULT_RESP_SIZE 16384
 
-
 /* Maximum number of queues per process. Must ensure the state arrays get cache line aligned.
    Update signal allocations in dspsignal.h if this changes. */
 #define DSPQUEUE_MAX_PROCESS_QUEUES 64
-
 
 /* Process queue information block, used with RPC-based signaling.
 
@@ -102,10 +100,10 @@ struct dspqueue_header {
    use argumentless FastRPC calls for signaling.
  */
 struct dspqueue_process_queue_state {
-    uint32_t req_packet_count[DSPQUEUE_MAX_PROCESS_QUEUES];
-    uint32_t req_space_count[DSPQUEUE_MAX_PROCESS_QUEUES];
-    uint32_t resp_packet_count[DSPQUEUE_MAX_PROCESS_QUEUES];
-    uint32_t resp_space_count[DSPQUEUE_MAX_PROCESS_QUEUES];
+	uint32_t req_packet_count[DSPQUEUE_MAX_PROCESS_QUEUES];
+	uint32_t req_space_count[DSPQUEUE_MAX_PROCESS_QUEUES];
+	uint32_t resp_packet_count[DSPQUEUE_MAX_PROCESS_QUEUES];
+	uint32_t resp_space_count[DSPQUEUE_MAX_PROCESS_QUEUES];
 };
 
 /* Info specific to multi-domain queues */
@@ -132,12 +130,11 @@ struct dspqueue_multidomain {
 /* Signals IDs used with driver signaling. Update the signal allocations in dspsignal.h
    if this changes. */
 enum dspqueue_signal {
-    DSPQUEUE_SIGNAL_REQ_PACKET = 0,
-    DSPQUEUE_SIGNAL_REQ_SPACE,
-    DSPQUEUE_SIGNAL_RESP_PACKET,
-    DSPQUEUE_SIGNAL_RESP_SPACE,
-    DSPQUEUE_NUM_SIGNALS
+	DSPQUEUE_SIGNAL_REQ_PACKET = 0,
+	DSPQUEUE_SIGNAL_REQ_SPACE,
+	DSPQUEUE_SIGNAL_RESP_PACKET,
+	DSPQUEUE_SIGNAL_RESP_SPACE,
+	DSPQUEUE_NUM_SIGNALS
 };
-
 
 #endif

@@ -19,18 +19,18 @@
 
 /* FastRPC latency voting data for QoS handler of a session */
 struct fastrpc_latency {
-  int adaptive_qos;
-  int state; //! latency thread handler running state
-  int exit;
-  int invoke;    //! invoke count in tacking window
-  int vote;      //! current pm_qos vote status
-  int dev;       //! associated device node
-  int wait_time; //! wait time for review next voting
-  int latency;   //! user requested fastrpc latency in us
-  pthread_t thread;
-  pthread_mutex_t mut;
-  pthread_mutex_t wmut;
-  pthread_cond_t cond;
+	int adaptive_qos;
+	int state; //! latency thread handler running state
+	int exit;
+	int invoke;    //! invoke count in tacking window
+	int vote;      //! current pm_qos vote status
+	int dev;       //! associated device node
+	int wait_time; //! wait time for review next voting
+	int latency;   //! user requested fastrpc latency in us
+	pthread_t thread;
+	pthread_mutex_t mut;
+	pthread_mutex_t wmut;
+	pthread_cond_t cond;
 };
 
 /* Increment RPC invoke count for activity detection in a window of time
@@ -45,8 +45,7 @@ int fastrpc_latency_invoke_incr(struct fastrpc_latency *qos);
  * @param latency, fastrpc latency requirement from user in us
  * @return, fastrpc error codes
  */
-int fastrpc_set_pm_qos(struct fastrpc_latency *qos, uint32_t enable,
-                       uint32_t latency);
+int fastrpc_set_pm_qos(struct fastrpc_latency *qos, uint32_t enable, uint32_t latency);
 
 /* Initialization routine to initialize globals & internal data structures */
 int fastrpc_latency_init(int dev, struct fastrpc_latency *qos);

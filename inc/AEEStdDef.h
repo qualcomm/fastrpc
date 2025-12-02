@@ -21,49 +21,49 @@ DESCRIPTION:  definition of basic types, constants,
 ** Standard Types
 ** ----------------------------------------------------------------------- */
 
- /** @defgroup  stdret standard return values
-*  @{
-*/
+/** @defgroup  stdret standard return values
+ *  @{
+ */
 
 //! @cond Doxygen_Suppress
 #ifndef _AEEUID_DEFINED
-typedef uint32_t             AEEUID;
+typedef uint32_t AEEUID;
 #define _AEEUID_DEFINED
 #endif
 
 #ifndef _AEEIID_DEFINED
-typedef uint32_t             AEEIID;
+typedef uint32_t AEEIID;
 #define _AEEIID_DEFINED
 #endif
 
 #ifndef _AEECLSID_DEFINED
-typedef uint32_t             AEECLSID;
+typedef uint32_t AEECLSID;
 #define _AEECLSID_DEFINED
 #endif
 
 #ifndef _AEEPRIVID_DEFINED
-typedef uint32_t             AEEPRIVID;
+typedef uint32_t AEEPRIVID;
 #define _AEEPRIVID_DEFINED
 #endif
 
 #ifndef _AECHAR_DEFINED
-typedef uint16_t             AECHAR;
+typedef uint16_t AECHAR;
 #define _AECHAR_DEFINED
 #endif
 //! @endcond
 
 /**
- * @brief Return value of functions indicating success or failure. return value 0 indicates success. A non zero value indicates a failure. Any data in rout parameters is not propagated back.
+ * @brief Return value of functions indicating success or failure. return value 0 indicates success.
+ * A non zero value indicates a failure. Any data in rout parameters is not propagated back.
  */
 #ifndef _AEERESULT_DEFINED
-typedef int                AEEResult;
+typedef int AEEResult;
 #define _AEERESULT_DEFINED
 #endif
 
 /**
  * @}
  */
-
 
 /* -----------------------------------------------------------------------
 ** Function Calling Conventions
@@ -80,9 +80,9 @@ typedef int                AEEResult;
 /* -----------------------------------------------------------------------
 ** Constants
 ** ----------------------------------------------------------------------- */
- /** @defgroup  stdminmax Standard Min and Max for all data types
-*  @{
-*/
+/** @defgroup  stdminmax Standard Min and Max for all data types
+ *  @{
+ */
 
 //! @cond Doxygen_Suppress
 #ifndef MIN_AECHAR
@@ -110,18 +110,16 @@ typedef int                AEEResult;
 ** Types for code generated from IDL
 ** ----------------------------------------------------------------------- */
 
- /** @defgroup  QIDL data types
-*  @{
-*/
+/** @defgroup  QIDL data types
+ *  @{
+ */
 //! @cond Doxygen_Suppress
 #ifndef __QIDL_WCHAR_T_DEFINED__
 #define __QIDL_WCHAR_T_DEFINED__
 typedef uint16_t _wchar_t;
 #endif
 
-
 /* __STRING_OBJECT__ will be deprecated in the future */
-
 
 #if !defined(__QIDL_STRING_OBJECT_DEFINED__) && !defined(__STRING_OBJECT__)
 #define __QIDL_STRING_OBJECT_DEFINED__
@@ -132,9 +130,9 @@ typedef uint16_t _wchar_t;
    sequence or union.
  */
 typedef struct _cstring_s {
-   char* data;
-   int dataLen;
-   int dataLenReq;
+	char *data;
+	int dataLen;
+	int dataLenReq;
 } _cstring_t;
 
 /**
@@ -143,9 +141,9 @@ typedef struct _cstring_s {
  */
 
 typedef struct _wstring_s {
-   _wchar_t* data;
-   int dataLen;
-   int dataLenReq;
+	_wchar_t *data;
+	int dataLen;
+	int dataLenReq;
 } _wstring_t;
 #endif /* __QIDL_STRING_OBJECT_DEFINED__ */
 //! @endcond
@@ -309,4 +307,3 @@ See Also:
 */
 
 #endif /* #ifndef AEESTDDEF_H */
-
