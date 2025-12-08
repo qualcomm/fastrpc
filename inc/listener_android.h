@@ -4,14 +4,14 @@
 #ifndef LISTENER_ANDROID_H
 #define LISTENER_ANDROID_H
 
-#include <semaphore.h>
 #include <dlfcn.h>
+#include <semaphore.h>
 
-#define   MSG(a, b, c)              printf(__FILE_LINE__ ":" c )
-#define   MSG_1(a, b, c, d)         printf(__FILE_LINE__ ":" c , d)
-#define   MSG_2(a, b, c, d, e)      printf(__FILE_LINE__ ":" c , d, e)
-#define   MSG_3(a, b, c, d, e, f)   printf(__FILE_LINE__ ":" c , d, e, f)
-#define   MSG_4(a, b, c, d, e, f,g) printf(__FILE_LINE__ ":" c , d, e, f, g)
+#define MSG(a, b, c) printf(__FILE_LINE__ ":" c)
+#define MSG_1(a, b, c, d) printf(__FILE_LINE__ ":" c, d)
+#define MSG_2(a, b, c, d, e) printf(__FILE_LINE__ ":" c, d, e)
+#define MSG_3(a, b, c, d, e, f) printf(__FILE_LINE__ ":" c, d, e, f)
+#define MSG_4(a, b, c, d, e, f, g) printf(__FILE_LINE__ ":" c, d, e, f, g)
 
 #define DLW_RTLD_NOW RTLD_NOW
 #define dlw_Open dlopen

@@ -19,7 +19,7 @@
  * P:      PERF_PUTARGS
  * INV:    PERF_INVARGS
  * INVOKE: PERF_INVOKE
-*/
+ */
 
 #define PERF_KERNEL_KEY_MAX (10)
 
@@ -37,7 +37,7 @@
  * R:      perf_rsp
  * E_R:    perf_early_rsp
  * J_S_T:  perf_job_start_time
-*/
+ */
 
 #define PERF_DSP_KEY_MAX (12)
 
@@ -47,4 +47,4 @@ void fastrpc_perf_update(int dev, remote_handle handle, uint32_t sc);
 int fastrpc_perf_init(int dev, int domain);
 void fastrpc_perf_deinit(void);
 
-#endif //FASTRPC_PERF_H
+#endif // FASTRPC_PERF_H

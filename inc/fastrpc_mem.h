@@ -15,14 +15,14 @@ int fastrpc_mem_init(void);
 int fastrpc_mem_deinit(void);
 
 /**
- * fastrpc_mem_open() initializes fastrpc_mem module data of a fastrpc session associated with domain.
- * Call once during session open for a domain.
+ * fastrpc_mem_open() initializes fastrpc_mem module data of a fastrpc session associated with
+ * domain. Call once during session open for a domain.
  */
 int fastrpc_mem_open(int domain);
 
 /**
- * fastrpc_mem_close() deinitializes fastrpc_mem module data of a fastrpc session associated with domain.
- * Call once during session close for a domain.
+ * fastrpc_mem_close() deinitializes fastrpc_mem module data of a fastrpc session associated with
+ * domain. Call once during session close for a domain.
  */
 int fastrpc_mem_close(int domain);
 
@@ -35,9 +35,10 @@ void unregister_dma_handle(int fd, uint32_t *len, uint32_t *attr);
  * returns a list of FDs registered by the clients.
  * used while making a remote call.
  */
-int fdlist_fd_from_buf(void* buf, int bufLen, int* nova, void** base, int* attr, int* ofd);
+int fdlist_fd_from_buf(void *buf, int bufLen, int *nova, void **base, int *attr, int *ofd);
 
-int remote_mmap64_internal(int fd, uint32_t flags, uint64_t vaddrin, int64_t size, uint64_t* vaddrout);
+int remote_mmap64_internal(int fd, uint32_t flags, uint64_t vaddrin, int64_t size,
+                           uint64_t *vaddrout);
 
 /*
  * Get information about an existing mapped buffer, optionally incrementing/decrementing its
@@ -52,9 +53,8 @@ int remote_mmap64_internal(int fd, uint32_t flags, uint64_t vaddrin, int64_t siz
  *
  * @return 0 on success, error code on failure.
  *         - AEE_ENOSUCHMAP: Unknown FD
-*/
+ */
 int fastrpc_buffer_ref(int domain, int fd, int ref, void **va, size_t *size);
-
 
 /*
  * Register or deregister a buffer with fastrpc framework, managing its reference count
@@ -73,4 +73,4 @@ int fastrpc_buffer_ref(int domain, int fd, int ref, void **va, size_t *size);
  */
 void remote_register_buf(void *buf, int size, int fd);
 
-#endif //FASTRPC_MEM_H
+#endif // FASTRPC_MEM_H

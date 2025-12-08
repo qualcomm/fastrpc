@@ -7,12 +7,12 @@
 #include "apps_std.h"
 
 /**
-  * @brief Macros used in apps_std
-  * defines the search paths where fastRPC library should 
-  * look for skel libraries, .debugconfig, .farf files.  
-  * Could be overloaded from build system.
-  **/
- 
+ * @brief Macros used in apps_std
+ * defines the search paths where fastRPC library should
+ * look for skel libraries, .debugconfig, .farf files.
+ * Could be overloaded from build system.
+ **/
+
 #define RETRY_WRITE (3) // number of times to retry write operation
 
 // Environment variable name, that can be used to override the search paths

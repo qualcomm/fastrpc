@@ -4,8 +4,8 @@
 #ifndef FASTRPC_NOTIF_H
 #define FASTRPC_NOTIF_H
 
-#include "remote64.h"
 #include "fastrpc_internal.h"
+#include "remote64.h"
 
 /*
  * Internal function to create fastrpc status notification thread
@@ -22,7 +22,8 @@ int fastrpc_notif_domain_init(int domain);
 void fastrpc_notif_domain_deinit(int domain);
 
 /*
- * Internal function to get notification response from kernel. Waits in kernel until notifications are received from DSP
+ * Internal function to get notification response from kernel. Waits in kernel until notifications
+ * are received from DSP
  * @ domain: domain to which notification needs to be received
  * returns 0 on success
  */

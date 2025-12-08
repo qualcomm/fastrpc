@@ -4,7 +4,6 @@
 #ifndef DSPSIGNAL_H
 #define DSPSIGNAL_H
 
-
 /** @file
     Internal FastRPC CPU-DSP signaling API.
 
@@ -63,10 +62,9 @@
     signals can only be used in FastRPC user PDs.
 */
 
-#include <stdlib.h>
-#include <stdint.h>
 #include <AEEStdDef.h>
-
+#include <stdint.h>
+#include <stdlib.h>
 
 /** Infinite timeout */
 #define DSPSIGNAL_TIMEOUT_NONE UINT32_MAX
@@ -80,15 +78,13 @@
 */
 #define DSPSIGNAL_DSPQUEUE_MIN 0
 #define DSPSIGNAL_DSPQUEUE_MAX 255
-#define DSPSIGNAL_RESERVED_MIN (DSPSIGNAL_DSPQUEUE_MAX+1)
+#define DSPSIGNAL_RESERVED_MIN (DSPSIGNAL_DSPQUEUE_MAX + 1)
 #define DSPSIGNAL_RESERVED_MAX 1023
-#define DSPSIGNAL_NUM_SIGNALS (DSPSIGNAL_RESERVED_MAX+1)
-
+#define DSPSIGNAL_NUM_SIGNALS (DSPSIGNAL_RESERVED_MAX + 1)
 
 #ifdef __cplusplus
 extern "C" {
 #endif
-
 
 /**
  * Create a signal instance for use.
@@ -110,7 +106,6 @@ extern "C" {
  */
 AEEResult dspsignal_create(int domain, uint32_t id, uint32_t flags);
 
-
 /**
  * Destroys a signal currently in use. This call will cancel all
  * pending wait operations on the signal.
@@ -126,7 +121,6 @@ AEEResult dspsignal_create(int domain, uint32_t id, uint32_t flags);
  *         - AEE_EBADPARM: Bad parameters, e.g. Invalid domain
  */
 AEEResult dspsignal_destroy(int domain, uint32_t id);
-
 
 /**
  * Send a signal. After the call returns a signal will be delivered
@@ -145,7 +139,6 @@ AEEResult dspsignal_destroy(int domain, uint32_t id);
  *         - AEE_EBADPARM: Bad parameters, e.g. Invalid domain
  */
 AEEResult dspsignal_signal(int domain, uint32_t id);
-
 
 /**
  * Wait for a signal, with an optional timeout.
@@ -168,7 +161,6 @@ AEEResult dspsignal_signal(int domain, uint32_t id);
  *         - AEE_EINTERRUPTED: Wait interrupted or cancelled
  */
 AEEResult dspsignal_wait(int domain, uint32_t id, uint32_t timeout_usec);
-
 
 /**
  * Cancel all pending wait operations on a signal on the local
@@ -203,4 +195,4 @@ void deinit_process_signals();
 }
 #endif
 
-#endif //DSPSIGNAL_H
+#endif // DSPSIGNAL_H
