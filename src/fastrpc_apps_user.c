@@ -70,7 +70,6 @@
 #include "remotectl.h"
 #include "remotectl1.h"
 #include "rpcmem_internal.h"
-#include "shared.h"
 #include "verify.h"
 #include "fastrpc_context.h"
 #include "fastrpc_process_attributes.h"
@@ -150,14 +149,7 @@ inline static void deinit_fastrpc_dsp_lib_refcnt(void) {
   }
 }
 
-enum fastrpc_proc_attr {
-  FASTRPC_MODE_DEBUG = 0x1,
-  FASTRPC_MODE_PTRACE = 0x2,
-  FASTRPC_MODE_CRC = 0x4,
-  FASTRPC_MODE_UNSIGNED_MODULE = 0x8,
-  FASTRPC_MODE_ADAPTIVE_QOS = 0x10,
-  FASTRPC_MODE_SYSTEM_PROCESS = 0x20,
-  FASTRPC_MODE_PRIVILEGED = 0x40, // this attribute will be populated in kernel
+enum fastrpc_proc_attr_local {
   // Attribute to enable pd dump feature for both signed/unsigned pd
   FASTRPC_MODE_ENABLE_PDDUMP = 0x80,
   // System attribute to enable pd dump debug data collection on rooted devices
@@ -1357,7 +1349,7 @@ int remote_handle_invoke_domain(int domain, remote_handle handle,
     wake_lock = 0;
   }
   // Macros are initializing and destroying pfds and pattrs.
-  nErr = ioctl_invoke(dev, req, handle, sc, get_args(), pfds, pattrs, job,
+  nErr = ioctl_invoke(dev, req, handle, sc, args, pfds, pattrs, job,
                       crc_remote, perf_kernel, perf_dsp);
   if (nErr) {
     nErr = convert_kernel_to_user_error(nErr, errno);

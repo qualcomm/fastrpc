@@ -14,7 +14,7 @@
 #include "fastrpc_apps_user.h"
 #include "fastrpc_mem.h"
 #include "fastrpc_trace.h"
-#include "remote64.h"
+#include "remote.h"
 #include "rpcmem_internal.h"
 #include "verify.h"
 #include <pthread.h>

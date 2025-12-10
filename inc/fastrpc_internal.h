@@ -10,7 +10,7 @@
 
 #include "HAP_farf.h"
 #include "AEEStdErr.h"
-#include "remote64.h"
+#include "remote.h"
 #include "verify.h"
 #include "AEEstd.h"
 #include "AEEQList.h"
@@ -51,9 +51,6 @@
 
 /* Max value of remote_mem_map_flags, used to validate the input flag */
 #define REMOTE_MAP_MAX_FLAG REMOTE_MAP_MEM_STATIC + 1
-
-/* Max value of fastrpc_map_flags, used to validate range of supported flags */
-#define FASTRPC_MAP_MAX FASTRPC_MAP_FD_NOMAP + 1
 
 #if !(defined __qdsp6__) && !(defined __hexagon__)
 static __inline uint32_t Q6_R_cl0_R(uint32_t num) {
@@ -229,29 +226,6 @@ enum fastrpc_map_type {
 	MEM_MAP,
 	MEM_UNMAP,
 	MUNMAP_FD,
-};
-
-/**
-  * @brief memory mapping and unmapping data structures used in 
-  * mmap/munmap ioctls. internal datastructures.
-  *  fastrpc_mem_map - used for storing memory map information
-  *  fastrpc_mem_unmap - used while unmapping the memory from the
-  *                      local data structures.
-  **/
-struct fastrpc_mem_map {
-	int fd;			/* ion fd */
-	int offset;		/* buffer offset */
-	uint32_t flags;		/* flags defined in enum fastrpc_map_flags */
-	int attrs;		/* buffer attributes used for SMMU mapping */
-	uintptr_t vaddrin;	/* buffer virtual address */
-	size_t length;		/* buffer length */
-	uint64_t vaddrout;	/* [out] remote virtual address */
-};
-
-struct fastrpc_mem_unmap {
-	int fd;			/* ion fd */
-	uint64_t vaddr;		/* remote process (dsp) virtual address */
-	size_t length;		/* buffer size */
 };
 
 struct fastrpc_map {

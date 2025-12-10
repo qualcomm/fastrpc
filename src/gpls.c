@@ -6,10 +6,8 @@
 #include "adsp_pls.h"
 #include "platform_libs.h"
 #include "pls.h"
-#include "version.h"
 
 static struct pls_table gpls;
-const char pls_version[] = VERSION_STRING;
 int gpls_init(void) {
   pls_ctor(&gpls, 1);
   return 0;

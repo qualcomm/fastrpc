@@ -56,8 +56,8 @@ const char *get_secure_domain_name(int domain_id) {
 int ioctl_init(int dev, uint32_t flags, int attr, unsigned char *shell, int shelllen,
                int shellfd, char *mem, int memlen, int memfd, int tessiglen) {
   int ioErr = 0;
-  struct fastrpc_ioctl_init_create init = {0};
-  struct fastrpc_ioctl_init_create_static init_static = {0};
+  struct fastrpc_init_create init = {0};
+  struct fastrpc_init_create_static init_static = {0};
 
   switch (flags) {
   case FASTRPC_INIT_ATTACH:
@@ -94,7 +94,7 @@ int ioctl_invoke(int dev, int req, remote_handle handle, uint32_t sc, void *pra,
                  int *fds, unsigned int *attrs, void *job, unsigned int *crc,
                  uint64_t *perf_kernel, uint64_t *perf_dsp) {
   int ioErr = AEE_SUCCESS;
-  struct fastrpc_ioctl_invoke invoke = {0};
+  struct fastrpc_invoke invoke = {0};
 
   invoke.handle = handle;
   invoke.sc = sc;
@@ -123,7 +123,7 @@ int ioctl_mmap(int dev, int req, uint32_t flags, int attr, int fd, int offset,
 
   switch (req) {
   case MEM_MAP: {
-    struct fastrpc_ioctl_mem_map map = {0};
+    struct fastrpc_mem_map map = {0};
     map.version = 0;
     map.fd = fd;
     map.offset = offset;
@@ -136,7 +136,7 @@ int ioctl_mmap(int dev, int req, uint32_t flags, int attr, int fd, int offset,
   } break;
   case MMAP:
   case MMAP_64: {
-    struct fastrpc_ioctl_req_mmap map = {0};
+    struct fastrpc_req_mmap map = {0};
     map.fd = fd;
     map.flags = flags;
     map.vaddrin = (uint64_t)vaddrin;
@@ -159,7 +159,7 @@ int ioctl_munmap(int dev, int req, int attr, void *buf, int fd, int len,
   switch (req) {
   case MEM_UNMAP:
   case MUNMAP_FD: {
-    struct fastrpc_ioctl_mem_unmap unmap = {0};
+    struct fastrpc_mem_unmap unmap = {0};
     unmap.version = 0;
     unmap.fd = fd;
     unmap.vaddr = vaddr;
@@ -168,7 +168,7 @@ int ioctl_munmap(int dev, int req, int attr, void *buf, int fd, int len,
   } break;
   case MUNMAP:
   case MUNMAP_64: {
-    struct fastrpc_ioctl_req_munmap unmap = {0};
+    struct fastrpc_req_munmap unmap = {0};
     unmap.vaddrout = vaddr;
     unmap.size = (ssize_t)len;
     ioErr = ioctl(dev, FASTRPC_IOCTL_MUNMAP, (unsigned long)&unmap);

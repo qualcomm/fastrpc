@@ -1,6 +1,8 @@
+SUBDIRS = generated
+
 lib_LTLIBRARIES =
 
-LIBDSPRPC_CFLAGS = -fno-short-enums -U_DEBUG -DARM_ARCH_7A -DLE_ENABLE -DENABLE_UPSTREAM_DRIVER_INTERFACE -DUSE_SYSLOG -I$(top_srcdir)/inc
+LIBDSPRPC_CFLAGS = -fno-short-enums -U_DEBUG -DARM_ARCH_7A -DLE_ENABLE -DENABLE_UPSTREAM_DRIVER_INTERFACE -DUSE_SYSLOG -I$(top_srcdir)/inc -I$(srcdir)/generated
 
 LIBDSPRPC_SOURCES = \
 		fastrpc_apps_user.c \
@@ -18,40 +20,39 @@ LIBDSPRPC_SOURCES = \
 		log_config.c \
 		dspsignal.c \
 		dspqueue/dspqueue_cpu.c \
-		dspqueue/dspqueue_rpc_stub.c \
 		listener_android.c \
 		apps_std_imp.c \
 		apps_mem_imp.c \
-		apps_mem_skel.c \
 		rpcmem_linux.c \
 		adspmsgd.c \
 		adspmsgd_printf.c \
 		std_path.c \
-		std_dtoa.c \
 		BufBound.c \
 		platform_libs.c \
 		pl_list.c \
 		gpls.c \
-		remotectl_stub.c \
-		remotectl1_stub.c \
-		adspmsgd_apps_skel.c \
-		adspmsgd_adsp_stub.c \
-		adspmsgd_adsp1_stub.c \
-		apps_remotectl_skel.c \
-		adsp_current_process_stub.c \
-		adsp_current_process1_stub.c \
-		adsp_listener_stub.c \
-		adsp_listener1_stub.c \
-		apps_std_skel.c \
-		adsp_perf_stub.c \
-		adsp_perf1_stub.c \
 		mod_table.c \
-		fastrpc_context.c
+		fastrpc_context.c \
+		generated/dspqueue_rpc_stub.c \
+		generated/apps_mem_skel.c \
+		generated/remotectl_stub.c \
+		generated/remotectl1_stub.c \
+		generated/adspmsgd_apps_skel.c \
+		generated/adspmsgd_adsp_stub.c \
+		generated/adspmsgd_adsp1_stub.c \
+		generated/apps_remotectl_skel.c \
+		generated/adsp_current_process_stub.c \
+		generated/adsp_current_process1_stub.c \
+		generated/adsp_listener_stub.c \
+		generated/adsp_listener1_stub.c \
+		generated/apps_std_skel.c \
+		generated/adsp_perf_stub.c \
+		generated/adsp_perf1_stub.c
 
 LIBDEFAULT_LISTENER_SOURCES = \
 				adsp_default_listener.c \
-				adsp_default_listener_stub.c \
-				adsp_default_listener1_stub.c
+				generated/adsp_default_listener_stub.c \
+				generated/adsp_default_listener1_stub.c
 
 if ANDROID_CC
 USE_LOG = -llog
@@ -98,10 +99,12 @@ libsdsp_default_listener_la_CFLAGS = $(SDSP_CFLAGS) -DUSE_SYSLOG
 
 GDSP_CFLAGS = $(LIBDSPRPC_CFLAGS) -DDEFAULT_DOMAIN_ID=5
 
+lib_LTLIBRARIES += libgdsprpc.la
 libgdsprpc_la_SOURCES = $(LIBDSPRPC_SOURCES)
 libgdsprpc_la_LDFLAGS = -ldl -lm $(USE_LOG) -version-number @LT_VERSION_NUMBER@
 libgdsprpc_la_CFLAGS = $(GDSP_CFLAGS)
 
+lib_LTLIBRARIES += libgdsp_default_listener.la
 libgdsp_default_listener_la_SOURCES = $(LIBDEFAULT_LISTENER_SOURCES)
 libgdsp_default_listener_la_DEPENDENCIES = libcdsprpc.la
 libgdsp_default_listener_la_LDFLAGS = libcdsprpc.la -shared -module $(USE_LOG) -version-number @LT_VERSION_NUMBER@

@@ -82,12 +82,6 @@ struct rpc_info {
   int dma;
 };
 
-struct fastrpc_alloc_dma_buf {
-  int fd;         /* fd */
-  uint32_t flags; /* flags to map with */
-  uint64_t size;  /* size */
-};
-
 void rpcmem_init() {
   QList_Ctor(&rpclst);
   pthread_mutex_init(&rpcmt, 0);
@@ -175,7 +169,7 @@ void *rpcmem_alloc_internal(int heapid, uint32_t flags, size_t size) {
     }
     fd = dmabuf.fd;
   } else {
-    struct fastrpc_ioctl_alloc_dma_buf buf;
+    struct fastrpc_alloc_dma_buf buf;
 
     buf.size = size + PAGE_SIZE;
     buf.fd = -1;

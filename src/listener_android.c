@@ -30,7 +30,6 @@
 #include "mod_table.h"
 #include "platform_libs.h"
 #include "rpcmem.h"
-#include "shared.h"
 #include "verify.h"
 #include "fastrpc_hash_table.h"
 

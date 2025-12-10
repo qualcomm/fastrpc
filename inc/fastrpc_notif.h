@@ -4,7 +4,7 @@
 #ifndef FASTRPC_NOTIF_H
 #define FASTRPC_NOTIF_H
 
-#include "remote64.h"
+#include "remote.h"
 #include "fastrpc_internal.h"
 
 /*
@@ -21,17 +21,6 @@ int fastrpc_notif_domain_init(int domain);
  */
 void fastrpc_notif_domain_deinit(int domain);
 
-/*
- * Internal function to get notification response from kernel. Waits in kernel until notifications are received from DSP
- * @ domain: domain to which notification needs to be received
- * returns 0 on success
- */
-int get_remote_notif_response(int domain);
-
-/*
- * API to cleanup all the clients registered for notifcation
- */
-void fastrpc_cleanup_notif_list();
 /*
  * API to register a notification mechanism for a state change in DSP Process.
  * state changes can be PD start, PD exit, PD crash.
