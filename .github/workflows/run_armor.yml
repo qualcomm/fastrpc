@@ -37,7 +37,9 @@ permissions:
 
 jobs:
   RUN-ARMOR:
-    runs-on: ubuntu-22.04
+    runs-on:
+      group: GHA-fastrpc-Prd-SelfHosted-RG
+      labels: [ self-hosted, fastrpc-prd-u2404-x64-large-od-ephem ]
     steps:
       - uses: actions/checkout@v4
       - name: Set event variables
