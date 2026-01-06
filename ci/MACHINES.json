@@ -16,5 +16,11 @@
     "linuxFirmware": "qcs8300",
     "lavaDeviceName": "qcs8300-ride",
     "hexDSPBinary": "qcs8300"
+  },
+  "qcs615-ride": {
+  "deviceTree": "qcs615-ride",
+  "linuxFirmware": "qcs615",
+  "lavaDeviceName": "qcs615-ride",
+  "hexDSPBinary": "qcs615"
   }
 }
