@@ -1,0 +1,89 @@
+# Nightly Build kernel and upload artifacts
+# This workflow builds the Linux kernel nightly from the `qcom-next` branch
+# of the `qualcomm-linux/kernel` repository using a custom Docker image.
+# Artifacts are zipped and uploaded for 30 days retention.
+
+name: Nightly Build kernel and upload artifacts
+
+on:
+  schedule:
+    - cron: '0 0 * * 0'  # Runs at 00:00, only on Sunday UTC
+  workflow_dispatch:     # Allows manual trigger
+
+jobs:
+  build-and-upload:
+    runs-on: 
+      group: GHA-fastrpc-Prd-SelfHosted-RG
+      labels: [ self-hosted, fastrpc-prd-u2404-x64-large-od-ephem ]
+    steps:
+      # Checkout fastrpc-image repository to get the Dockerfile
+      - name: Checkout fastrpc-image repo for Dockerfile
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          repository: qualcomm/fastrpc-image
+          ref: main
+
+      - name: Build fastrpc docker image
+        run: |
+          docker build -t fastrpc-image:latest -f Dockerfile .
+
+      - name: Configure git
+        shell: bash
+        run: |
+          git config --global user.name "github-actions"
+          git config --global user.email "github-actions@github.com"
+
+      - name: Clone kernel repository
+        shell: bash
+        run: |
+          echo "Cloning qualcomm-linux/kernel into ${{ github.workspace }}/kernel..."
+          git clone https://github.com/qualcomm-linux/kernel.git "${{ github.workspace }}/kernel"
+          cd "${{ github.workspace }}/kernel"
+          echo "Fetching all branches and checking out 'qcom-next'..."
+          git fetch origin
+          git checkout qcom-next
+          echo "Successfully checked out qcom-next branch."
+
+      - name: Build kernel
+        shell: bash
+        run: |
+          echo "Creating kobj directory for out-of-tree build output..."
+          mkdir -p "${{ github.workspace }}/kobj"
+          echo "Running Docker container to build the kernel..."
+          docker run -i --rm \
+            --user "$(id -u):$(id -g)" \
+            --volume "${{ github.workspace }}:/workspace" \
+            --workdir="/workspace/kernel" \
+            fastrpc-image:latest bash -c "
+              echo 'Inside container: Current working directory is $(pwd)'
+              echo 'Inside container: Building kernel with output directory O=/workspace/kobj'
+              make O=/workspace/kobj defconfig
+              make O=/workspace/kobj -j\$(nproc) all
+              make O=/workspace/kobj -j\$(nproc) dir-pkg INSTALL_MOD_STRIP=1
+            "
+          echo "Kernel build completed. Checking for kobj output..."
+          ls -l "${{ github.workspace }}/kobj" || echo "kobj directory is empty or missing."
+
+      - name: Zip kobj folder
+        shell: bash
+        run: |
+          mkdir -p build_output
+          if [ -d "${{ github.workspace }}/kobj" ]; then
+            echo "zipping kobj to build_output/kobj.tar.gz..."
+            tar -cvf build_output/kobj.tar -C "${{ github.workspace }}" kobj
+            gzip -9 build_output/kobj.tar
+            echo "Successfully created build_output/kobj.tar.gz"
+          else
+            echo "Error: kobj directory not found."
+            exit 1
+          fi
+
+      - name: Upload zipped kobj as artifact to aws S3 bucket
+        uses: qualcomm/fastrpc/.github/actions/aws_s3_helper@development
+        with:
+          s3_bucket: qli-prd-fastrpc-gh-artifacts
+          local_file: ${{ github.workspace }}/build_output/kobj.tar.gz
+          mode: single-upload
+          artifacts: kernel-artifact/kobj.tar.gz 
+          deviceTree: false

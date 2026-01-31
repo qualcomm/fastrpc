@@ -16,6 +16,10 @@ inputs:
   workspace_path:
     description: Workspace path
     required: true
+  deviceTree:
+    description: Target device Tree name or identifier, used to organize uploads in S3.
+    type: string
+    required: true
 
 runs:
   using: "composite"
@@ -35,26 +39,29 @@ runs:
         "
         echo "::endgroup::"
 
-    - name: Build kernel using Docker Image
-      shell: bash
-      run: |
-        cd ${{ inputs.workspace_path }}/kernel
-
-        echo "::group::$(printf '__________ %-100s' 'Compile kernel' | tr ' ' _)"
-        docker run -i --rm \
-          --user $(id -u):$(id -g) \
-          --workdir="$PWD" \
-          -v "$(dirname $PWD)":"$(dirname $PWD)" \
-          ${{ inputs.docker_image }} bash -c "
-            make O=../kobj defconfig
-            make O=../kobj -j$(nproc)
-            make O=../kobj -j$(nproc) dir-pkg INSTALL_MOD_STRIP=1
-          "
-        echo "::endgroup::"
+    - name: Download Kernel artifact
+      uses: qualcomm-linux-stg/fastrpc/.github/actions/aws_s3_helper@development
+      with:
+        s3_bucket: qli-stg-fastrpc-gh-artifacts
+        artifacts:  kernel-artifact/kobj.tar.gz 
+        deviceTree: false
+        download_location: ${{ inputs.workspace_path }}
+        mode: download
 
     - name: Package Files into ramdisk
       shell: bash
       run: |
+        echo "Extracting kobj.tar.gz"
+        ls -la ${{ inputs.workspace_path }}/
+        mkdir -p extracted_kobj
+        tar -xzf "${{ inputs.workspace_path }}/kobj.tar.gz" -C extracted_kobj
+        echo "Contents of extracted_kobj:"
+        find extracted_kobj -type d
+        # Move extracted folder to kobj
+        rm -rf kobj
+        mv extracted_kobj/kobj kobj
+        ls -la kobj
+
         echo "Package FastRPC firmware files"
         cp -r ${{ inputs.workspace_path }}/firmware_dir/* ${{ inputs.workspace_path }}/artifacts/ramdisk_fastrpc/
 

@@ -6,7 +6,6 @@ description: |
   It clones and copies FastRPC hexagon DSP binaries and 
   Linux firmware (specifically QCOM firmware) based on 
   the provided `hexDSPBinary` and `linuxFirmware` input. 
-  It also clones the `qualcomm-linux/kernel` repository.
   The action sets an output `workspace_path` to the GitHub
    workspace directory.
 
@@ -106,21 +105,6 @@ runs:
         echo "Listing contents of firmware_dir recursively..."
         find firmware_dir -type d -print
         find firmware_dir -type f -print
-
-    - name: Configure git
-      shell: bash
-      run: |
-        git config --global user.name "github-actions"
-        git config --global user.email "github-actions@github.com"
-
-    - name: Clone kernel repositories
-      shell: bash
-      run: |
-        cd ${{ github.workspace }}
-        git clone https://github.com/qualcomm-linux/kernel.git
-        cd kernel
-        git fetch origin
-        git checkout qcom-next
 
     - name: Set workspace path
       id: set-workspace

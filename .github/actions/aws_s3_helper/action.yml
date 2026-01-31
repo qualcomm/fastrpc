@@ -10,13 +10,21 @@ inputs:
     required: false
     default: ../artifacts/file_list.txt
   download_file:
-    description: S3 path of the file to download (e.g., path/to/your/file.txt). Used only in 'download' mode.
+    description: S3 key of the file to download (e.g., path/to/your/file.txt). Used only in 'download' mode.
     required: false
     default: ''
   download_location:
-    description: Local directory where the downloaded file should be placed. Used only in 'download' mode.
+    description: Local directory or file path where the downloaded file should be placed. Used only in 'download' mode.
     required: false
     default: .
+  artifacts:
+    description: >
+      Optional S3 key or prefix for upload/download.
+      - If ends with '/', it is treated as a prefix and the local filename is appended.
+      - If not ending with '/', it is treated as a full S3 key.
+      - If empty, a default location is derived.
+    required: false
+    default: ''
   mode:
     description: Mode of operation (single-upload, multi-upload, download)
     required: true
@@ -39,56 +47,148 @@ runs:
       shell: bash
       env:
         UPLOAD_LOCATION: ${{ github.repository_owner }}/${{ github.event.repository.name }}/${{ github.workflow }}/${{ github.head_ref != '' && github.head_ref || github.run_id }}/${{ inputs.deviceTree }}/
+        DEFAULT_UPLOAD_LOCATION: ${{ github.repository_owner }}/${{ github.event.repository.name }}/
       run: |
+        set -euo pipefail
         echo "::group::$(printf '__________ %-100s' 'Process' | tr ' ' _)"
-        case "${{ inputs.mode }}" in
+
+        S3_BUCKET="${{ inputs.s3_bucket }}"
+        MODE="${{ inputs.mode }}"
+        LOCAL_FILE="${{ inputs.local_file }}"
+        ARTIFACTS="${{ inputs.artifacts }}"
+        DOWNLOAD_FILE="${{ inputs.download_file }}"
+        DOWNLOAD_LOCATION="${{ inputs.download_location }}"
+        WORKSPACE="${{ github.workspace }}"
+        DEVICE="${{ inputs.deviceTree }}"
+        UPLOAD_LOCATION="${{ env.UPLOAD_LOCATION }}"
+        DEFAULT_UPLOAD_LOCATION="${{ env.DEFAULT_UPLOAD_LOCATION }}"
+
+        # Helpers
+        _choose_upload_key() {
+          # $1: local path of file to upload
+          local local_path="$1"
+          local base; base="$(basename "$local_path")"
+
+          if [ -n "$ARTIFACTS" ]; then
+            # user provided a path; decide whether it's a prefix or a full key
+            if [[ "$ARTIFACTS" == */ ]]; then
+              # prefix: append filename
+              echo "${ARTIFACTS}${base}"
+            else
+              # full key
+              echo "${ARTIFACTS}"
+            fi
+          else
+            # default to computed upload location + filename
+            echo "${UPLOAD_LOCATION}${base}"
+          fi
+        }
+
+        case "${MODE}" in
           multi-upload)
-            echo "Uploading files to S3 bucket..."
+            echo "Uploading files to S3 bucket (multi-upload)..."
+            if [ ! -f "$LOCAL_FILE" ]; then
+              echo "ERROR: File list not found: $LOCAL_FILE" >&2
+              exit 1
+            fi
+
+            mkdir -p "${WORKSPACE}/${DEVICE}"
+            MANIFEST="${WORKSPACE}/${DEVICE}/presigned_urls_${DEVICE}.json"
+            echo "{" > "$MANIFEST"
             first_line=true
-            # Start the JSON object
-            mkdir -p "${{ github.workspace }}/${{ inputs.deviceTree }}"
-            echo "{" > ${{ github.workspace }}/${{ inputs.deviceTree }}/presigned_urls_${{ inputs.deviceTree }}.json
-            while IFS= read -r file; do
+
+            while IFS= read -r file || [ -n "$file" ]; do
+              # Skip blank and comment lines
+              [[ -z "${file// }" || "$file" =~ ^[[:space:]]*# ]] && continue
+
               if [ -f "$file" ]; then
-                echo "Uploading $file..."
-                aws s3 cp "$file" s3://${{ inputs.s3_bucket }}/${{ env.UPLOAD_LOCATION }}
-                echo "Uploaded $file to s3://${{ inputs.s3_bucket }}/${{ env.UPLOAD_LOCATION }}"
-                echo "Creating Pre-signed URL for $file..."
-                filename=$(basename "$file")
-                presigned_url=$(aws s3 presign s3://${{ inputs.s3_bucket }}/${{ env.UPLOAD_LOCATION }}$filename --expires-in 259200)
+                key="$(_choose_upload_key "$file")"
+                s3_uri="s3://${S3_BUCKET}/${key}"
+
+                echo "Uploading $file to $s3_uri ..."
+                aws s3 cp "$file" "$s3_uri" --sse AES256
+                echo "Uploaded $file to $s3_uri"
+
+                echo "Creating Pre-signed URL for $s3_uri ..."
+                presigned_url=$(aws s3 presign "$s3_uri" --expires-in 259200)
+
                 if [ "$first_line" = true ]; then
                   first_line=false
                 else
-                  echo "," >> ${{ github.workspace }}/${{ inputs.deviceTree }}/presigned_urls_${{ inputs.deviceTree }}.json
+                  echo "," >> "$MANIFEST"
                 fi
-                # Append the pre-signed URL to the file
-                echo " \"${file}\": \"${presigned_url}\"" >> ${{ github.workspace }}/${{ inputs.deviceTree }}/presigned_urls_${{ inputs.deviceTree }}.json
-                echo "Pre-signed URL for $file: $presigned_url"
+
+                printf ' "%s": "%s"' "$file" "$presigned_url" >> "$MANIFEST"
+                echo ""
               else
-                echo "Warning: $file does not exist or is not a regular file."
+                echo "Warning: $file does not exist or is not a regular file." >&2
               fi
-            done < "${{ inputs.local_file }}"
-            # Close the JSON object
-            echo "}" >> ${{ github.workspace }}/${{ inputs.deviceTree }}/presigned_urls_${{ inputs.deviceTree }}.json
+            done < "$LOCAL_FILE"
+
+
+            echo "}" >> "$MANIFEST"
             ;;
+
           single-upload)
             echo "Uploading single file to S3 bucket..."
-            aws s3 cp "${{ inputs.local_file }}" s3://${{ inputs.s3_bucket }}/${{ env.UPLOAD_LOCATION }}
-            echo "Uploaded ${{ inputs.local_file }} to s3://${{ inputs.s3_bucket }}/${{ env.UPLOAD_LOCATION }}"
-            echo "Creating Pre-signed URL for ${{ inputs.local_file }}..."
-            presigned_url=$(aws s3 presign s3://${{ inputs.s3_bucket }}/${{ env.UPLOAD_LOCATION }}${{ inputs.local_file }} --expires-in 259200)
+            if [ ! -f "$LOCAL_FILE" ]; then
+              echo "ERROR: Local file not found: $LOCAL_FILE" >&2
+              exit 1
+            fi
+
+            key="$(_choose_upload_key "$LOCAL_FILE")"
+            s3_uri="s3://${S3_BUCKET}/${key}"
+
+            echo "Uploading $LOCAL_FILE to $s3_uri ..."
+            aws s3 cp "$LOCAL_FILE" "$s3_uri" --sse AES256
+            echo "Uploaded $LOCAL_FILE to $s3_uri"
+
+            echo "Creating Pre-signed URL for $s3_uri ..."
+            presigned_url=$(aws s3 presign "$s3_uri" --expires-in 259200)
             echo "presigned_url=${presigned_url}" >> "$GITHUB_OUTPUT"
             ;;
+
           download)
-            #Download The required file from s3
-            echo "Downloading files from S3 bucket..."
-            aws s3 cp s3://${{ inputs.s3_bucket }}/${{ inputs.download_file }} ${{ inputs.download_location }}
+
+            echo "Downloading file from S3 bucket..."
+            # Priority:
+            #   - If ARTIFACTS is provided and not ending with '/', treat it as key
+            #   - Else if ARTIFACTS ends with '/', error (need a concrete key)
+            #   - Else use DOWNLOAD_FILE (must be set)
+            if [ -n "$ARTIFACTS" ]; then
+              if [[ "$ARTIFACTS" == */ ]]; then
+                echo "ERROR: 'artifacts' ends with '/'. Please provide a full S3 key (not a prefix) for download mode, or use 'download_file'." >&2
+                exit 1
+              fi
+              key="$ARTIFACTS"
+            else
+              if [ -z "$DOWNLOAD_FILE" ]; then
+                echo "ERROR: 'download_file' must be provided when 'artifacts' is empty in download mode." >&2
+                exit 1
+              fi
+              key="$DOWNLOAD_FILE"
+            fi
+            s3_uri="s3://${S3_BUCKET}/${key}"
+
+            # Ensure download location exists if it is a directory
+            if [ -d "$DOWNLOAD_LOCATION" ]; then
+              echo "Downloading $s3_uri -> ${DOWNLOAD_LOCATION}/"
+              aws s3 cp "$s3_uri" "${DOWNLOAD_LOCATION}/"
+            else
+              mkdir -p "$(dirname "$DOWNLOAD_LOCATION")"
+              echo "Downloading $s3_uri -> ${DOWNLOAD_LOCATION}"
+              aws s3 cp "$s3_uri" "${DOWNLOAD_LOCATION}"
+            fi
+
+            echo "Downloaded ${s3_uri} to ${DOWNLOAD_LOCATION}"
             ;;
           *)
             echo "Invalid mode. Use 'upload' or 'download'."
             exit 1
             ;;
         esac
+
+        echo "::endgroup::"
 
     - name: Upload artifacts
       if: ${{ inputs.mode == 'multi-upload' }}

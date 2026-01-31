@@ -57,6 +57,7 @@ jobs:
         with:
           docker_image: ${{ inputs.docker_image }}
           workspace_path: ${{ steps.sync.outputs.workspace_path }}
+          deviceTree: ${{ inputs.deviceTree }}
 
       - name: Create file list for artifacts upload
         run: |
