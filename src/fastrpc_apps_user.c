@@ -3221,9 +3221,7 @@ static int open_shell(int domain_id, apps_std_FILE *fh, int unsigned_shell) {
   strlcpy(shell_absName, shell_name, shell_absNameLen);
   strlcat(shell_absName, domain_str, shell_absNameLen);
 
-  strlcpy(dir_list, DSP_LIBS_LOCATION, sizeof(dir_list));
-  nErr = fopen_from_dirlist(dir_list, ";", "r", shell_absName, fh);
-
+  nErr = apps_std_fopen_from_global_dirlist_internal(shell_absName, "r", fh, NULL, NULL);
   if (nErr) {
     absNameLen = strlen(VENDOR_DSP_LOCATION) + shell_absNameLen + 1;
     VERIFYC(NULL !=
@@ -3236,16 +3234,15 @@ static int open_shell(int domain_id, apps_std_FILE *fh, int unsigned_shell) {
     if (nErr) {
       absNameLen = strlen(VENDOR_DOM_LOCATION) + shell_absNameLen + 1;
       VERIFYC(NULL != (absName =
-                           (char *)realloc(absName, sizeof(char) * absNameLen)),
-              AEE_ENOMEMORY);
+    	  (char *)realloc(absName, sizeof(char) * absNameLen)), AEE_ENOMEMORY);
       strlcpy(absName, VENDOR_DSP_LOCATION, absNameLen);
       strlcat(absName, SUBSYSTEM_NAME[domain], absNameLen);
       strlcat(absName, "/", absNameLen);
       strlcat(absName, shell_absName, absNameLen);
-
       nErr = apps_std_fopen(absName, "r", fh);
     }
   }
+
   if (!nErr)
     FARF(RUNTIME_RPC_HIGH, "Successfully opened %s, domain %d", shell_absName, domain);
 bail:
@@ -3917,14 +3914,13 @@ static int fastrpc_apps_user_init(void) {
 
   pthread_mutexattr_init(&attr);
   pthread_mutexattr_settype(&attr, PTHREAD_MUTEX_RECURSIVE);
-
+#ifdef PARSE_YAML
+  configure_dsp_paths();
+#endif
   VERIFY(AEE_SUCCESS == (nErr = PL_INIT(gpls)));
   VERIFY(AEE_SUCCESS == (nErr = PL_INIT(rpcmem)));
   VERIFY(AEE_SUCCESS == (nErr = PL_INIT(apps_std)));
   VERIFY(AEE_SUCCESS == (nErr = pthread_key_create(&tlsKey, exit_thread)));
-#ifdef PARSE_YAML
-  configure_dsp_paths();
-#endif
   fastrpc_mem_init();
   fastrpc_context_table_init();
   fastrpc_log_init();

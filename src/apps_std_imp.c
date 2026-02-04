@@ -99,6 +99,14 @@ struct apps_std_info {
   apps_std_FILE fd;
 };
 
+/**
+ * @brief Structure to hold a single directory path in the global list
+ */
+struct dir_path_node {
+  QNode qn;
+  char *path;
+};
+
 /*
  * Member of the linked list of valid directory handles
  */
@@ -112,6 +120,12 @@ static QList apps_std_qlst;
 /* Linked list that tracks list of all valid dir handles */
 static QList apps_std_dirlist;
 static pthread_mutex_t apps_std_mt;
+
+/* Global directory path lists - initialized once during init */
+static QList global_lib_dirlist;
+static pthread_mutex_t global_dirlist_mt;
+static int global_dirlist_initialized = 0;
+
 extern const char *SUBSYSTEM_NAME[];
 struct mem_io_to_fd {
   QNode qn;
@@ -154,7 +168,7 @@ int apps_std_get_dirinfo(const apps_std_DIR *dir,
   } else {
     nErr = ESTALE;
     VERIFY_EPRINTF(
-        "Error 0x%x: %s: stale directory handle 0x%llx passed by DSP\n", nErr,
+        "Error 0x%x: %s: stale directory handle 0x%lx passed by DSP\n", nErr,
         __func__, dir->handle);
     goto bail;
   }
@@ -162,18 +176,27 @@ bail:
   return nErr;
 }
 
+int apps_std_init_dir_lists(void);
+void apps_std_deinit_dir_lists(void);
+
 int apps_std_init(void) {
   QList_Ctor(&apps_std_qlst);
   QList_Ctor(&apps_std_dirlist);
   pthread_mutex_init(&apps_std_mt, 0);
   pthread_mutex_init(&fdlist.mut, 0);
   QList_Ctor(&fdlist.ql);
+  QList_Ctor(&global_lib_dirlist);
+  pthread_mutex_init(&global_dirlist_mt, 0);
+  apps_std_init_dir_lists();
+  
   return AEE_SUCCESS;
 }
 
 void apps_std_deinit(void) {
   pthread_mutex_destroy(&apps_std_mt);
   pthread_mutex_destroy(&fdlist.mut);
+  apps_std_deinit_dir_lists();
+  pthread_mutex_destroy(&global_dirlist_mt);
 }
 
 PL_DEFINE(apps_std, apps_std_init, apps_std_deinit);
@@ -925,6 +948,258 @@ __QAIC_IMPL(apps_std_unsetenv)(const char *name) __QAIC_IMPL_ATTRIBUTE {
 
 #define EMTPY_STR ""
 #define ENV_LEN_GUESS 256
+#define DELIM ";"
+
+
+/**
+ * Helper function to add a path to a global directory list.
+ *
+ * Returns:
+ *   AEE_SUCCESS on success,
+ *   or an appropriate AEE_* error code on failure.
+ */
+static int add_path_to_dirlist(QList *dirlist, const char *path) {
+  struct dir_path_node *node = NULL;
+  int nErr = AEE_SUCCESS;
+
+  if (!path || strlen(path) == 0)
+    return AEE_EBADPARM;
+
+  VERIFYC(NULL != (node = calloc(1, sizeof(struct dir_path_node))), AEE_ENOMEMORY);
+  QNode_CtorZ(&node->qn);
+  VERIFYC(NULL != (node->path = strdup(path)), AEE_ENOMEMORY);
+  pthread_mutex_lock(&global_dirlist_mt);
+  QList_AppendNode(dirlist, &node->qn);
+  pthread_mutex_unlock(&global_dirlist_mt);
+  FARF(RUNTIME_RPC_HIGH, "Added path to global dirlist: %s", path);
+  return AEE_SUCCESS;
+
+bail:
+  if (node) {
+    FREEIF(node->path);
+    FREEIF(node);
+  }
+  return nErr;
+}
+
+/**
+ * Parse a delimited string and add paths to the global directory list
+ */
+static int parse_and_add_paths(QList *dirlist, const char *path_string, const char *delim) {
+  int nErr = AEE_SUCCESS;
+  char *path_copy = NULL;
+  char *token = NULL;
+  char *saveptr = NULL;
+  
+  if (!path_string || strlen(path_string) == 0) {
+    return AEE_SUCCESS;
+  }
+  
+  VERIFYC(NULL != (path_copy = strdup(path_string)), AEE_ENOMEMORY);
+  
+  token = strtok_r(path_copy, delim, &saveptr);
+  while (token != NULL) {
+    VERIFY(AEE_SUCCESS == (nErr = add_path_to_dirlist(dirlist, token)));
+    token = strtok_r(NULL, delim, &saveptr);
+  }
+  
+bail:
+  FREEIF(path_copy);
+  return nErr;
+}
+
+/**
+ * @brief Initialize global directory path lists from environment variables and config
+ * @return AEE_SUCCESS on success, error code otherwise
+ */
+int apps_std_init_dir_lists(void) {
+  int nErr = AEE_SUCCESS;
+  char *env_value = NULL;
+  const char *dsp_search_path = NULL;
+  const char *env_var = NULL;
+  int env_len = 0;
+
+  FARF(RUNTIME_RPC_LOW, "Entering %s", __func__);
+  pthread_mutex_lock(&global_dirlist_mt);
+  if (global_dirlist_initialized) {
+    pthread_mutex_unlock(&global_dirlist_mt);
+    return AEE_SUCCESS;
+  }
+  pthread_mutex_unlock(&global_dirlist_mt);
+  // Get DSP search path from config
+  dsp_search_path = get_dsp_search_path();
+  // Initialize library path list (ADSP_LIBRARY_PATH/DSP_LIBRARY_PATH)
+  // Priority: Environment variable paths first, then config paths
+
+  // Check which environment variable is set
+  if (getenv(DSP_LIBRARY_PATH)) {
+    env_var = DSP_LIBRARY_PATH;
+  } else {
+    env_var = ADSP_LIBRARY_PATH;
+  }
+  // Read environment variable
+  env_len = ENV_LEN_GUESS;
+  VERIFYC(NULL != (env_value = malloc(env_len)), AEE_ENOMEMORY);
+  if (0 == apps_std_getenv(env_var, env_value, env_len, &env_len)) {
+    // Environment variable exists, parse and add paths
+    VERIFY(AEE_SUCCESS == (nErr = parse_and_add_paths(&global_lib_dirlist, env_value, DELIM)));
+    FARF(RUNTIME_RPC_HIGH, "Added paths from %s to global lib dirlist", env_var);
+  }
+
+  /* Add paths from dsp_search_path
+   * (includes both default and config-defined paths;
+   * lower priority than env)
+   */
+  if (dsp_search_path && strlen(dsp_search_path) > 0) {
+    VERIFY(AEE_SUCCESS == (nErr = parse_and_add_paths(&global_lib_dirlist, dsp_search_path, DELIM)));
+    FARF(RUNTIME_RPC_HIGH, "Added paths from config to global lib dirlist");
+  }
+  pthread_mutex_lock(&global_dirlist_mt);
+  global_dirlist_initialized = 1;
+  pthread_mutex_unlock(&global_dirlist_mt);
+  FARF(RUNTIME_RPC_LOW, "Successfully initialized global directory lists");
+bail:
+  FREEIF(env_value);
+  if (nErr != AEE_SUCCESS) {
+    VERIFY_EPRINTF("Error 0x%x: Failed to initialize global directory lists\n", nErr);
+  }
+  return nErr;
+}
+
+/**
+ * @brief Cleanup global directory path lists
+ */
+void apps_std_deinit_dir_lists(void) {
+  QNode *pn = NULL, *pnn = NULL;
+  struct dir_path_node *node = NULL;
+  
+  FARF(RUNTIME_RPC_LOW, "Entering %s", __func__);
+  pthread_mutex_lock(&global_dirlist_mt);
+
+  // Cleanup library path list
+  QLIST_NEXTSAFE_FOR_ALL(&global_lib_dirlist, pn, pnn) {
+    node = STD_RECOVER_REC(struct dir_path_node, qn, pn);
+    if (node) {
+      QNode_Dequeue(&node->qn);
+      FREEIF(node->path);
+      FREEIF(node);
+    }
+  }
+
+  global_dirlist_initialized = 0;
+  pthread_mutex_unlock(&global_dirlist_mt);
+  FARF(RUNTIME_RPC_LOW, "Exiting %s", __func__);
+}
+
+/**
+ * Try to open a file from the global directory list
+ * @param name: file name to open
+ * @param mode: file open mode
+ * @param psout: output file handle (for regular fopen)
+ * @param fd: output file descriptor (for fopen_fd)
+ * @param len: output file length (for fopen_fd)
+ */
+int apps_std_fopen_from_global_dirlist_internal(const char *name,
+    const char *mode, apps_std_FILE *psout, int *fd, int *len) {
+  int nErr = (fd != NULL) ? ENOENT : AEE_ENOSUCHFILE;
+  int err = ENOENT;
+  QNode *pn = NULL;
+  struct dir_path_node *node = NULL;
+  char *absName = NULL;
+  char *errabsName = NULL;
+  uint16_t absNameLen = 0;
+  int domain = GET_DOMAIN_FROM_EFFEC_DOMAIN_ID(get_current_domain());
+  QList *dirlist = &global_lib_dirlist;
+
+  FARF(RUNTIME_RPC_LOW, "Entering %s for file %s", __func__, name);
+
+  pthread_mutex_lock(&global_dirlist_mt);
+  // Iterate through the global directory list
+  QLIST_FOR_ALL(dirlist, pn) {
+    node = STD_RECOVER_REC(struct dir_path_node, qn, pn);
+    if (!node || !node->path) {
+      continue;
+    }
+
+    // Try with domain subdirectory first
+    absNameLen = strlen(node->path) + strlen(name) + strlen(SUBSYSTEM_NAME[domain]) + 3;
+    VERIFYC(NULL != (absName = malloc(absNameLen)), AEE_ENOMEMORY);
+
+    if (strlen(node->path) > 0) {
+      snprintf(absName, absNameLen, "%s/%s/%s", node->path, SUBSYSTEM_NAME[domain], name);
+    } else {
+      strlcpy(absName, name, absNameLen);
+    }
+    pthread_mutex_unlock(&global_dirlist_mt);
+    
+    if (fd) {
+      err = apps_std_fopen_fd(absName, mode, fd, len);
+    } else {
+      err = apps_std_fopen(absName, mode, psout);
+    }
+
+    pthread_mutex_lock(&global_dirlist_mt); 
+    if (AEE_SUCCESS == err) {
+      FARF(ALWAYS, "Successfully opened file %s", absName);
+      FREEIF(absName);
+      pthread_mutex_unlock(&global_dirlist_mt);
+      return err;
+    }
+    if (err != ENOENT && (nErr == ENOENT || nErr == AEE_SUCCESS)) {
+      nErr = err;
+      errabsName = absName;
+      absName = NULL;
+    }
+    FREEIF(absName);
+    
+    // Fallback: try without domain subdirectory
+    absNameLen = strlen(node->path) + strlen(name) + 2;
+    VERIFYC(NULL != (absName = malloc(absNameLen)), AEE_ENOMEMORY);
+    
+    if (strlen(node->path) > 0) {
+      snprintf(absName, absNameLen, "%s/%s", node->path, name);
+    } else {
+      strlcpy(absName, name, absNameLen);
+    }
+    pthread_mutex_unlock(&global_dirlist_mt);
+
+    if (fd) {
+      err = apps_std_fopen_fd(absName, mode, fd, len);
+    } else {
+      err = apps_std_fopen(absName, mode, psout);
+    }
+
+    pthread_mutex_lock(&global_dirlist_mt);
+
+    if (AEE_SUCCESS == err) {
+      if (name != NULL &&
+          (strncmp(name, OEM_CONFIG_FILE_NAME, strlen(OEM_CONFIG_FILE_NAME)) != 0) &&
+          (strncmp(name, TESTSIG_FILE_NAME, strlen(TESTSIG_FILE_NAME)) != 0)) {
+        FARF(ALWAYS, "%s: Successfully opened file from path: %s", __func__, absName);
+      }
+      FREEIF(absName);
+      nErr = err;
+      pthread_mutex_unlock(&global_dirlist_mt);
+      return nErr;
+    }
+
+    if (err != ENOENT && (nErr == ENOENT || nErr == AEE_SUCCESS)) {
+      nErr = err;
+      errabsName = absName;
+      absName = NULL;
+    }
+    FREEIF(absName);
+  }
+
+  if (err == ENOENT && (nErr == ENOENT || nErr == AEE_SUCCESS))
+    nErr = err;
+
+bail:
+  pthread_mutex_unlock(&global_dirlist_mt);
+  FREEIF(errabsName);
+  FREEIF(absName);
+  return nErr;
+}
 
 static int get_dirlist_from_env(const char *envvarname, char **ppDirList) {
   char *envList = NULL;
@@ -1094,22 +1369,8 @@ __QAIC_IMPL_EXPORT int __QAIC_IMPL(apps_std_fopen_with_env)(
   FASTRPC_ATRACE_BEGIN_L("%s for %s in %s mode from path in environment "
                          "variable %s delimited with %s",
                          __func__, name, mode, envvarname, delim);
-  if (strncmp(envvarname, ADSP_LIBRARY_PATH,
-                  strlen(ADSP_LIBRARY_PATH)) == 0) {
-    if (getenv(DSP_LIBRARY_PATH)) {
-      envVar = DSP_LIBRARY_PATH;
-    } else {
-      envVar = ADSP_LIBRARY_PATH;
-    }
-  } else {
-    envVar = envvarname;
-  }
 
-  VERIFY(0 == (nErr = get_dirlist_from_env(envVar, &dirListBuf)));
-  VERIFYC(NULL != (dirList = dirListBuf), AEE_EBADPARM);
-  FARF(RUNTIME_RPC_HIGH, "%s dirList %s", __func__, dirList);
-
-  nErr = fopen_from_dirlist(dirList, delim, mode, name, psout);
+  nErr = apps_std_fopen_from_global_dirlist_internal(name, mode, psout, NULL, NULL);
 
 bail:
   FREEIF(dirListBuf);
@@ -1139,15 +1400,6 @@ __QAIC_IMPL_EXPORT int __QAIC_IMPL(apps_std_fopen_with_env_fd)(
     const char *mode, int *fd, int *len) __QAIC_IMPL_ATTRIBUTE {
 
   int nErr = ENOENT, err = ENOENT;
-  char *dirName = NULL;
-  char *pos = NULL;
-  char *dirListBuf = NULL;
-  char *dirList = NULL;
-  char *absName = NULL;
-  char *errabsName = NULL;
-  const char *envVar = NULL;
-  uint16_t absNameLen = 0;
-  int domain = GET_DOMAIN_FROM_EFFEC_DOMAIN_ID(get_current_domain());
 
   FARF(RUNTIME_RPC_LOW, "Entering %s", __func__);
   VERIFYC(NULL != mode, AEE_EBADPARM);
@@ -1165,95 +1417,9 @@ __QAIC_IMPL_EXPORT int __QAIC_IMPL(apps_std_fopen_with_env_fd)(
   FASTRPC_ATRACE_BEGIN_L("%s for %s in %s mode from path in environment "
                          "variable %s delimited with %s",
                          __func__, name, mode, envvarname, delim);
-  if (strncmp(envvarname, ADSP_LIBRARY_PATH,
-                  strlen(ADSP_LIBRARY_PATH)) == 0) {
-    if (getenv(DSP_LIBRARY_PATH)) {
-      envVar = DSP_LIBRARY_PATH;
-    } else {
-      envVar = ADSP_LIBRARY_PATH;
-    }
-  } else {
-    envVar = envvarname;
-  }
 
-  VERIFY(0 == (nErr = get_dirlist_from_env(envVar, &dirListBuf)));
-  VERIFYC(NULL != (dirList = dirListBuf), AEE_EBADPARM);
+  nErr = apps_std_fopen_from_global_dirlist_internal(name, mode, NULL, fd, len);
 
-  while (dirList) {
-    pos = strstr(dirList, delim);
-    dirName = dirList;
-    if (pos) {
-      *pos = '\0';
-      dirList = pos + strlen(delim);
-    } else {
-      dirList = 0;
-    }
-
-    // Append domain to path
-    absNameLen =
-        strlen(dirName) + strlen(name) + 2 + strlen("adsp") + 1;
-    VERIFYC(NULL != (absName = (char *)malloc(sizeof(char) * absNameLen)),
-            AEE_ENOMEMORY);
-    if ('\0' != *dirName) {
-      strlcpy(absName, dirName, absNameLen);
-      strlcat(absName, "/", absNameLen);
-      strlcat(absName, SUBSYSTEM_NAME[domain], absNameLen);
-      strlcat(absName, "/", absNameLen);
-      strlcat(absName, name, absNameLen);
-    } else {
-      strlcpy(absName, name, absNameLen);
-    }
-
-    err = apps_std_fopen_fd(absName, mode, fd, len);
-    if (AEE_SUCCESS == err) {
-      // Success
-      FARF(ALWAYS, "Successfully opened file %s", absName);
-      goto bail;
-    }
-    /* Do not Update nErr if error is no such file, as it may not be
-     * genuine error until we find in all path's.
-     */
-    if (err != ENOENT && (nErr == ENOENT || nErr == AEE_SUCCESS)) {
-      nErr = err;
-      errabsName = absName;
-      absName = NULL;
-    }
-    FREEIF(absName);
-
-    // fallback: If not found in domain path /vendor/dsp/adsp try in /vendor/dsp
-    absNameLen = strlen(dirName) + strlen(name) + 2;
-    VERIFYC(NULL != (absName = (char *)malloc(sizeof(char) * absNameLen)),
-            AEE_ENOMEMORY);
-    if ('\0' != *dirName) {
-      strlcpy(absName, dirName, absNameLen);
-      strlcat(absName, "/", absNameLen);
-      strlcat(absName, name, absNameLen);
-    } else {
-      strlcpy(absName, name, absNameLen);
-    }
-
-    err = apps_std_fopen_fd(absName, mode, fd, len);
-    if (AEE_SUCCESS == err) {
-      // Success
-      FARF(ALWAYS, "Successfully opened file %s", absName);
-      nErr = err;
-      goto bail;
-    }
-    /* Do not Update nErr if error is no such file, as it may not be
-     * genuine error until we find in all path's.
-     */
-    if (err != ENOENT && (nErr == ENOENT || nErr == AEE_SUCCESS)) {
-      nErr = err;
-      errabsName = absName;
-      absName = NULL;
-    }
-    FREEIF(absName);
-  }
-  /* In case if file is not present in any path update
-   * error code to no such file.
-   */
-  if (err == ENOENT && (nErr == ENOENT || nErr == AEE_SUCCESS))
-    nErr = err;
 bail:
   if (nErr != AEE_SUCCESS) {
     if (ERRNO != ENOENT ||
@@ -1264,19 +1430,11 @@ bail:
                      strlen(RPC_VERSION_FILE_NAME)) != 0 &&
          strncmp(name, TESTSIG_FILE_NAME, strlen(TESTSIG_FILE_NAME)) !=
              0)) {
-      if (errabsName) {
-        VERIFY_WPRINTF(" Warning: %s failed with 0x%x for path %s name %s (%s)",
-                       __func__, nErr, errabsName, name, strerror(ERRNO));
-      } else {
         VERIFY_WPRINTF(" Warning: %s failed with 0x%x for %s (%s)", __func__,
                        nErr, name, strerror(ERRNO));
       }
     }
-  }
 
-  FREEIF(errabsName);
-  FREEIF(absName);
-  FREEIF(dirListBuf);
   FARF(RUNTIME_RPC_LOW,
        "Exiting %s for %s envvarname %s mode %s delim %s, err %d", __func__,
        name, envvarname, mode, delim, nErr);
