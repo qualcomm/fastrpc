@@ -22,13 +22,6 @@
 #define MAX_NON_PRELOAD_LIBS_LEN 2048
 #define FILE_EXT ".so"
 
-#ifndef VENDOR_DSP_LOCATION
-#define VENDOR_DSP_LOCATION "/vendor/dsp/"
-#endif
-#ifndef VENDOR_DOM_LOCATION
-#define VENDOR_DOM_LOCATION "/vendor/dsp/xdsp/"
-#endif
-
 // Search path used by fastRPC for acdb path
 #ifndef ADSP_AVS_CFG_PATH
 #define ADSP_AVS_CFG_PATH ";/etc/acdbdata/;"

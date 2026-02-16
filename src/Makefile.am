@@ -24,7 +24,7 @@ LIBDSPRPC_SOURCES = \
 		dspsignal.c \
 		dspqueue/dspqueue_cpu.c \
 		dspqueue/dspqueue_rpc_stub.c \
-		listener_android.c \
+		listener.c \
 		apps_std_imp.c \
 		apps_mem_imp.c \
 		apps_mem_skel.c \
@@ -54,7 +54,7 @@ LIBDSPRPC_SOURCES = \
 		fastrpc_context.c
 
 if ANDROID_CC
-# Do nothing (or Android-specific sources)
+LIBDSPRPC_SOURCES += fastrpc_android.c
 else
 LIBDSPRPC_SOURCES += fastrpc_config_parser.c
 endif

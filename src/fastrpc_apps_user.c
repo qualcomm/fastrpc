@@ -63,7 +63,7 @@
 #include "fastrpc_perf.h"
 #include "fastrpc_pm.h"
 #include "fastrpc_procbuf.h"
-#include "listener_android.h"
+#include "listener.h"
 #include "log_config.h"
 #include "platform_libs.h"
 #include "remotectl.h"
@@ -74,23 +74,16 @@
 #include "fastrpc_context.h"
 #include "fastrpc_process_attributes.h"
 #include "fastrpc_trace.h"
-#include "fastrpc_config_parser.h"
 
-#define VENDOR_DSP_LOCATION "/vendor/dsp/"
-#define VENDOR_DOM_LOCATION "/vendor/dsp/xdsp/"
+#if defined(ANDROID) || defined(_ANDROID)
+#include "fastrpc_android.h"
+#else
+#include "fastrpc_config_parser.h"
+#endif
 
 char DSP_LIBS_LOCATION[PATH_MAX] = DEFAULT_DSP_SEARCH_PATHS;
 
-#ifdef LE_ENABLE
-#define PROPERTY_VALUE_MAX                                                     \
-  92 // as this macro is defined in cutils for Android platforms, defined
-     // explicitly for LE platform
-#elif (defined _ANDROID) || (defined ANDROID)
-/// TODO: Bharath #include "cutils/properties.h"
 #define PROPERTY_VALUE_MAX 92
-#else
-#define PROPERTY_VALUE_MAX 92
-#endif
 
 #ifndef _WIN32
 #include <poll.h>
@@ -232,28 +225,7 @@ const char *ENV_DEBUG_VAR_NAME[] = {"FASTRPC_PROCESS_ATTRS",
                                     "FASTRPC_PERF_FREQ",
                                     "FASTRPC_DEBUG_SYSTRACE",
                                     "FASTRPC_DEBUG_PDDUMP",
-                                    "FASTRPC_PROCESS_ATTRS_PERSISTENT",
-                                    "ro.debuggable"};
-const char *ANDROIDP_DEBUG_VAR_NAME[] = {"vendor.fastrpc.process.attrs",
-                                         "vendor.fastrpc.debug.trace",
-                                         "vendor.fastrpc.debug.testsig",
-                                         "vendor.fastrpc.perf.kernel",
-                                         "vendor.fastrpc.perf.adsp",
-                                         "vendor.fastrpc.perf.freq",
-                                         "vendor.fastrpc.debug.systrace",
-                                         "vendor.fastrpc.debug.pddump",
-                                         "persist.vendor.fastrpc.process.attrs",
-                                         "ro.build.type"};
-const char *ANDROID_DEBUG_VAR_NAME[] = {"fastrpc.process.attrs",
-                                        "fastrpc.debug.trace",
-                                        "fastrpc.debug.testsig",
-                                        "fastrpc.perf.kernel",
-                                        "fastrpc.perf.adsp",
-                                        "fastrpc.perf.freq",
-                                        "fastrpc.debug.systrace",
-                                        "fastrpc.debug.pddump",
-                                        "persist.fastrpc.process.attrs",
-                                        "ro.build.type"};
+                                    "FASTRPC_PROCESS_ATTRS_PERSISTENT"};
 
 const char *SUBSYSTEM_NAME[] = {"adsp", "mdsp", "sdsp", "cdsp", "cdsp1", "gdsp0", "gdsp1", "reserved"};
 
@@ -267,10 +239,6 @@ static const size_t invoke_end_trace_strlen = sizeof(INVOKE_END_TRACE_STR) - 1;
 
 int NO_ENV_DEBUG_VAR_NAME_ARRAY_ELEMENTS =
     sizeof(ENV_DEBUG_VAR_NAME) / sizeof(char *);
-int NO_ANDROIDP_DEBUG_VAR_NAME_ARRAY_ELEMENTS =
-    sizeof(ANDROIDP_DEBUG_VAR_NAME) / sizeof(char *);
-int NO_ANDROID_DEBUG_VAR_NAME_ARRAY_ELEMENTS =
-    sizeof(ANDROID_DEBUG_VAR_NAME) / sizeof(char *);
 
 /* Shell prefix for signed and unsigned */
 const char *const SIGNED_SHELL = "fastrpc_shell_";
@@ -478,10 +446,6 @@ static uint32_t crc32_lut(unsigned char *data, int nbyte, uint32_t *crctab) {
   return crc;
 }
 
-int property_get_int32(const char *name, int value) { return 0; }
-
-int property_get(const char *name, int *def, int *value) { return 0; }
-
 int fastrpc_get_property_int(fastrpc_properties UserPropKey, int defValue) {
   if (((int)UserPropKey > NO_ENV_DEBUG_VAR_NAME_ARRAY_ELEMENTS)) {
     FARF(ERROR,
@@ -493,25 +457,7 @@ int fastrpc_get_property_int(fastrpc_properties UserPropKey, int defValue) {
   if (env != 0)
     return (int)atoi(env);
 #if !defined(LE_ENABLE) // Android platform
-#if !defined(SYSTEM_RPC_LIBRARY) // vendor library
-  if (((int)UserPropKey > NO_ANDROIDP_DEBUG_VAR_NAME_ARRAY_ELEMENTS)) {
-    FARF(
-        ERROR,
-        "%s: Index %d out-of-bound for ANDROIDP_DEBUG_VAR_NAME array of len %d",
-        __func__, UserPropKey, NO_ANDROIDP_DEBUG_VAR_NAME_ARRAY_ELEMENTS);
-    return defValue;
-  }
-  return (int)property_get_int32(ANDROIDP_DEBUG_VAR_NAME[UserPropKey],
-                                 defValue);
-#else // system library
-  if (((int)UserPropKey > NO_ANDROID_DEBUG_VAR_NAME_ARRAY_ELEMENTS)) {
-    FARF(ERROR,
-         "%s: Index %d out-of-bound for ANDROID_DEBUG_VAR_NAME array of len %d",
-         __func__, UserPropKey, NO_ANDROID_DEBUG_VAR_NAME_ARRAY_ELEMENTS);
-    return defValue;
-  }
-  return (int)property_get_int32(ANDROID_DEBUG_VAR_NAME[UserPropKey], defValue);
-#endif
+  return platform_get_property_int(UserPropKey, defValue);
 #else // non-Android platforms
   return defValue;
 #endif
@@ -532,25 +478,7 @@ int fastrpc_get_property_string(fastrpc_properties UserPropKey, char *value,
     return strlen(env);
   }
 #if !defined(LE_ENABLE) // Android platform
-#if !defined(SYSTEM_RPC_LIBRARY) // vendor library
-  if (((int)UserPropKey > NO_ANDROIDP_DEBUG_VAR_NAME_ARRAY_ELEMENTS)) {
-    FARF(
-        ERROR,
-        "%s: Index %d out-of-bound for ANDROIDP_DEBUG_VAR_NAME array of len %d",
-        __func__, UserPropKey, NO_ANDROIDP_DEBUG_VAR_NAME_ARRAY_ELEMENTS);
-    return len;
-  }
-  return property_get(ANDROIDP_DEBUG_VAR_NAME[UserPropKey], (int *)value,
-                      (int *)defValue);
-#else // system library
-  if (((int)UserPropKey > NO_ANDROID_DEBUG_VAR_NAME_ARRAY_ELEMENTS)) {
-    FARF(ERROR,
-         "%s: Index %d out-of-bound for ANDROID_DEBUG_VAR_NAME array of len %d",
-         __func__, UserPropKey, NO_ANDROID_DEBUG_VAR_NAME_ARRAY_ELEMENTS);
-    return len;
-  }
-  return property_get(ANDROID_DEBUG_VAR_NAME[UserPropKey], value, defValue);
-#endif
+  return platform_get_property_string(UserPropKey, value, defValue);
 #else // non-Android platforms
   if (defValue != NULL) {
     strncpy(value, defValue, PROPERTY_VALUE_MAX - 1);
@@ -1609,7 +1537,7 @@ bail:
   return nErr;
 }
 
-int listener_android_geteventfd(int domain, int *fd);
+int listener_geteventfd(int domain, int *fd);
 int remote_handle_open_domain(int domain, const char *name, remote_handle *ph,
                               uint64_t *t_spawn, uint64_t *t_load) {
   char dlerrstr[255];
@@ -1632,7 +1560,7 @@ int remote_handle_open_domain(int domain, const char *name, remote_handle *ph,
   if (!strncmp(name, ITRANSPORT_PREFIX "geteventfd",
                    strlen(ITRANSPORT_PREFIX "geteventfd"))) {
     FARF(RUNTIME_RPC_HIGH, "getting event fd");
-    return listener_android_geteventfd(domain, (int *)ph);
+    return listener_geteventfd(domain, (int *)ph);
   }
   if (!strncmp(name, ITRANSPORT_PREFIX "attachguestos",
                    strlen(ITRANSPORT_PREFIX "attachguestos"))) {
@@ -3118,7 +3046,7 @@ PL_DEP(fastrpc_apps_user);
 PL_DEP(gpls);
 PL_DEP(apps_std);
 PL_DEP(rpcmem);
-PL_DEP(listener_android);
+PL_DEP(listener);
 PL_DEP(fastrpc_async);
 
 static int attach_guestos(int domain) {
@@ -3168,7 +3096,7 @@ static void domain_deinit(int domain) {
     pthread_mutex_unlock(&hlist[domain].mut);
 
     dspsignal_domain_deinit(domain);
-    listener_android_domain_deinit(domain);
+    listener_domain_deinit(domain);
     hlist[domain].first_revrpc_done = 0;
     pthread_mutex_lock(&hlist[domain].async_init_deinit_mut);
     fastrpc_async_domain_deinit(domain);
@@ -3398,11 +3326,10 @@ static void get_process_testsig(apps_std_FILE *fp, uint64_t *ptrlen) {
 }
 
 static int open_shell(int domain_id, apps_std_FILE *fh, int unsigned_shell) {
-  char *absName = NULL;
   char *shell_absName = NULL;
   char *domain_str = NULL;
   char dir_list[PATH_MAX] = {0};
-  uint16_t shell_absNameLen = 0, absNameLen = 0;
+  uint16_t shell_absNameLen = 0;
   int nErr = AEE_SUCCESS;
   int domain = GET_DOMAIN_FROM_EFFEC_DOMAIN_ID(domain_id);
   const char *shell_name = SIGNED_SHELL;
@@ -3428,28 +3355,6 @@ static int open_shell(int domain_id, apps_std_FILE *fh, int unsigned_shell) {
   strlcpy(dir_list, DSP_LIBS_LOCATION, sizeof(dir_list));
   nErr = fopen_from_dirlist(dir_list, ";", "r", shell_absName, fh);
 
-  if (nErr) {
-    absNameLen = strlen(VENDOR_DSP_LOCATION) + shell_absNameLen + 1;
-    VERIFYC(NULL !=
-                (absName = (char *)realloc(absName, sizeof(char) * absNameLen)),
-            AEE_ENOMEMORY);
-    strlcpy(absName, VENDOR_DSP_LOCATION, absNameLen);
-    strlcat(absName, shell_absName, absNameLen);
-
-    nErr = apps_std_fopen(absName, "r", fh);
-    if (nErr) {
-      absNameLen = strlen(VENDOR_DOM_LOCATION) + shell_absNameLen + 1;
-      VERIFYC(NULL != (absName =
-                           (char *)realloc(absName, sizeof(char) * absNameLen)),
-              AEE_ENOMEMORY);
-      strlcpy(absName, VENDOR_DSP_LOCATION, absNameLen);
-      strlcat(absName, SUBSYSTEM_NAME[domain], absNameLen);
-      strlcat(absName, "/", absNameLen);
-      strlcat(absName, shell_absName, absNameLen);
-
-      nErr = apps_std_fopen(absName, "r", fh);
-    }
-  }
   if (!nErr)
     FARF(RUNTIME_RPC_HIGH, "Successfully opened %s, domain %d", shell_absName, domain);
 bail:
@@ -3460,10 +3365,6 @@ bail:
   if (shell_absName) {
     free(shell_absName);
     shell_absName = NULL;
-  }
-  if (absName) {
-    free(absName);
-    absName = NULL;
   }
   if (nErr != AEE_SUCCESS) {
     if (domain == SDSP_DOMAIN_ID && fh != NULL) {
@@ -3992,7 +3893,7 @@ static int domain_init(int domain, int *dev) {
   hlist[domain].state = FASTRPC_DOMAIN_STATE_INIT;
   hlist[domain].ref = 0;
   pthread_mutex_unlock(&hlist[domain].mut);
-  VERIFY(AEE_SUCCESS == (nErr = listener_android_domain_init(
+  VERIFY(AEE_SUCCESS == (nErr = listener_domain_init(
                              domain, hlist[domain].th_params.update_requested,
                              &hlist[domain].th_params.r_sem)));
   if ((dom != SDSP_DOMAIN_ID) && hlist[domain].dsppd == ROOT_PD) {
@@ -4045,7 +3946,7 @@ static void fastrpc_apps_user_deinit(void) {
       pthread_mutex_destroy(&hlist[i].init);
       pthread_mutex_destroy(&hlist[i].async_init_deinit_mut);
     }
-    listener_android_deinit();
+    listener_deinit();
     free(hlist);
     hlist = NULL;
   }
@@ -4151,7 +4052,7 @@ static int fastrpc_apps_user_init(void) {
     pthread_mutex_init(&hlist[i].init, 0);
     pthread_mutex_init(&hlist[i].async_init_deinit_mut, 0);
   }
-  listener_android_init();
+  listener_init();
   VERIFY(AEE_SUCCESS == (nErr = PL_INIT(apps_std)));
   GenCrc32Tab(POLY32, crc_table);
   fastrpc_notif_init();

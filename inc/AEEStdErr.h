@@ -84,7 +84,7 @@
 #define AEE_EINVALIDITEM              (AEE_EOFFSET + 0x02A)  ///< Current item is invalid, it can be a switch case or a pointer to memory
 #define AEE_ENOTALLOWED               (AEE_EOFFSET + 0x02B)  ///< Not allowed to perform the
                                                                     ///< operation
-#define AEE_EINVHANDLE                (AEE_EOFFSET + 0x02C)  ///< Invalid handle - adding here as its defined in vendor AEEStdErr.h - needed to check valid handle in stub.c
+#define AEE_EINVHANDLE                (AEE_EOFFSET + 0x02C)  ///< Invalid handle - needed to check valid handle in stub.c
 #define AEE_EOUTOFHANDLES             (AEE_EOFFSET + 0x02D)  ///< Out of handles (Handle list is already full)
 //Hole here
 #define AEE_ENOMORE                   (AEE_EOFFSET + 0x02F)  ///< No more items available --
