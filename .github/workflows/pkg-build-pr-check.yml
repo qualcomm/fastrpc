@@ -31,8 +31,8 @@ jobs:
     uses: qualcomm-linux/qcom-build-utils/.github/workflows/qcom-upstream-pr-pkg-build-reusable-workflow.yml@main
     with:
       qcom-build-utils-ref: main
-      upstream-repo: ${{github.repository}}
-      upstream-repo-ref: ${{github.head_ref}}
+      upstream-repo: ${{ github.event.pull_request.head.repo.full_name }}
+      upstream-repo-ref: ${{ github.event.pull_request.head.ref }}
       pkg-repo: ${{vars.PKG_REPO_GITHUB_NAME}}
       pr-number: ${{github.event.pull_request.number}}
     secrets:
