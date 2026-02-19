@@ -283,7 +283,7 @@ static AEEResult init_domain_queues_locked(int domain) {
                sizeof(struct dspqueue_process_queue_state))) != NULL,
           AEE_ENORPCMEMORY);
   VERIFYC((((uintptr_t)dq->state) & 4095) == 0, AEE_ERPC);
-  VERIFYC((dq->state_fd = rpcmem_to_fd(dq->state)) > 0, AEE_ERPC);
+  VERIFYC((dq->state_fd = rpcmem_to_handle_internal(dq->state)) > 0, AEE_ERPC);
   VERIFY((nErr = fastrpc_mmap(domain, dq->state_fd, dq->state, 0,
                               sizeof(struct dspqueue_process_queue_state),
                               FASTRPC_MAP_FD)) == 0);
@@ -555,7 +555,7 @@ AEEResult dspqueue_create(int domain, uint32_t flags, uint32_t req_queue_size,
                q->user_queue_size)) != NULL,
           AEE_ENOMEMORY);
   VERIFYC((((uintptr_t)q->user_queue) & 4095) == 0, AEE_ERPC);
-  VERIFYC((q->user_queue_fd = rpcmem_to_fd(q->user_queue)) > 0, AEE_ERPC);
+  VERIFYC((q->user_queue_fd = rpcmem_to_handle_internal(q->user_queue)) > 0, AEE_ERPC);
   VERIFY((nErr = fastrpc_mmap(domain, q->user_queue_fd, q->user_queue, 0,
                               q->user_queue_size, FASTRPC_MAP_FD)) == 0);
   queue_mapped = 1;

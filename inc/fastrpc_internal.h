@@ -16,7 +16,13 @@
 #include "AEEQList.h"
 #include "AEEStdErr.h"
 #include "fastrpc_common.h"
+
+#ifdef USE_ACCEL_DRIVER
+#include "fastrpc_ioctl_drm.h"
+#include "fastrpc_device_discovery.h"
+#else
 #include "fastrpc_ioctl.h"
+#endif
 
 // Aligns the memory
 #define ALIGN_B(p, a)	      (((p) + ((a) - 1)) & ~((a) - 1))

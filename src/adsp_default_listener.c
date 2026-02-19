@@ -56,7 +56,6 @@ static domain_t *get_domain_uri(int domain_id) {
   return NULL;
 }
 
-
 /**
  * fastrpc_dev_exists() - Check if device exists
  * @dev_path: Full device path (e.g., "/dev/fastrpc-adsp")
@@ -85,6 +84,7 @@ static bool fastrpc_dev_exists(const char* dev_path)
  */
 static int fastrpc_wait_for_device(int domain)
 {
+#ifndef USE_ACCEL_DRIVER
 	int inotify_fd = -1, watch_fd = -1, err = 0;
 	const char *sec_dev_name = NULL, *non_sec_dev_name = NULL;
 	struct pollfd pfd[1];
@@ -166,6 +166,9 @@ bail:
 	close(inotify_fd);
 
 	return err;
+#else
+	return 0;
+#endif
 }
 
 int adsp_default_listener_start(int argc, char *argv[]) {
