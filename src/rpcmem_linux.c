@@ -146,6 +146,12 @@ int rpcmem_to_fd_internal(void *po) {
 
 int rpcmem_to_fd(void *po) { return rpcmem_to_fd_internal(po); }
 
+int rpcmem_to_handle_internal(void *po) {
+  return rpcmem_to_fd_internal(po);
+}
+
+int rpcmem_to_handle(void *po) { return rpcmem_to_handle_internal(po); }
+
 void *rpcmem_alloc_internal(int heapid, uint32_t flags, size_t size) {
   struct rpc_info *rinfo;
   int nErr = 0, fd = -1;

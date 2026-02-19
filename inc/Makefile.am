@@ -42,9 +42,11 @@ noinst_HEADERS = \
 	fastrpc_config.h \
 	fastrpc_config_parser.h \
 	fastrpc_context.h \
+	fastrpc_device_discovery.h \
 	fastrpc_hash_table.h \
 	fastrpc_internal.h \
 	fastrpc_ioctl.h \
+	fastrpc_ioctl_drm.h \
 	fastrpc_log.h \
 	fastrpc_mem.h \
 	fastrpc_notif.h \
@@ -64,6 +66,7 @@ noinst_HEADERS = \
 	remotectl.h \
 	remotectl1.h \
 	rpcmem_internal.h \
+	rpcmem_prime.h \
 	sbuf.h \
 	sbuf_parser.h \
 	shared.h \

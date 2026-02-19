@@ -2,6 +2,10 @@ lib_LTLIBRARIES =
 
 LIBDSPRPC_CFLAGS = -fno-short-enums -U_DEBUG -DARM_ARCH_7A -DLE_ENABLE -DENABLE_UPSTREAM_DRIVER_INTERFACE -DUSE_SYSLOG -DCONFIG_BASE_DIR='"$(CONFIG_BASE_DIR)"' -DMACHINE_NAME_PATH='"/sys/firmware/devicetree/base/model"' -I$(top_srcdir)/inc
 
+if USE_ACCEL_DRIVER
+LIBDSPRPC_CFLAGS += -DUSE_ACCEL_DRIVER
+endif
+
 if ANDROID_CC
 LIBDSPRPC_CFLAGS += -DDEFAULT_DSP_SEARCH_PATHS='";/vendor/lib/rfsa/adsp;/vendor/dsp;"'
 else
@@ -16,7 +20,6 @@ LIBDSPRPC_SOURCES = \
 		fastrpc_async.c \
 		fastrpc_mem.c \
 		fastrpc_notif.c \
-		fastrpc_ioctl.c \
 		fastrpc_log.c \
 		fastrpc_procbuf.c \
 		fastrpc_cap.c \
@@ -28,7 +31,6 @@ LIBDSPRPC_SOURCES = \
 		apps_std_imp.c \
 		apps_mem_imp.c \
 		apps_mem_skel.c \
-		rpcmem_linux.c \
 		adspmsgd.c \
 		adspmsgd_printf.c \
 		std_path.c \
@@ -52,6 +54,15 @@ LIBDSPRPC_SOURCES = \
 		adsp_perf1_stub.c \
 		mod_table.c \
 		fastrpc_context.c
+
+if USE_ACCEL_DRIVER
+LIBDSPRPC_SOURCES += rpcmem_drm.c
+LIBDSPRPC_SOURCES += fastrpc_ioctl_drm.c
+LIBDSPRPC_SOURCES += fastrpc_device_discovery.c
+else
+LIBDSPRPC_SOURCES += rpcmem_linux.c
+LIBDSPRPC_SOURCES += fastrpc_ioctl.c
+endif
 
 if ANDROID_CC
 # Do nothing (or Android-specific sources)

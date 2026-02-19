@@ -33,6 +33,17 @@
 #define POLL_TIMEOUT	10 * 1000
 #define EVENT_SIZE		( sizeof (struct inotify_event) )
 #define EVENT_BUF_LEN	( 1024 * ( EVENT_SIZE + 16 ) )
+
+#ifdef USE_ACCEL_DRIVER
+/* QDA accel device names */
+#define ADSP_ACCEL_DEVICE_NAME "accel0"
+#define SDSP_ACCEL_DEVICE_NAME "accel0"
+#define MDSP_ACCEL_DEVICE_NAME "accel0"
+#define CDSP_ACCEL_DEVICE_NAME "accel0"
+#define CDSP1_ACCEL_DEVICE_NAME "accel0"
+#define GDSP0_ACCEL_DEVICE_NAME "accel0"
+#define GDSP1_ACCEL_DEVICE_NAME "accel0"
+#else
 #define ADSP_SECURE_DEVICE_NAME "fastrpc-adsp-secure"
 #define SDSP_SECURE_DEVICE_NAME "fastrpc-sdsp-secure"
 #define MDSP_SECURE_DEVICE_NAME "fastrpc-mdsp-secure"
@@ -47,6 +58,7 @@
 #define CDSP1_DEVICE_NAME "fastrpc-cdsp1"
 #define GDSP0_DEVICE_NAME "fastrpc-gdsp0"
 #define GDSP1_DEVICE_NAME "fastrpc-gdsp1"
+#endif
 
 // Array of supported domain names and its corresponding ID's.
 static domain_t supported_domains[] = {{ADSP_DOMAIN_ID, ADSP_DOMAIN},
@@ -70,6 +82,41 @@ static domain_t *get_domain_uri(int domain_id) {
   return NULL;
 }
 
+#ifdef USE_ACCEL_DRIVER
+static const char *get_accel_device_name(int domain_id) {
+	const char *name;
+	int domain = GET_DOMAIN_FROM_EFFEC_DOMAIN_ID(domain_id);
+
+	switch (domain) {
+	case ADSP_DOMAIN_ID:
+		name = ADSP_ACCEL_DEVICE_NAME;
+		break;
+	case SDSP_DOMAIN_ID:
+		name = SDSP_ACCEL_DEVICE_NAME;
+		break;
+	case MDSP_DOMAIN_ID:
+		name = MDSP_ACCEL_DEVICE_NAME;
+		break;
+	case CDSP_DOMAIN_ID:
+		name = CDSP_ACCEL_DEVICE_NAME;
+		break;
+	case CDSP1_DOMAIN_ID:
+		name = CDSP1_ACCEL_DEVICE_NAME;
+		break;
+	case GDSP0_DOMAIN_ID:
+		name = GDSP0_ACCEL_DEVICE_NAME;
+		break;
+	case GDSP1_DOMAIN_ID:
+		name = GDSP1_ACCEL_DEVICE_NAME;
+		break;
+	default:
+		name = NULL;
+		break;
+	}
+
+	return name;
+}
+#else
 static const char *get_secure_device_name(int domain_id) {
 	const char *name;
 	int domain = GET_DOMAIN_FROM_EFFEC_DOMAIN_ID(domain_id);
@@ -137,6 +184,7 @@ static const char *get_default_device_name(int domain_id) {
 
 	return name;
 }
+#endif
 
 /**
  * fastrpc_dev_exists() - Check if device exists
@@ -151,14 +199,26 @@ static bool fastrpc_dev_exists(const char* dev_name)
 	struct stat buffer;
 	char *path = NULL;
 	uint64_t len;
+	bool exists;
 
+#ifdef USE_ACCEL_DRIVER
+	len = snprintf(0, 0, "/dev/accel/%s", dev_name) + 1;
+#else
 	len = snprintf(0, 0, "/dev/%s", dev_name) + 1;
+#endif
 	if(NULL == (path = (char *)malloc(len * sizeof(char))))
 		return false;
 
+#ifdef USE_ACCEL_DRIVER
+	snprintf(path, (int)len, "/dev/accel/%s", dev_name);
+#else
 	snprintf(path, (int)len, "/dev/%s", dev_name);
+#endif
 
-	return (stat(path, &buffer) == 0);
+	exists = (stat(path, &buffer) == 0);
+
+	free(path);
+	return exists;
 }
 
 /**
@@ -172,14 +232,25 @@ static bool fastrpc_dev_exists(const char* dev_name)
 static int fastrpc_wait_for_device(int domain)
 {
 	int inotify_fd = -1, watch_fd = -1, err = 0;
+#ifdef USE_ACCEL_DRIVER
+	const char *def_dev_name = NULL;
+#else
 	const char *sec_dev_name = NULL, *def_dev_name = NULL;
+#endif
 	struct pollfd pfd[1];
 
+#ifdef USE_ACCEL_DRIVER
+	def_dev_name = get_accel_device_name(domain);
+
+	if (fastrpc_dev_exists(def_dev_name))
+		return 0;
+#else
 	sec_dev_name = get_secure_device_name(domain);
 	def_dev_name = get_default_device_name(domain);
 
 	if (fastrpc_dev_exists(sec_dev_name) || fastrpc_dev_exists(def_dev_name))
 		return 0;
+#endif
 
 	inotify_fd = inotify_init();
 	if (inotify_fd < 0) {
@@ -187,15 +258,24 @@ static int fastrpc_wait_for_device(int domain)
 		return AEE_EINVALIDFD;
 	}
 
+#ifdef USE_ACCEL_DRIVER
+	watch_fd = inotify_add_watch(inotify_fd, "/dev/accel/", IN_CREATE);
+#else
 	watch_fd = inotify_add_watch(inotify_fd, "/dev/", IN_CREATE);
+#endif
 	if (watch_fd < 0) {
 		close(inotify_fd);
 		VERIFY_EPRINTF("Error: inotify_add_watch failed, invalid fd errno = %s\n", strerror(errno));
 		return AEE_EINVALIDFD;
 	}
 
+#ifdef USE_ACCEL_DRIVER
+	if (fastrpc_dev_exists(def_dev_name))
+		goto bail;
+#else
 	if (fastrpc_dev_exists(sec_dev_name) || fastrpc_dev_exists(def_dev_name))
 		goto bail;
+#endif
 
 	memset(pfd, 0 , sizeof(pfd));
 	pfd[0].fd = inotify_fd;
@@ -229,9 +309,14 @@ static int fastrpc_wait_for_device(int domain)
 					ptr += sizeof(struct inotify_event) + event->len) {
 			event = (struct inotify_event *) ptr;
 			/* Check if the event corresponds to the creation of the device node. */
+#ifdef USE_ACCEL_DRIVER
+			if (event->wd == watch_fd && (event->mask & IN_CREATE) &&
+				(strcmp(def_dev_name, event->name) == 0)) {
+#else
 			if (event->wd == watch_fd && (event->mask & IN_CREATE) &&
 				((strcmp(sec_dev_name, event->name) == 0) ||
 				(strcmp(def_dev_name, event->name) == 0))) {
+#endif
 				/* Device node created, process proceed to open and use it. */
 				VERIFY_IPRINTF("Device node %s created!\n", event->name);
 				goto bail; /* Exit the loop after device creation is detected. */

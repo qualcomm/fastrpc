@@ -530,6 +530,11 @@ int ioctl_mdctx_manage(int dev, int req, void *user_ctx,
 const char* get_secure_domain_name(int domain_id);
 int is_async_fastrpc_supported(void);
 
+#ifdef USE_ACCEL_DRIVER
+#include "fastrpc_ioctl_drm.h"
+#include "fastrpc_device_discovery.h"
+#else
 #include "fastrpc_ioctl.h"
+#endif
 
 #endif // FASTRPC_INTERNAL_H

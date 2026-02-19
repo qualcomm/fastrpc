@@ -80,6 +80,15 @@ AC_ARG_WITH([config-base-dir],
 AC_MSG_NOTICE([Config base path: $config_base_dir])
 AC_SUBST([CONFIG_BASE_DIR], ["$config_base_dir"])
 
+# Configure accel driver option (--enable-accel-driver)
+AC_ARG_ENABLE([accel-driver],
+  [AS_HELP_STRING([--enable-accel-driver],
+                  [Enable accelerator driver support (default: no)])],
+  [enable_accel_driver="$enableval"],
+  [enable_accel_driver=no])
+AC_MSG_NOTICE([Accelerator driver support: $enable_accel_driver])
+AM_CONDITIONAL([USE_ACCEL_DRIVER], [test "$enable_accel_driver" = yes])
+
 AC_CONFIG_FILES([
 Makefile
 inc/Makefile

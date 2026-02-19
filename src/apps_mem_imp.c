@@ -148,7 +148,7 @@ __QAIC_IMPL(apps_mem_request_map64)(int heapid, uint32_t lflags, uint32_t rflags
   } else if (rflags == FASTRPC_ALLOC_HLOS_FD) {
     VERIFYC(NULL != (buf = rpcmem_alloc_internal(heapid, lflags, len)),
             AEE_ENORPCMEMORY);
-    VERIFYC(0 < (fd = rpcmem_to_fd_internal(buf)), AEE_EBADFD);
+    VERIFYC(0 < (fd = rpcmem_to_handle_internal(buf)), AEE_EBADFD);
     rpcmem_set_dmabuf_name("dsp", fd, heapid, buf, lflags);
     /* Using FASTRPC_MAP_FD_DELAYED as only HLOS mapping is reqd at this point
      */
@@ -175,7 +175,7 @@ __QAIC_IMPL(apps_mem_request_map64)(int heapid, uint32_t lflags, uint32_t rflags
          (unsigned_module && ualloc_support))) {
       VERIFYC(NULL != (buf = rpcmem_alloc_internal(heapid, lflags, len)),
               AEE_ENORPCMEMORY);
-      fd = rpcmem_to_fd_internal(buf);
+      fd = rpcmem_to_handle_internal(buf);
       VERIFYC(fd > 0, AEE_EBADPARM);
       rpcmem_set_dmabuf_name("dsp", fd, heapid, buf, lflags);
     }
