@@ -3099,6 +3099,23 @@ int open_device_node(int domain_id) {
   int dev = -1, nErr = 0;
   int domain = GET_DOMAIN_FROM_EFFEC_DOMAIN_ID(domain_id);
   int sess_id = GET_SESSION_ID_FROM_DOMAIN_ID(domain_id);
+
+#ifdef USE_ACCEL_DRIVER
+  char dev_path[64] = {0};
+
+  /* Try device discovery first for DRM-based accel devices */
+  nErr = fastrpc_discovery_get_device_path(domain, dev_path, sizeof(dev_path));
+  if (nErr == AEE_SUCCESS) {
+    dev = open(dev_path, O_NONBLOCK);
+    if (dev >= 0) {
+      FARF(ALWAYS, "Opened device %s for domain %d via discovery", dev_path, domain);
+    } else {
+	    FARF(ERROR, "Failed to open discovered device %s for domain %d (errno %s), "
+            "falling back to legacy device nodes", dev_path, domain, strerror(errno));
+    }
+	return dev;
+  }
+#else
   const char *secure_dev = NULL, *non_secure_dev = NULL;
 
   if (IS_VALID_DOMAIN_ID(domain)) {
@@ -3120,6 +3137,7 @@ int open_device_node(int domain_id) {
          "processor\n",
          nErr, __func__, domain_id, sess_id, secure_dev,
          non_secure_dev, errno, strerror(errno));
+#endif
   return dev;
 }
 
@@ -3398,6 +3416,9 @@ static int remote_init(int domain) {
   if (hlist[domain].dev == -1) {
     dev = open_device_node(domain);
     VERIFYC(dev >= 0, AEE_ECONNREFUSED);
+#ifdef USE_ACCEL_DRIVER
+    hlist[domain].dev = dev;
+#else //USE_ACCEL_DRIVER
     // Set session relation info using FASTRPC_INVOKE2_SESS_INFO
     sess_info.domain_id = info;
     sess_info.pd_type = pd_type;
@@ -3450,7 +3471,7 @@ static int remote_init(int domain) {
     // Set session id
     if (IS_EXTENDED_DOMAIN_ID(domain))
       VERIFY(AEE_SUCCESS == (nErr = ioctl_setmode(dev, FASTRPC_SESSION_ID1)));
-
+#endif //USE_ACCEL_DRIVER
     FARF(RUNTIME_RPC_HIGH, "%s: device %d opened with info 0x%x (attach %d)",
          __func__, dev, hlist[domain].info, pd_type);
     // keep the memory we used to allocate
@@ -3528,7 +3549,7 @@ static int remote_init(int domain) {
         VERIFY(AEE_SUCCESS ==
                (nErr = apps_std_fread(fh, (unsigned char *)file, len, &readlen, &eof)));
         VERIFYC((int)len == readlen, AEE_EFILE);
-        filefd = rpcmem_to_fd_internal((void *)file);
+        filefd = rpcmem_to_handle_internal((void *)file);
         filelen = (int)len;
         VERIFYC(filefd != -1, AEE_ERPC);
       } else {
@@ -3594,6 +3615,7 @@ bail:
     apps_std_fclose(fh);
   }
   if (nErr != AEE_SUCCESS) {
+    hlist[domain].dev = -1;
     errno = errno_save;
     if ((nErr == -1) && (errno == ECONNRESET)) {
       nErr = AEE_ECONNRESET;

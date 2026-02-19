@@ -170,6 +170,14 @@ AC_SUBST([STRICTER_CFLAGS])
 AC_SUBST([STRICTER_CPPFLAGS])
 AC_SUBST([STRICTER_LDFLAGS])
 
+# Configure accel driver option (--enable-accel-driver)
+AC_ARG_ENABLE([accel-driver],
+  [AS_HELP_STRING([--enable-accel-driver],
+                  [Enable accelerator driver support (default: no)])],
+  [enable_accel_driver="$enableval"],
+  [enable_accel_driver=no])
+AC_MSG_NOTICE([Accelerator driver support: $enable_accel_driver])
+AM_CONDITIONAL([USE_ACCEL_DRIVER], [test "$enable_accel_driver" = yes])
 
 AC_CONFIG_FILES([
 Makefile

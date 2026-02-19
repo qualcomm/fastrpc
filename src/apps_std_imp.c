@@ -338,7 +338,7 @@ __QAIC_IMPL(apps_std_fopen_fd)(const char *name, const char *mode, int *fd,
     nErr = AEE_EFILE;
     goto bail;
   }
-  *fd = rpcmem_to_fd(source);
+  *fd = rpcmem_to_handle_internal(source);
   *len = statbuf.st_size;
   PROFILE_ALWAYS(&mmap_time, nErr = fastrpc_mmap(domain, *fd, source, 0, *len,
                                                  FASTRPC_MAP_FD));

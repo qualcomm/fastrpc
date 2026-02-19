@@ -10,6 +10,11 @@
  * returns an file descriptor associated with the address
  */
 int rpcmem_to_fd_internal(void *po);
+
+/*
+ * returns a unique handle associated with the address
+ */
+int rpcmem_to_handle_internal(void *po);
 /*
  * allocates dma memory of size, from specific heap mentioned in heapid.
  * flags are not used for now

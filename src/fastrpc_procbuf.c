@@ -33,7 +33,7 @@ int proc_sharedbuf_init(int dev, int domain) {
 	errno = 0;
 	VERIFYC(NULL != (proc_sharedbuf = rpcmem_alloc_internal(0, RPCMEM_HEAP_DEFAULT, (size_t)proc_sharedbuf_size)), AEE_ENORPCMEMORY);
 	hlist[domain].proc_sharedbuf = proc_sharedbuf;
-	VERIFYC(-1 != (sharedbuf_info.buf_fd = rpcmem_to_fd_internal(proc_sharedbuf)), AEE_ERPC);
+	VERIFYC(-1 != (sharedbuf_info.buf_fd = rpcmem_to_handle_internal(proc_sharedbuf)), AEE_ERPC);
 	sharedbuf_info.buf_size = proc_sharedbuf_size;
 
 	ioErr = ioctl_sharedbuf(dev, &sharedbuf_info);
