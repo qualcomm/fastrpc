@@ -154,54 +154,51 @@ static void parse_config_dir(char *machine_name) {
   }
 
     if (dsp_lib_paths[0] != '\0') {
-     char processed_paths[PATH_MAX] = {0};
-     char *path_start = dsp_lib_paths;
-     char *path_end;
-     char *delimiter = ";"; // Paths are separated by semicolons
-
-     // Initialize DSP_LIBS_LOCATION as empty
-     DSP_LIBS_LOCATION[0] = '\0';
-
-     // Process each path in dsp_lib_paths
-     while ((path_end = strchr(path_start, ';')) != NULL || *path_start != '\0') {
-       char single_path[PATH_MAX] = {0};
-       size_t path_len;
-
-       if (path_end) {
-         path_len = path_end - path_start;
-       } else {
-         path_len = strlen(path_start);
-       }
-       if (path_len > 0) {
-         strncpy(single_path, path_start, path_len);
-         single_path[path_len] = '\0';
-         if (processed_paths[0] != '\0') {
-           strlcat(processed_paths, delimiter, sizeof(processed_paths));
-         }
-         if (single_path[0] != '/') {
-           strlcat(processed_paths, CONFIG_BASE_DIR, sizeof(processed_paths));
-           // Ensure there's a slash between CONFIG_BASE_DIR and the path
-           if (processed_paths[strlen(processed_paths) - 1] != '/') {
-             strlcat(processed_paths, "/", sizeof(processed_paths));
-           }
-         }
-         strlcat(processed_paths, single_path, sizeof(processed_paths));
-       }
-       if (!path_end) {
-         break;
-       }
-       path_start = path_end + 1;
-     }
-     strlcpy(DSP_LIBS_LOCATION, processed_paths, sizeof(DSP_LIBS_LOCATION));
-     if (DEFAULT_DSP_SEARCH_PATHS[0] != '\0' && DEFAULT_DSP_SEARCH_PATHS[0] != ';') {
-       if (DSP_LIBS_LOCATION[0] != '\0') {
-         strlcat(DSP_LIBS_LOCATION, delimiter, sizeof(DSP_LIBS_LOCATION));
-       }
-       strlcat(DSP_LIBS_LOCATION, DEFAULT_DSP_SEARCH_PATHS, sizeof(DSP_LIBS_LOCATION));
-     }
-     FARF(ALWAYS, "Processed DSP_LIBS_LOCATION: %s", DSP_LIBS_LOCATION);
-  } else {
-    FARF(ALWAYS, "Warning: No DSP library path found for machine [%s] in any configuration file\n", 
+      char processed_paths[PATH_MAX] = {0};
+      char *path_start = dsp_lib_paths;
+      char *path_end;
+      const char *delimiter = ";"; // Paths are separated by semicolons
+    
+      // Initialize DSP_LIBS_LOCATION as empty
+      DSP_LIBS_LOCATION[0] = '\0';
+    
+      // Process each path in dsp_lib_paths
+      while ((path_end = strchr(path_start, ';')) != NULL || *path_start != '\0') {
+        char single_path[PATH_MAX] = {0};
+        size_t path_len;
+    
+        if (path_end) {
+          path_len = path_end - path_start;
+        } else {
+          path_len = strlen(path_start);
+        }
+        if (path_len > 0) {
+          strncpy(single_path, path_start, path_len);
+          single_path[path_len] = '\0';
+          // Append delimiter if needed
+          if (processed_paths[0] != '\0') {
+            strlcat(processed_paths, delimiter, sizeof(processed_paths));
+          }
+          // Always prefix CONFIG_BASE_DIR and a slash, then the path
+          strlcat(processed_paths, CONFIG_BASE_DIR, sizeof(processed_paths));
+          strlcat(processed_paths, "/", sizeof(processed_paths));
+          strlcat(processed_paths, single_path, sizeof(processed_paths));
+        }
+        if (!path_end) {
+          break;
+        }
+        path_start = path_end + 1;
+      }
+      strlcpy(DSP_LIBS_LOCATION, processed_paths, sizeof(DSP_LIBS_LOCATION));
+      if (DEFAULT_DSP_SEARCH_PATHS[0] != '\0' && DEFAULT_DSP_SEARCH_PATHS[0] != ';') {
+        if (DSP_LIBS_LOCATION[0] != '\0') {
+          strlcat(DSP_LIBS_LOCATION, delimiter, sizeof(DSP_LIBS_LOCATION));
+        }
+        strlcat(DSP_LIBS_LOCATION, DEFAULT_DSP_SEARCH_PATHS, sizeof(DSP_LIBS_LOCATION));
+      }
+      FARF(ALWAYS, "Processed DSP_LIBS_LOCATION: %s", DSP_LIBS_LOCATION);
+    } else {
+      FARF(ALWAYS, "Warning: No DSP library path found for machine [%s] in any configuration file\n", 
          machine_name);
   }
 }
