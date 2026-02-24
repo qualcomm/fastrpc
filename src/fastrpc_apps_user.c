@@ -3038,7 +3038,7 @@ static void domain_deinit(int domain) {
 }
 
 static const char *get_domain_name(int domain_id) {
-  const char *name;
+  const char *name = NULL;
   int domain = GET_DOMAIN_FROM_EFFEC_DOMAIN_ID(domain_id);
 
   switch (domain) {
@@ -3064,7 +3064,7 @@ static const char *get_domain_name(int domain_id) {
     name = GDSP1RPC_DEVICE;
     break;
   default:
-    name = DEFAULT_DEVICE;
+    FARF(ERROR, "ERROR: %s Invalid domain %d", __func__, domain);
     break;
   }
   return name;
@@ -3075,40 +3075,7 @@ int open_device_node(int domain_id) {
   int domain = GET_DOMAIN_FROM_EFFEC_DOMAIN_ID(domain_id);
   int sess_id = GET_SESSION_ID_FROM_DOMAIN_ID(domain_id);
 
-  switch (domain) {
-  case ADSP_DOMAIN_ID:
-  case SDSP_DOMAIN_ID:
-  case MDSP_DOMAIN_ID:
-    dev = open(get_secure_domain_name(domain), O_NONBLOCK);
-    if ((dev < 0) && (errno == ENOENT)) {
-      FARF(RUNTIME_RPC_HIGH,
-           "Device node %s open failed for domain %d (errno %s),"
-           "falling back to node %s \n",
-           get_secure_domain_name(domain), domain, strerror(errno),
-           get_domain_name(domain));
-      dev = open(get_domain_name(domain), O_NONBLOCK);
-      if ((dev < 0) && (errno == ENOENT)) {
-        FARF(RUNTIME_RPC_HIGH,
-             "Device node %s open failed for domain %d (errno %s),"
-             "falling back to node %s \n",
-             get_domain_name(domain), domain, strerror(errno), DEFAULT_DEVICE);
-        dev = open(DEFAULT_DEVICE, O_NONBLOCK);
-      }
-    } else if ((dev < 0) && (errno == EACCES)) {
-      // Open the default device node if unable to open the
-      // secure device node due to permissions
-      FARF(RUNTIME_RPC_HIGH,
-           "Device node %s open failed for domain %d (errno %s),"
-           "falling back to node %s \n",
-           get_secure_domain_name(domain), domain, strerror(errno),
-           DEFAULT_DEVICE);
-      dev = open(DEFAULT_DEVICE, O_NONBLOCK);
-    }
-    break;
-  case CDSP_DOMAIN_ID:
-  case CDSP1_DOMAIN_ID:
-  case GDSP0_DOMAIN_ID:
-  case GDSP1_DOMAIN_ID:
+  if (IS_VALID_DOMAIN_ID(domain)) {
     dev = open(get_secure_domain_name(domain), O_NONBLOCK);
     if ((dev < 0) && ((errno == ENOENT) || (errno == EACCES))) {
       FARF(RUNTIME_RPC_HIGH,
@@ -3118,18 +3085,11 @@ int open_device_node(int domain_id) {
            get_domain_name(domain));
       dev = open(get_domain_name(domain), O_NONBLOCK);
       if ((dev < 0) && ((errno == ENOENT) || (errno == EACCES))) {
-        // Open the default device node if actual device node
-        // is not present
         FARF(RUNTIME_RPC_HIGH,
-             "Device node %s open failed for domain %d (errno %s),"
-             "falling back to node %s \n",
-             get_domain_name(domain), domain, strerror(errno), DEFAULT_DEVICE);
-        dev = open(DEFAULT_DEVICE, O_NONBLOCK);
+             "Device node %s open failed for domain %d (errno %s)\n",
+             get_domain_name(domain), domain, strerror(errno));
       }
     }
-    break;
-  default:
-    break;
   }
   if (dev < 0)
     FARF(ERROR,
