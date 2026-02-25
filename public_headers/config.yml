@@ -9,3 +9,12 @@ branches:
           - inc/remote64.h
           - inc/dspqueue.h
           - inc/rpcmem.h
+
+abi_checks:
+  - path: "src/.libs"
+    include_globs: ["libadsprpc.so", "libcdsprpc.so", "libsdsprpc.so"]
+    public_headers:
+      - inc/adsp_default_listener1.h
+      - inc/HAP_pls.h
+      - inc/rpcmem.h
+      - inc/remote.h
