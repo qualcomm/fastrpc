@@ -16,6 +16,7 @@
 #include "AEEQList.h"
 #include "AEEStdErr.h"
 #include "fastrpc_common.h"
+#include "fastrpc_ioctl.h"
 
 // Aligns the memory
 #define ALIGN_B(p, a)	      (((p) + ((a) - 1)) & ~((a) - 1))
@@ -450,6 +451,14 @@ static __inline int convert_kernel_to_user_error(int nErr, int err_no) {
 }
 
 /**
+  * @brief Get both secure and non-secure device names for a domain
+  * @param domain_id: Domain ID
+  * @param secure_name: Output pointer for secure device name
+  * @param non_secure_name: Output pointer for non-secure device name
+  **/
+void get_domain_device_names(int domain_id, const char **secure_name, const char **non_secure_name);
+
+/**
   * @brief utility APIs used in fastRPC library to get name, handle from domain 
   **/
 int get_domain_from_name(const char *uri, uint32_t type);
@@ -514,9 +523,5 @@ int ioctl_optimization(int dev, uint32_t max_concurrency);
  */
 int ioctl_mdctx_manage(int dev, int req, void *user_ctx,
 	unsigned int *domain_ids, unsigned int num_domain_ids, uint64_t *ctx);
-
-const char* get_secure_domain_name(int domain_id);
-
-#include "fastrpc_ioctl.h"
 
 #endif // FASTRPC_INTERNAL_H
