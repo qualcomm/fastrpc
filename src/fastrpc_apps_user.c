@@ -3217,57 +3217,65 @@ static void domain_deinit(int domain) {
   pthread_mutex_unlock(&hlist[domain].mut);
 }
 
-static const char *get_domain_name(int domain_id) {
-  const char *name = NULL;
+void get_domain_device_names(int domain_id, const char **secure_name, const char **non_secure_name) {
   int domain = GET_DOMAIN_FROM_EFFEC_DOMAIN_ID(domain_id);
 
   switch (domain) {
   case ADSP_DOMAIN_ID:
-    name = ADSPRPC_DEVICE;
+    *secure_name = ADSPRPC_SECURE_DEVICE;
+    *non_secure_name = ADSPRPC_DEVICE;
     break;
   case SDSP_DOMAIN_ID:
-    name = SDSPRPC_DEVICE;
+    *secure_name = SDSPRPC_SECURE_DEVICE;
+    *non_secure_name = SDSPRPC_DEVICE;
     break;
   case MDSP_DOMAIN_ID:
-    name = MDSPRPC_DEVICE;
+    *secure_name = MDSPRPC_SECURE_DEVICE;
+    *non_secure_name = MDSPRPC_DEVICE;
     break;
   case CDSP_DOMAIN_ID:
-    name = CDSPRPC_DEVICE;
+    *secure_name = CDSPRPC_SECURE_DEVICE;
+    *non_secure_name = CDSPRPC_DEVICE;
     break;
   case CDSP1_DOMAIN_ID:
-    name = CDSP1RPC_DEVICE;
+    *secure_name = CDSP1RPC_SECURE_DEVICE;
+    *non_secure_name = CDSP1RPC_DEVICE;
     break;
   case GDSP0_DOMAIN_ID:
-    name = GDSP0RPC_DEVICE;
+    *secure_name = GDSP0RPC_SECURE_DEVICE;
+    *non_secure_name = GDSP0RPC_DEVICE;
     break;
   case GDSP1_DOMAIN_ID:
-    name = GDSP1RPC_DEVICE;
+    *secure_name = GDSP1RPC_SECURE_DEVICE;
+    *non_secure_name = GDSP1RPC_DEVICE;
     break;
   default:
     FARF(ERROR, "ERROR: %s Invalid domain %d", __func__, domain);
+    *secure_name = NULL;
+    *non_secure_name = NULL;
     break;
   }
-  return name;
 }
 
 int open_device_node(int domain_id) {
   int dev = -1, nErr = 0;
   int domain = GET_DOMAIN_FROM_EFFEC_DOMAIN_ID(domain_id);
   int sess_id = GET_SESSION_ID_FROM_DOMAIN_ID(domain_id);
+  const char *secure_dev = NULL, *non_secure_dev = NULL;
 
   if (IS_VALID_DOMAIN_ID(domain)) {
-    dev = open(get_secure_domain_name(domain), O_NONBLOCK);
+    get_domain_device_names(domain, &secure_dev, &non_secure_dev);
+    dev = open(secure_dev, O_NONBLOCK);
     if ((dev < 0) && ((errno == ENOENT) || (errno == EACCES))) {
       FARF(RUNTIME_RPC_HIGH,
            "Device node %s open failed for domain %d (errno %s),"
            "falling back to node %s \n",
-           get_secure_domain_name(domain), domain, strerror(errno),
-           get_domain_name(domain));
-      dev = open(get_domain_name(domain), O_NONBLOCK);
+           secure_dev, domain, strerror(errno), non_secure_dev);
+      dev = open(non_secure_dev, O_NONBLOCK);
       if ((dev < 0) && ((errno == ENOENT) || (errno == EACCES))) {
         FARF(RUNTIME_RPC_HIGH,
              "Device node %s open failed for domain %d (errno %s)\n",
-             get_domain_name(domain), domain, strerror(errno));
+             non_secure_dev, domain, strerror(errno));
       }
     }
   }
@@ -3277,8 +3285,8 @@ int open_device_node(int domain_id) {
          "dev : %s. (errno %d, %s) (Either the remote processor is down, or "
          "application does not have permission to access the remote "
          "processor\n",
-         nErr, __func__, domain_id, sess_id, get_secure_domain_name(domain),
-         get_domain_name(domain), errno, strerror(errno));
+         nErr, __func__, domain_id, sess_id, secure_dev,
+         non_secure_dev, errno, strerror(errno));
   return dev;
 }
 
