@@ -2030,11 +2030,10 @@ bail:
   return nErr;
 }
 
-static int manage_poll_qos(int domain, remote_handle64 h, uint32_t enable,
-                           uint32_t latency) {
+static int manage_poll_qos(int domain, remote_handle64 h, uint32_t enable) {
   int nErr = AEE_SUCCESS, dev = -1;
   const unsigned int MAX_POLL_TIMEOUT = 10000;
-  struct fastrpc_ctrl_latency lp = {0};
+  struct fastrpc_ioctl_set_option op = {0};
 
   /* Handle will be -1 in non-domains invocation. Create DSP session if
    * necessary  */
@@ -2048,13 +2047,10 @@ static int manage_poll_qos(int domain, remote_handle64 h, uint32_t enable,
    * already */
   VERIFYC((hlist) && (-1 != (dev = hlist[domain].dev)), AEE_ERPC);
 
-  // Max poll timeout allowed is 10 ms
-  VERIFYC(latency < MAX_POLL_TIMEOUT, AEE_EBADPARM);
-
   /* Update polling mode in kernel */
-  lp.enable = enable;
-  lp.latency = latency;
-  nErr = ioctl_control(dev, DSPRPC_RPC_POLL, &lp);
+  op.req = FASTRPC_POLL_MODE;
+  op.value = enable;
+  nErr = ioctl_control(dev, FASTRPC_POLL_MODE, &op);
   if (nErr) {
     nErr = convert_kernel_to_user_error(nErr, errno);
     goto bail;
@@ -2063,22 +2059,21 @@ static int manage_poll_qos(int domain, remote_handle64 h, uint32_t enable,
   /* Update polling mode in DSP */
   if (h == INVALID_HANDLE) {
     VERIFY(AEE_SUCCESS ==
-           (nErr = adsp_current_process_poll_mode(enable, latency)));
+           (nErr = adsp_current_process_poll_mode(enable, MAX_POLL_TIMEOUT)));
   } else {
     remote_handle64 handle = get_adsp_current_process1_handle(domain);
     VERIFY(AEE_SUCCESS ==
-           (nErr = adsp_current_process1_poll_mode(handle, enable, latency)));
+           (nErr = adsp_current_process1_poll_mode(handle, enable, MAX_POLL_TIMEOUT)));
   }
   FARF(ALWAYS,
-       "%s: poll mode updated to %u for domain %d, handle 0x%" PRIx64
-       " for timeout %u\n",
-       __func__, enable, domain, h, latency);
+       "%s: poll mode updated to %u for domain %d, handle 0x%" PRIx64 "\n",
+       __func__, enable, domain, h);
 bail:
   if (nErr) {
     FARF(ERROR,
          "Error 0x%x (errno %d): %s failed for domain %d, handle 0x%" PRIx64
-         ", enable %u, timeout %u (%s)\n",
-         nErr, errno, __func__, domain, h, enable, latency, strerror(errno));
+         ", enable %u (%s)\n",
+         nErr, errno, __func__, domain, h, enable, strerror(errno));
   }
   return nErr;
 }
@@ -2288,7 +2283,7 @@ int remote_handle_control_domain(int domain, remote_handle64 h, uint32_t req,
       VERIFY(AEE_SUCCESS ==
              (nErr = manage_adaptive_qos(domain, RPC_DISABLE_QOS)));
       VERIFY(AEE_SUCCESS ==
-             (nErr = manage_poll_qos(domain, h, RPC_DISABLE_QOS, lp->latency)));
+             (nErr = manage_poll_qos(domain, h, 0)));
       /* Error ignored, currently meeting qos requirement is optional. Consider
        * to error out in later targets */
       fastrpc_set_qos_latency(domain, h, FASTRPC_QOS_MAX_LATENCY_USEC);
@@ -2310,7 +2305,7 @@ int remote_handle_control_domain(int domain, remote_handle64 h, uint32_t req,
     }
     case RPC_POLL_QOS: {
       VERIFY(AEE_SUCCESS ==
-             (nErr = manage_poll_qos(domain, h, RPC_POLL_QOS, lp->latency)));
+             (nErr = manage_poll_qos(domain, h, 1)));
       break;
     }
     default:
