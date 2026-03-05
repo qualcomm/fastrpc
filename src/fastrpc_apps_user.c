@@ -3425,9 +3425,7 @@ static int open_shell(int domain_id, apps_std_FILE *fh, int unsigned_shell) {
   strlcpy(shell_absName, shell_name, shell_absNameLen);
   strlcat(shell_absName, domain_str, shell_absNameLen);
 
-  strlcpy(dir_list, DSP_LIBS_LOCATION, sizeof(dir_list));
-  nErr = fopen_from_dirlist(dir_list, ";", "r", shell_absName, fh);
-
+  nErr = fopen_from_global_dirlist(shell_absName, "r", fh);
   if (nErr) {
     absNameLen = strlen(VENDOR_DSP_LOCATION) + shell_absNameLen + 1;
     VERIFYC(NULL !=
@@ -3437,19 +3435,18 @@ static int open_shell(int domain_id, apps_std_FILE *fh, int unsigned_shell) {
     strlcat(absName, shell_absName, absNameLen);
 
     nErr = apps_std_fopen(absName, "r", fh);
-    if (nErr) {
-      absNameLen = strlen(VENDOR_DOM_LOCATION) + shell_absNameLen + 1;
-      VERIFYC(NULL != (absName =
-                           (char *)realloc(absName, sizeof(char) * absNameLen)),
-              AEE_ENOMEMORY);
-      strlcpy(absName, VENDOR_DSP_LOCATION, absNameLen);
-      strlcat(absName, SUBSYSTEM_NAME[domain], absNameLen);
-      strlcat(absName, "/", absNameLen);
-      strlcat(absName, shell_absName, absNameLen);
-
-      nErr = apps_std_fopen(absName, "r", fh);
-    }
   }
+  if (nErr) {
+    absNameLen = strlen(VENDOR_DOM_LOCATION) + shell_absNameLen + 1;
+    VERIFYC(NULL != (absName =
+    	(char *)realloc(absName, sizeof(char) * absNameLen)), AEE_ENOMEMORY);
+    strlcpy(absName, VENDOR_DSP_LOCATION, absNameLen);
+    strlcat(absName, SUBSYSTEM_NAME[domain], absNameLen);
+    strlcat(absName, "/", absNameLen);
+    strlcat(absName, shell_absName, absNameLen);
+    nErr = apps_std_fopen(absName, "r", fh);
+  }
+
   if (!nErr)
     FARF(RUNTIME_RPC_HIGH, "Successfully opened %s, domain %d", shell_absName, domain);
 bail:
