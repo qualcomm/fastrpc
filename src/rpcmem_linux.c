@@ -240,6 +240,10 @@ void *rpcmem_alloc(int heapid, uint32_t flags, int size) {
   return rpcmem_alloc_internal(heapid, flags, size);
 }
 
+void *rpcmem_alloc2(int heapid, uint32_t flags, size_t size) {
+  return rpcmem_alloc_internal(heapid, flags, (size_t)size);
+}
+
 void rpcmem_deinit_internal() { rpcmem_deinit(); }
 
 void rpcmem_init_internal() { rpcmem_init(); }
