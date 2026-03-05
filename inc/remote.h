@@ -700,7 +700,16 @@ enum fastrpc_map_flags {
      */
     FASTRPC_MAP_FD_NOMAP,
 
-    /** Update FASTRPC_MAP_MAX when adding new value to this enum **/
+    /**
+     * These 2 flags work the same way as FASTRPC_MAP_FD and
+     * FASTRPC_MAP_FD_DELAYED with the only difference being the DSP mapping
+     * created in the extended address space.
+     */
+    FASTRPC_MAP_FD_EXTENDED,
+    FASTRPC_MAP_FD_DELAYED_EXTENDED,
+
+    /** Always keep this as the last member */
+    FASTRPC_MAP_MAX,
 };
 
 /**
