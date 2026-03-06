@@ -1,0 +1,28 @@
+# udev rules for Qualcomm FastRPC devices
+# These rules set permissions and systemd tags for FastRPC device nodes
+
+# aDSP devices
+ACTION=="add", SUBSYSTEM=="misc", KERNEL=="fastrpc-adsp", OWNER="fastrpc", GROUP="fastrpc", MODE="0640", TAG+="systemd", ENV{SYSTEMD_WANTS}+="adsprpcd.service"
+ACTION=="add", SUBSYSTEM=="misc", KERNEL=="fastrpc-adsp-secure", OWNER="fastrpc", GROUP="fastrpc", MODE="0640", TAG+="systemd", ENV{SYSTEMD_WANTS}+="adsprpcd.service"
+ACTION=="add", SUBSYSTEM=="misc", KERNEL=="fastrpc-adsp", OWNER="fastrpc", GROUP="fastrpc", MODE="0640", TAG+="systemd", ENV{SYSTEMD_WANTS}+="adsprpcd_audiopd.service"
+ACTION=="add", SUBSYSTEM=="misc", KERNEL=="fastrpc-adsp-secure", OWNER="fastrpc", GROUP="fastrpc", MODE="0640", TAG+="systemd", ENV{SYSTEMD_WANTS}+="adsprpcd_audiopd.service"
+
+# cDSP devices
+ACTION=="add", SUBSYSTEM=="misc", KERNEL=="fastrpc-cdsp", OWNER="fastrpc", GROUP="fastrpc", MODE="0640", TAG+="systemd", ENV{SYSTEMD_WANTS}+="cdsprpcd.service"
+ACTION=="add", SUBSYSTEM=="misc", KERNEL=="fastrpc-cdsp-secure", OWNER="fastrpc", GROUP="fastrpc", MODE="0640", TAG+="systemd", ENV{SYSTEMD_WANTS}+="cdsprpcd.service"
+
+# cDSP1 devices
+ACTION=="add", SUBSYSTEM=="misc", KERNEL=="fastrpc-cdsp1", OWNER="fastrpc", GROUP="fastrpc", MODE="0640", TAG+="systemd", ENV{SYSTEMD_WANTS}+="cdsp1rpcd.service"
+ACTION=="add", SUBSYSTEM=="misc", KERNEL=="fastrpc-cdsp1-secure", OWNER="fastrpc", GROUP="fastrpc", MODE="0640", TAG+="systemd", ENV{SYSTEMD_WANTS}+="cdsp1rpcd.service"
+
+# gDSP0 devices
+ACTION=="add", SUBSYSTEM=="misc", KERNEL=="fastrpc-gdsp0", OWNER="fastrpc", GROUP="fastrpc", MODE="0640", TAG+="systemd", ENV{SYSTEMD_WANTS}+="gdsp0rpcd.service"
+ACTION=="add", SUBSYSTEM=="misc", KERNEL=="fastrpc-gdsp0-secure", OWNER="fastrpc", GROUP="fastrpc", MODE="0640", TAG+="systemd", ENV{SYSTEMD_WANTS}+="gdsp0rpcd.service"
+
+# gDSP1 devices
+ACTION=="add", SUBSYSTEM=="misc", KERNEL=="fastrpc-gdsp1", OWNER="fastrpc", GROUP="fastrpc", MODE="0640", TAG+="systemd", ENV{SYSTEMD_WANTS}+="gdsp1rpcd.service"
+ACTION=="add", SUBSYSTEM=="misc", KERNEL=="fastrpc-gdsp1-secure", OWNER="fastrpc", GROUP="fastrpc", MODE="0640", TAG+="systemd", ENV{SYSTEMD_WANTS}+="gdsp1rpcd.service"
+
+# sDSP devices
+ACTION=="add", SUBSYSTEM=="misc", KERNEL=="fastrpc-sdsp", OWNER="fastrpc", GROUP="fastrpc", MODE="0640", TAG+="systemd", ENV{SYSTEMD_WANTS}+="sdsprpcd.service"
+ACTION=="add", SUBSYSTEM=="misc", KERNEL=="fastrpc-sdsp-secure", OWNER="fastrpc", GROUP="fastrpc", MODE="0640", TAG+="systemd", ENV{SYSTEMD_WANTS}+="sdsprpcd.service"

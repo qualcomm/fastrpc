@@ -9,6 +9,3 @@ Type=exec
 ExecStart=/usr/bin/cdsprpcd rootpd cdsp1
 Restart=on-failure
 RestartSec=5
-
-[Install]
-WantedBy=multi-user.target
