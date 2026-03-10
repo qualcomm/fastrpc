@@ -457,6 +457,7 @@ AEEResult dspqueue_create(int domain, uint32_t flags, uint32_t req_queue_size,
   int queue_mapped = 0;
   unsigned signals = 0;
 
+  FARF(ALWAYS, "%s called for domain: %d, flags: %d", __func__, domain, flags);
   VERIFYC(queue, AEE_EBADPARM);
   *queue = NULL;
   errno = 0;
@@ -808,6 +809,7 @@ AEEResult dspqueue_close(dspqueue_t queue) {
   int32_t imported;
   unsigned i;
 
+  FARF(ALWAYS, "%s called for queue: 0x%p", __func__, queue);
   errno = 0;
   VERIFYC(q, AEE_EBADPARM);
 
