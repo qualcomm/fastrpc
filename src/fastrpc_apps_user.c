@@ -2995,6 +2995,7 @@ static void domain_deinit(int domain) {
     trace_marker_deinit(domain);
     deinitFileWatcher(domain);
     adspmsgd_stop(domain);
+    fastrpc_log_deinit();
     fastrpc_mem_close(domain);
     apps_mem_deinit(domain);
     hlist[domain].state = 0;
@@ -3759,6 +3760,7 @@ static int domain_init(int domain, int *dev) {
   }
   VERIFY(AEE_SUCCESS == (nErr = fastrpc_mem_open(domain)));
   VERIFY(AEE_SUCCESS == (nErr = apps_mem_init(domain)));
+  fastrpc_log_init();
 
   if (dom == CDSP_DOMAIN_ID || dom == CDSP1_DOMAIN_ID || dom == GDSP0_DOMAIN_ID || dom == GDSP1_DOMAIN_ID) {
     panic_handle = get_adsp_current_process1_handle(domain);
@@ -3865,7 +3867,6 @@ static void fastrpc_apps_user_deinit(void) {
   fastrpc_notif_deinit();
   apps_mem_table_deinit();
   fastrpc_wake_lock_deinit();
-  fastrpc_log_deinit();
   fastrpc_mem_deinit();
   PL_DEINIT(apps_std);
   PL_DEINIT(rpcmem);
@@ -3935,7 +3936,6 @@ static int fastrpc_apps_user_init(void) {
 #endif
   fastrpc_mem_init();
   fastrpc_context_table_init();
-  fastrpc_log_init();
   fastrpc_config_init();
   pthread_mutex_init(&update_notif_list_mut, 0);
   VERIFYC(NULL != (hlist = calloc(NUM_DOMAINS_EXTEND, sizeof(*hlist))),
