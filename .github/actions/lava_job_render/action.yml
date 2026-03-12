@@ -177,7 +177,7 @@ runs:
           -e TARGET="${{ env.LAVA_DEVICE_NAME }}" \
           -e TARGET_DTB="${{ env.DEVICE_TREE }}" \
           ${{ inputs.docker_image }} \
-          sh -c 'export BOOT_METHOD=fastboot && \
+          sh -c 'export BOOT_METHOD=fastboot_fastrpc && \
             export TEST_METHOD=generic && \
             export TARGET=${TARGET} && \
             export TARGET_DTB=${TARGET_DTB} && \
