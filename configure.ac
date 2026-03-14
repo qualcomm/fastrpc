@@ -39,6 +39,9 @@ AM_PROG_CC_C_O
 
 # Checks for libraries.
 
+# Enable pkg-config
+PKG_PROG_PKG_CONFIG
+
 # Configure systemd unit directory option (--with-systemdsystemunitdir)
 AC_ARG_WITH([systemdsystemunitdir],
   [AS_HELP_STRING([--with-systemdsystemunitdir=DIR],
@@ -48,12 +51,23 @@ AC_ARG_WITH([systemdsystemunitdir],
 AC_MSG_NOTICE([systemd unit directory: $systemdsystemunitdir])
 AC_SUBST([systemdsystemunitdir])
 
+# Configure udev rules directory using pkg-config
+AC_ARG_WITH([udevrulesdir],
+  [AS_HELP_STRING([--with-udevrulesdir=DIR],
+                  [Directory for udev rules files])],
+  [udevrulesdir="$withval"],
+  [
+    # Get udev directory from pkg-config
+    PKG_CHECK_VAR([udevrulesdir], [udev], [udevdir],
+      [udevrulesdir="${udevrulesdir}/rules.d"],
+      [AC_MSG_ERROR([Could not determine udev rules directory. Please install udev development files or use --with-udevrulesdir=DIR])])
+  ])
+AC_MSG_NOTICE([udev rules directory: $udevrulesdir])
+AC_SUBST([udevrulesdir])
+
 # Checks for typedefs, structures, and compiler characteristics.
 
 # Checks for library functions.
-
-# Enable pkg-config
-PKG_PROG_PKG_CONFIG
 
 # Check for libyaml only if not Android
 AS_IF([test "$compile_for_android" = no], [
