@@ -23,6 +23,7 @@
 #include <string.h>
 #include <sys/mman.h>
 #include "fastrpc_hash_table.h"
+#include "fastrpc_internal.h"
 
 #define ADSP_MMAP_HEAP_ADDR 4
 #define ADSP_MMAP_REMOTE_HEAP_ADDR 8
@@ -47,6 +48,7 @@ struct mem_info {
   int32_t size;
   int32_t mapped;
   uint32_t rflags;
+  enum fastrpc_map_type map_method;
 };
 
 /* Delete and free all nodes in hash-table */
@@ -167,9 +169,19 @@ __QAIC_IMPL(apps_mem_request_map64)(int heapid, uint32_t lflags, uint32_t rflags
             AEE_ENORPCMEMORY);
     fd = rpcmem_to_fd_internal(buf);
     VERIFYC(fd > 0, AEE_EBADPARM);
-    VERIFY(AEE_SUCCESS ==
-           (nErr = fastrpc_mmap_internal(domain, fd, buf, 0, len,
-                                         rflags, vadsp)));
+    nErr = fastrpc_mmap_internal(domain, fd, buf, 0, len,
+                                          rflags, vadsp);
+    minfo->map_method = MEM_MAP;
+    if (nErr == AEE_EUNSUPPORTED) {
+      rpcmem_free_internal(buf);
+      buf = NULL;
+      fd = -1;
+      minfo->map_method = MMAP_64;
+      VERIFY(AEE_SUCCESS == (nErr = remote_mmap64_internal(fd, rflags, 
+                              (uint64_t)buf, len, (uint64_t *)vadsp)));
+    } else if (nErr) {
+          goto bail;
+    }
     pbuf = (uint64_t)buf;
     *vapps = pbuf;
     minfo->vapps = *vapps;
@@ -256,11 +268,21 @@ __QAIC_IMPL(apps_mem_request_unmap64)(uint64_t vadsp,
        * So continue to unmap to avoid driver global maps leak.
        * For other cases, use fastrpc_munmap_internal as they were mapped with fastrpc_mmap_internal.
        */
-      if (mfree) {
-         VERIFY(AEE_SUCCESS == (nErr = fastrpc_munmap_internal(domain, (uint64_t)vadsp, len)));
-      } else {
-         VERIFY(AEE_SUCCESS == (nErr = remote_munmap64((uint64_t)vadsp, len)));
+      switch (minfo->map_method) {
+          case MEM_MAP:
+              VERIFY(AEE_SUCCESS ==
+                    (nErr = fastrpc_munmap_internal(domain,
+                                                    (uint64_t)vadsp, len)));
+              break;
+          case MMAP_64:
+              VERIFY(AEE_SUCCESS ==
+                    (nErr = remote_munmap64((uint64_t)vadsp, len)));
+              break;
+          default:
+              VERIFYC(0, AEE_EBADPARM);
+              break;
       }
+
       if (!mfree)
          goto bail;
    }
