@@ -169,13 +169,20 @@ void configure_dsp_paths() {
   char machine_name[PATH_MAX] = {0};
   FILE *file = fopen(MACHINE_NAME_PATH, "r");
 
-  if (file == NULL)
-    return;
+  if (file) {
+    if (fgets(machine_name, sizeof(machine_name), file) != NULL)
+        // Remove trailing newline if present
+        machine_name[strcspn(machine_name, "\n")] = '\0';
 
-  if (fgets(machine_name, sizeof(machine_name), file) != NULL)
-    // Remove trailing newline if present
-    machine_name[strcspn(machine_name, "\n")] = '\0';
-
-  fclose(file);
-  parse_config_dir(machine_name);
+    fclose(file);
+    parse_config_dir(machine_name);
+  } else {
+    char *env_value = getenv("MACHINE_NAME");
+    // fallback to look for MACHINE_NAME in environment variable
+    if (env_value) {
+      snprintf(machine_name, sizeof(machine_name), "%s", env_value);
+      machine_name[strcspn(machine_name, "\n")] = '\0';
+      parse_config_dir(machine_name);
+    }
+  }
 }
