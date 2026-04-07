@@ -1488,11 +1488,19 @@ bail:
     }
     if (0 == check_rpc_error(nErr)) {
       if (get_logger_state(domain)) {
-        FARF(ERROR,
-             "Error 0x%x: %s failed for module %s, handle 0x%" PRIx64
-             ", method %d on domain %d (sc 0x%x) (errno %s)\n",
-             nErr, __func__, h->name, local, REMOTE_SCALARS_METHOD(sc), domain, sc,
-             strerror(errno));
+        if (nErr == DSP_AEE_EOFFSET + AEE_ENOSUCHMOD) {
+          FARF(ALWAYS,
+               "Warning: %s module %s is not supported on DSP domain %d, handle 0x%" PRIx64
+               ", method %d (sc 0x%x) (errno %s)\n",
+               __func__, h->name, domain, local, REMOTE_SCALARS_METHOD(sc), sc,
+               strerror(errno));
+        } else {
+          FARF(ERROR,
+               "Error 0x%x: %s failed for module %s, handle 0x%" PRIx64
+               ", method %d on domain %d (sc 0x%x) (errno %s)\n",
+               nErr, __func__, h->name, local, REMOTE_SCALARS_METHOD(sc), domain, sc,
+               strerror(errno));
+        }
       }
     }
   }
