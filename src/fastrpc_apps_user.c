@@ -77,8 +77,10 @@
 
 #define VENDOR_DSP_LOCATION "/vendor/dsp/"
 #define VENDOR_DOM_LOCATION "/vendor/dsp/xdsp/"
+#define HEXAGON_LIBS_PATH_PREFIX CONFIG_BASE_DIR "hexagon"
 
 char DSP_LIBS_LOCATION[PATH_MAX] = DEFAULT_DSP_SEARCH_PATHS;
+static char DSP_SEARCH_PATHS_CACHE[NUM_DOMAINS][PATH_MAX] = {{0}};
 
 #ifdef LE_ENABLE
 #define PROPERTY_VALUE_MAX                                                     \
@@ -326,6 +328,92 @@ extern void apps_mem_table_deinit(void);
 
 static uint32_t crc_table[256];
 static atomic_bool timer_expired = false;
+
+static void build_dsp_search_path_cache_for_domain(int domain) {
+  int nErr = AEE_SUCCESS;
+  fastrpc_capability cap = {0, ARCH_VER, 0};
+  char arch_str[64] = {0};
+  char arch_path[PATH_MAX] = {0};
+  char *domain_path_cache = NULL;
+  const char *yaml_arch = NULL;
+
+  if (!IS_VALID_DOMAIN_ID(domain)) {
+    FARF(ALWAYS, "Warning: %s: Invalid domain %d", __func__, domain);
+    return;
+  }
+
+  domain_path_cache = DSP_SEARCH_PATHS_CACHE[domain];
+
+  /*
+   * Resolve arch string: capability API is preferred; YAML is the fallback
+   * for legacy targets where the capability is not supported.
+   */
+  cap.domain = domain;
+  nErr = fastrpc_get_cap(cap.domain, cap.attribute_ID, &cap.capability);
+  if (nErr == AEE_SUCCESS && cap.capability != 0) {
+    snprintf(arch_str, sizeof(arch_str), "v%02x", cap.capability & 0xFF);
+    FARF(RUNTIME_RPC_HIGH, "%s: domain %d: resolved ARCH from capability 0x%x: %s",
+         __func__, domain, cap.capability, arch_str);
+  } else {
+    /* Legacy target: capability API not supported, use YAML ARCH config. */
+    FARF(ALWAYS,
+         "Warning 0x%x: %s: ARCH_VER capability not supported for domain %d, "
+         "trying YAML ARCH config",
+         nErr, __func__, domain);
+    yaml_arch = get_dsp_arch_from_yaml(domain);
+    if (!yaml_arch || yaml_arch[0] == '\0') {
+      FARF(ALWAYS,
+           "Warning: %s: No YAML ARCH config for domain %d, "
+           "using DSP_LIBS_LOCATION only",
+           __func__, domain);
+      strlcpy(domain_path_cache, DSP_LIBS_LOCATION, PATH_MAX);
+      return;
+    }
+    strlcpy(arch_str, yaml_arch, sizeof(arch_str));
+    FARF(RUNTIME_RPC_HIGH, "%s: domain %d: resolved ARCH from YAML config: %s",
+         __func__, domain, arch_str);
+  }
+
+  /*
+   * Build the arch-specific path and put it at the front of the search list,
+   * followed by DSP_LIBS_LOCATION (board/YAML paths + generic fallback).
+   * The user-set ADSP_LIBRARY_PATH env is prepended at open-time by
+   * apps_std_imp, so the effective resolution order is:
+   *   1. ADSP_LIBRARY_PATH (user/container, highest priority)
+   *   2. arch-specific path  (e.g. CONFIG_BASE_DIR/hexagon/v75)
+   *   3. DSP_LIBS_LOCATION   (board-specific path from YAML + generic fallback)
+   */
+  if (snprintf(arch_path, sizeof(arch_path), "%s/%s",
+               HEXAGON_LIBS_PATH_PREFIX, arch_str) >= (int)sizeof(arch_path)) {
+    FARF(ALWAYS,
+         "Warning: %s: ARCH path truncated for domain %d, "
+         "using DSP_LIBS_LOCATION only",
+         __func__, domain);
+    strlcpy(domain_path_cache, DSP_LIBS_LOCATION, PATH_MAX);
+    return;
+  }
+
+  strlcpy(domain_path_cache, arch_path, PATH_MAX);
+  strlcat(domain_path_cache, ";", PATH_MAX);
+  if (strlcat(domain_path_cache, DSP_LIBS_LOCATION, PATH_MAX) >= PATH_MAX) {
+    FARF(ALWAYS,
+         "Warning: %s: Failed to build search list for domain %d, "
+         "using DSP_LIBS_LOCATION only",
+         __func__, domain);
+    strlcpy(domain_path_cache, DSP_LIBS_LOCATION, PATH_MAX);
+    return;
+  }
+
+  FARF(RUNTIME_RPC_HIGH, "%s: domain %d: search path: %s", __func__, domain,
+       domain_path_cache);
+}
+
+static const char *get_dsp_search_path_for_domain(int domain) {
+  if (IS_VALID_DOMAIN_ID(domain) && DSP_SEARCH_PATHS_CACHE[domain][0] != '\0')
+    return DSP_SEARCH_PATHS_CACHE[domain];
+
+  return DSP_LIBS_LOCATION;
+}
 
 void set_thread_context(int domain) {
   if (tlsKey != INVALID_KEY) {
@@ -3792,6 +3880,7 @@ static int domain_init(int domain, int *dev) {
     }
   }
   VERIFY(AEE_SUCCESS == (nErr = fastrpc_enable_kernel_optimizations(domain)));
+  build_dsp_search_path_cache_for_domain(domain);
   initFileWatcher(domain); // Ignore errors
   trace_marker_init(domain);
 
@@ -3927,7 +4016,8 @@ static void exit_thread(void *value) {
 }
 
 const char* get_dsp_search_path() {
-  return DSP_LIBS_LOCATION;
+  int domain = GET_DOMAIN_FROM_EFFEC_DOMAIN_ID(get_current_domain());
+  return get_dsp_search_path_for_domain(domain);
 }
 
 /*
