@@ -77,8 +77,10 @@
 
 #define VENDOR_DSP_LOCATION "/vendor/dsp/"
 #define VENDOR_DOM_LOCATION "/vendor/dsp/xdsp/"
+#define HEXAGON_LIBS_PATH_PREFIX "/usr/share/qcom/hexagon"
 
 char DSP_LIBS_LOCATION[PATH_MAX] = DEFAULT_DSP_SEARCH_PATHS;
+static char DSP_SEARCH_PATHS_CACHE[NUM_DOMAINS][PATH_MAX] = {{0}};
 
 #ifdef LE_ENABLE
 #define PROPERTY_VALUE_MAX                                                     \
@@ -326,6 +328,156 @@ extern void apps_mem_table_deinit(void);
 
 static uint32_t crc_table[256];
 static atomic_bool timer_expired = false;
+
+static int is_path_present_in_list(const char *dir_list, const char *path) {
+  const char *token_start = NULL;
+  const char *token_end = NULL;
+  size_t path_len = 0;
+
+  if (!dir_list || !path || !path[0])
+    return 0;
+
+  path_len = strlen(path);
+  token_start = dir_list;
+  while (*token_start != '\0') {
+    token_end = strchr(token_start, ';');
+    if (!token_end)
+      token_end = token_start + strlen(token_start);
+    if ((size_t)(token_end - token_start) == path_len &&
+        !strncmp(token_start, path, path_len)) {
+      return 1;
+    }
+    if (*token_end == '\0')
+      break;
+    token_start = token_end + 1;
+  }
+  return 0;
+}
+
+static int append_path_to_search_list(char *dir_list, size_t dir_list_size,
+                                      const char *path) {
+  size_t cur_len = 0;
+
+  if (!dir_list || !path || !path[0] || dir_list_size == 0)
+    return AEE_EBADPARM;
+
+  if (is_path_present_in_list(dir_list, path)) {
+    return AEE_SUCCESS;
+  }
+
+  cur_len = strlen(dir_list);
+  if (cur_len && dir_list[cur_len - 1] != ';') {
+    if (strlcat(dir_list, ";", dir_list_size) >= dir_list_size) {
+      return AEE_ENOMEMORY;
+    }
+  }
+
+  if (strlcat(dir_list, path, dir_list_size) >= dir_list_size) {
+    return AEE_ENOMEMORY;
+  }
+
+  return AEE_SUCCESS;
+}
+
+static void build_dsp_search_path_cache_for_domain(int domain) {
+  int nErr = AEE_SUCCESS;
+  fastrpc_capability cap = {0, ARCH_VER, 0};
+  uint32_t arch_ver = 0;
+  char arch_path[PATH_MAX] = {0};
+  char *domain_path_cache = NULL;
+  const char *yaml_arch = NULL;
+
+  if (!IS_VALID_DOMAIN_ID(domain)) {
+    FARF(ALWAYS, "Warning: %s: Invalid domain %d", __func__, domain);
+    return;
+  }
+
+  domain_path_cache = DSP_SEARCH_PATHS_CACHE[domain];
+  strlcpy(domain_path_cache, DSP_LIBS_LOCATION, PATH_MAX);
+
+  /* Try ARCH_VER capability first. */
+  cap.domain = domain;
+  nErr = fastrpc_get_cap(cap.domain, cap.attribute_ID, &cap.capability);
+  if (nErr != AEE_SUCCESS) {
+    FARF(ALWAYS,
+         "Warning 0x%x: %s: Failed to get ARCH_VER for domain %d, "
+         "falling back to YAML ARCH config",
+         nErr, __func__, cap.domain);
+    goto try_yaml;
+  }
+
+  arch_ver = cap.capability & 0xFF;
+  if (!arch_ver) {
+    FARF(ALWAYS,
+         "Warning: %s: Invalid ARCH_VER capability 0x%x for domain %d, "
+         "falling back to YAML ARCH config",
+         __func__, cap.capability, cap.domain);
+    goto try_yaml;
+  }
+
+  if (snprintf(arch_path, sizeof(arch_path), "%s/v%02x",
+               HEXAGON_LIBS_PATH_PREFIX, arch_ver) >= (int)sizeof(arch_path)) {
+    FARF(ALWAYS,
+         "Warning: %s: ARCH path truncated for capability 0x%x, "
+         "falling back to YAML ARCH config",
+         __func__, cap.capability);
+    goto try_yaml;
+  }
+
+  nErr = append_path_to_search_list(domain_path_cache, PATH_MAX, arch_path);
+  if (nErr != AEE_SUCCESS) {
+    FARF(ALWAYS,
+         "Warning: %s: Failed to append ARCH path %s for domain %d, "
+         "falling back to YAML ARCH config",
+         __func__, arch_path, cap.domain);
+    goto try_yaml;
+  }
+
+  FARF(ALWAYS,
+       "%s: domain %d: ARCH path from capability 0x%x: %s",
+       __func__, cap.domain, cap.capability, arch_path);
+  return;
+
+try_yaml:
+  /* Fallback: try per-domain ARCH key from YAML config. */
+  yaml_arch = get_dsp_arch_from_yaml(domain);
+  if (!yaml_arch || yaml_arch[0] == '\0') {
+    FARF(ALWAYS,
+         "Warning: %s: No YAML ARCH config for domain %d, "
+         "using DSP_LIBS_LOCATION only",
+         __func__, domain);
+    return;
+  }
+
+  if (snprintf(arch_path, sizeof(arch_path), "%s/%s",
+               HEXAGON_LIBS_PATH_PREFIX, yaml_arch) >= (int)sizeof(arch_path)) {
+    FARF(ALWAYS,
+         "Warning: %s: YAML ARCH path truncated for domain %d, "
+         "using DSP_LIBS_LOCATION only",
+         __func__, domain);
+    return;
+  }
+
+  nErr = append_path_to_search_list(domain_path_cache, PATH_MAX, arch_path);
+  if (nErr != AEE_SUCCESS) {
+    FARF(ALWAYS,
+         "Warning: %s: Failed to append YAML ARCH path %s for domain %d, "
+         "using DSP_LIBS_LOCATION only",
+         __func__, arch_path, domain);
+    return;
+  }
+
+  FARF(ALWAYS,
+       "%s: domain %d: ARCH path from YAML config (%s): %s",
+       __func__, domain, yaml_arch, arch_path);
+}
+
+static const char *get_dsp_search_path_for_domain(int domain) {
+  if (IS_VALID_DOMAIN_ID(domain))
+    return DSP_SEARCH_PATHS_CACHE[domain];
+
+  return DSP_LIBS_LOCATION;
+}
 
 void set_thread_context(int domain) {
   if (tlsKey != INVALID_KEY) {
@@ -3787,6 +3939,7 @@ static int domain_init(int domain, int *dev) {
   }
   fastrpc_perf_init(hlist[domain].dev, domain);
   get_dsp_dma_reverse_rpc_map_capability(domain);
+  build_dsp_search_path_cache_for_domain(domain);
   hlist[domain].state = FASTRPC_DOMAIN_STATE_INIT;
   hlist[domain].ref = 0;
   pthread_mutex_unlock(&hlist[domain].mut);
@@ -3903,7 +4056,8 @@ static void exit_thread(void *value) {
 }
 
 const char* get_dsp_search_path() {
-  return DSP_LIBS_LOCATION;
+  int domain = GET_DOMAIN_FROM_EFFEC_DOMAIN_ID(get_current_domain());
+  return get_dsp_search_path_for_domain(domain);
 }
 
 /*

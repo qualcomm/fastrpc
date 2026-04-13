@@ -1,1 +1,13 @@
-machines: map(key=str(), value=map(DSP_LIBRARY_PATH=regex('^/.+/')))
+machines: map(
+  key=str(),
+  value=map(
+    DSP_LIBRARY_PATH=regex('^/.+/'),
+    ADSP_ARCH=optional(regex('^v[0-9a-f]+$')),
+    MDSP_ARCH=optional(regex('^v[0-9a-f]+$')),
+    SDSP_ARCH=optional(regex('^v[0-9a-f]+$')),
+    CDSP_ARCH=optional(regex('^v[0-9a-f]+$')),
+    CDSP0_ARCH=optional(regex('^v[0-9a-f]+$')),
+    GDSP0_ARCH=optional(regex('^v[0-9a-f]+$')),
+    GDSP1_ARCH=optional(regex('^v[0-9a-f]+$'))
+  )
+)
