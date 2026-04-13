@@ -7,8 +7,6 @@ ConditionPathExists=|/dev/fastrpc-cdsp-secure
 [Service]
 Type=exec
 ExecStart=/usr/bin/cdsprpcd
-Restart=on-failure
-RestartSec=5
 
 [Install]
 WantedBy=multi-user.target
