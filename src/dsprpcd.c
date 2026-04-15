@@ -150,7 +150,8 @@ int main(int argc, char *argv[]) {
     lib_unversioned = GDSP_LISTENER_UNVERSIONED;
     dsp_name = "GDSP";
   #else
-    goto bail;
+    VERIFY_EPRINTF("daemon exiting %x (no DSP type defined)", nErr);
+    return nErr;
   #endif
 
   // Parse command-line options
@@ -197,7 +198,6 @@ int main(int argc, char *argv[]) {
         usleep(100000);
   }
 
-  bail:
-    VERIFY_EPRINTF("daemon exiting %x", nErr);
-    return nErr;
+  VERIFY_EPRINTF("daemon exiting %x", nErr);
+  return nErr;
 }
