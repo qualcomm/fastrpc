@@ -1560,14 +1560,13 @@ int remote_handle_open_domain(int domain, const char *name, remote_handle *ph,
      */
     if (strstr(pdName, get_domain_from_id(GET_DOMAIN_FROM_EFFEC_DOMAIN_ID(domain))) &&
         strstr(pdName, FASTRPC_SESSION_URI)) {
-      strlcpy(pdName, pdName,
-                  (strlen(pdName) -
-                   strlen(get_domain_from_id(GET_DOMAIN_FROM_EFFEC_DOMAIN_ID(domain))) -
-                   strlen(FASTRPC_SESSION1_URI) + 1));
+      /* Truncate string in place by null-terminating at desired length */
+      pdName[strlen(pdName) -
+             strlen(get_domain_from_id(GET_DOMAIN_FROM_EFFEC_DOMAIN_ID(domain))) -
+             strlen(FASTRPC_SESSION1_URI)] = '\0';
     } else if (strstr(pdName, get_domain_from_id(domain))) {
-      strlcpy(
-          pdName, pdName,
-          (strlen(pdName) - strlen(get_domain_from_id(domain)) + 1));
+      /* Truncate string in place by null-terminating at desired length */
+      pdName[strlen(pdName) - strlen(get_domain_from_id(domain))] = '\0';
     }
     VERIFYC(MAX_DSPPD_NAMELEN > strlen(pdName), AEE_EBADPARM);
     strlcpy(hlist[domain].dsppdname, pdName, strlen(pdName) + 1);

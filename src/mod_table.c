@@ -549,7 +549,9 @@ static int open_mod_table_open_dynamic(struct open_mod_table *me,
         break;
       }
     }
-    rv = snprintf(tmp, tmplen, "%s_system.so", tmp);
+    /* Append "_system.so" to base name (avoid overlapping buffers in snprintf) */
+    strlcat(tmp, "_system.so", tmplen);
+    rv = strlen(tmp);
     VERIFYC((rv > 0) && (tmplen >= rv), AEE_EBADPARM);
     FARF(RUNTIME_RPC_HIGH, "calling dlopen for %s", tmp);
     dm->dlhandle = DLOPEN(tmp, RTLD_NOW);
