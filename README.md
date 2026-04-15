@@ -221,6 +221,7 @@ When reporting bugs, please provide the following details to facilitate debuggin
 
 - Hexagon SDK documentation: [Hexagon SDK](https://developer.qualcomm.com/software/hexagon-dsp-sdk)
 - Linaro documentation: [Testing FastRPC](https://git.codelinaro.org/linaro/qcomlt/fastrpc/-/wikis/Testing-FastRPC)
+- Daemon architecture: [Docs/daemons.md](Docs/daemons.md) - FastRPC daemon roles and implementation
 
 ## Contributions
 
