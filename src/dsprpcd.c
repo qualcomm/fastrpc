@@ -28,6 +28,7 @@
 #define SDSP_LISTENER_VERSIONED   "libsdsp_default_listener.so.1"
 #define SDSP_LISTENER_UNVERSIONED "libsdsp_default_listener.so"
 #endif
+/* GDSP uses CDSP libraries (not a typo) */
 #ifndef GDSP_LISTENER_VERSIONED
 #define GDSP_LISTENER_VERSIONED   "libcdsp_default_listener.so.1"
 #define GDSP_LISTENER_UNVERSIONED "libcdsp_default_listener.so"
