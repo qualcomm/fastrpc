@@ -1170,8 +1170,11 @@ int remote_handle_invoke_domain(int domain, remote_handle handle,
 
   if (IS_QTF_TRACING_ENABLED(hlist[domain].procattrs) &&
       !IS_STATIC_HANDLE(handle) && trace_marker_fd > 0) {
-    write(trace_marker_fd, INVOKE_BEGIN_TRACE_STR, invoke_begin_trace_strlen);
-    trace_enabled = true;
+    /* Write begin trace marker; only enable tracing if write succeeds.
+     * This ensures we don't attempt to write an end marker if begin failed. */
+    ssize_t ret = write(trace_marker_fd, INVOKE_BEGIN_TRACE_STR, invoke_begin_trace_strlen);
+    if (ret > 0)
+      trace_enabled = true;
   }
 
   VERIFY(AEE_SUCCESS == (nErr = fastrpc_session_dev(domain, &dev)));
@@ -1406,7 +1409,10 @@ bail:
     }
   }
   if (trace_enabled) {
-    write(trace_marker_fd, INVOKE_END_TRACE_STR, invoke_end_trace_strlen);
+    /* Write end trace marker. Store return value to satisfy warn_unused_result,
+     * but don't check it since trace writes are optional and failures are non-critical. */
+    ssize_t ret __attribute__((unused));
+    ret = write(trace_marker_fd, INVOKE_END_TRACE_STR, invoke_end_trace_strlen);
   }
   if (nErr != AEE_SUCCESS) {
     if ((nErr == -1) && (errno == ECONNRESET)) {
