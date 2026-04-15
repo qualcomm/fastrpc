@@ -80,6 +80,79 @@ AC_ARG_WITH([config-base-dir],
 AC_MSG_NOTICE([Config base path: $config_base_dir])
 AC_SUBST([CONFIG_BASE_DIR], ["$config_base_dir"])
 
+# Enable stricter compiler flags
+# These are based on Debian's dpkg-buildflags defaults for compatibility with
+# distro builds and to catch issues during development
+AC_ARG_ENABLE([stricter],
+  [AS_HELP_STRING([--enable-stricter],
+                  [Enable stricter compiler flags (warnings, stack protection, fortify source, RELRO)])],
+  [enable_stricter=$enableval],
+  [enable_stricter=no])
+
+# Helper macro to test if compiler accepts a flag
+AC_DEFUN([CC_CHECK_FLAG], [
+  AC_MSG_CHECKING([if $CC supports $1])
+  saved_CFLAGS="$CFLAGS"
+  CFLAGS="$CFLAGS $1"
+  AC_COMPILE_IFELSE([AC_LANG_PROGRAM([])],
+    [AC_MSG_RESULT([yes]); $2],
+    [AC_MSG_RESULT([no]); $3])
+  CFLAGS="$saved_CFLAGS"
+])
+
+# Helper macro to test if linker accepts a flag
+AC_DEFUN([LD_CHECK_FLAG], [
+  AC_MSG_CHECKING([if linker supports $1])
+  saved_LDFLAGS="$LDFLAGS"
+  LDFLAGS="$LDFLAGS $1"
+  AC_LINK_IFELSE([AC_LANG_PROGRAM([])],
+    [AC_MSG_RESULT([yes]); $2],
+    [AC_MSG_RESULT([no]); $3])
+  LDFLAGS="$saved_LDFLAGS"
+])
+
+# Set up hardening flags
+STRICTER_CFLAGS=""
+STRICTER_CPPFLAGS=""
+STRICTER_LDFLAGS=""
+AS_IF([test "x$enable_stricter" = "xyes"], [
+  # Format string security warnings
+  STRICTER_CFLAGS="-Wformat -Werror=format-security -Werror=implicit-function-declaration"
+  
+  # Stack protection
+  CC_CHECK_FLAG([-fstack-protector-strong],
+    [STRICTER_CFLAGS="$STRICTER_CFLAGS -fstack-protector-strong"])
+  CC_CHECK_FLAG([-fstack-clash-protection],
+    [STRICTER_CFLAGS="$STRICTER_CFLAGS -fstack-clash-protection"])
+  
+  # Architecture-specific hardening
+  AS_CASE([$host_cpu],
+    [aarch64], [
+      CC_CHECK_FLAG([-mbranch-protection=standard],
+        [STRICTER_CFLAGS="$STRICTER_CFLAGS -mbranch-protection=standard"])
+    ],
+    []
+  )
+  
+  # FORTIFY_SOURCE and reproducible builds
+  STRICTER_CPPFLAGS="-D_FORTIFY_SOURCE=2 -Wdate-time"
+  
+  # RELRO - read-only relocations
+  LD_CHECK_FLAG([-Wl,-z,relro],
+    [STRICTER_LDFLAGS="-Wl,-z,relro"])
+  
+  AC_MSG_NOTICE([Stricter compiler flags enabled)])
+  AC_MSG_NOTICE([  STRICTER_CFLAGS: $STRICTER_CFLAGS])
+  AC_MSG_NOTICE([  STRICTER_CPPFLAGS: $STRICTER_CPPFLAGS])
+  AC_MSG_NOTICE([  STRICTER_LDFLAGS: $STRICTER_LDFLAGS])
+], [
+  AC_MSG_NOTICE([Stricter compiler flags disabled (use --enable-stricter to enable)])
+])
+AC_SUBST([STRICTER_CFLAGS])
+AC_SUBST([STRICTER_CPPFLAGS])
+AC_SUBST([STRICTER_LDFLAGS])
+
+
 AC_CONFIG_FILES([
 Makefile
 inc/Makefile
