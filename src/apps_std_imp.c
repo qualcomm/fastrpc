@@ -154,8 +154,8 @@ int apps_std_get_dirinfo(const apps_std_DIR *dir,
   } else {
     nErr = ESTALE;
     VERIFY_EPRINTF(
-        "Error 0x%x: %s: stale directory handle 0x%llx passed by DSP\n", nErr,
-        __func__, dir->handle);
+        "Error 0x%x: %s: stale directory handle 0x%" PRIx64 " passed by DSP\n",
+        nErr, __func__, dir->handle);
     goto bail;
   }
 bail:

@@ -17,6 +17,7 @@
 #include "remote64.h"
 #include "rpcmem_internal.h"
 #include "verify.h"
+#include <inttypes.h>
 #include <pthread.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -122,8 +123,8 @@ __QAIC_IMPL(apps_mem_request_map64)(int heapid, uint32_t lflags, uint32_t rflags
   VERIFYC(me, AEE_ERESOURCENOTFOUND);
   VERIFY(AEE_SUCCESS ==
          (nErr = get_unsigned_pd_attribute(domain, &unsigned_module)));
-  FASTRPC_ATRACE_BEGIN_L("%s called with rflag 0x%x, lflags 0x%x, len 0x%llx, "
-                         "heapid %d and unsigned PD %d",
+  FASTRPC_ATRACE_BEGIN_L("%s called with rflag 0x%x, lflags 0x%x, "
+                         "len 0x%" PRIx64 ", heapid %d and unsigned PD %d",
                          __func__, rflags, lflags, len, heapid,
                          unsigned_module);
   if (unsigned_module) {
@@ -196,7 +197,7 @@ bail:
       minfo = NULL;
     }
     VERIFY_EPRINTF("Error 0x%x: apps_mem_request_mmap64 failed for fd 0x%x of "
-                   "size %lld (lflags 0x%x, rflags 0x%x)\n",
+                   "size %" PRId64 " (lflags 0x%x, rflags 0x%x)\n",
                    nErr, fd, len, lflags, rflags);
   }
   FASTRPC_ATRACE_END();
@@ -228,8 +229,8 @@ __QAIC_IMPL(apps_mem_request_unmap64)(uint64_t vadsp,
   int domain = get_current_domain();
   apps_mem_info *me = NULL;
 
-  FASTRPC_ATRACE_BEGIN_L("%s called with vadsp 0x%llx, len 0x%llx", __func__,
-                         vadsp, len);
+  FASTRPC_ATRACE_BEGIN_L("%s called with vadsp 0x%" PRIx64 ", len 0x%" PRIx64,
+                         __func__, vadsp, len);
   GET_HASH_NODE(apps_mem_info, domain, me);
   VERIFYC(me, AEE_ERESOURCENOTFOUND);
 
@@ -275,8 +276,8 @@ __QAIC_IMPL(apps_mem_request_unmap64)(uint64_t vadsp,
   mfree = NULL;
 bail:
   if (nErr != AEE_SUCCESS) {
-    VERIFY_EPRINTF("Error 0x%x: apps_mem_request_unmap64 failed for size %lld "
-                   "(vadsp 0x%llx)\n",
+    VERIFY_EPRINTF("Error 0x%x: apps_mem_request_unmap64 failed for size "
+                   "%" PRId64 " (vadsp 0x%" PRIx64 ")\n",
                    nErr, len, vadsp);
   }
   FASTRPC_ATRACE_END();
@@ -345,7 +346,7 @@ __QAIC_IMPL_EXPORT int __QAIC_IMPL(apps_mem_share_unmap)(uint64_t vadsp, int siz
   nErr = apps_mem_request_unmap64(vadsp, len1);
   if (nErr != AEE_SUCCESS) {
     VERIFY_EPRINTF(
-        "Error 0x%x: apps_mem_share_unmap failed size %d (vadsp 0x%llx)\n",
+        "Error 0x%x: apps_mem_share_unmap failed size %d (vadsp 0x%" PRIx64 ")\n",
         nErr, size, vadsp);
   }
   return nErr;
