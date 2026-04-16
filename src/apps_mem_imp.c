@@ -112,7 +112,7 @@ __QAIC_IMPL(apps_mem_request_map64)(int heapid, uint32_t lflags, uint32_t rflags
                                     uint64_t vin, int64_t len, uint64_t *vapps,
                                     uint64_t *vadsp) __QAIC_IMPL_ATTRIBUTE {
   struct mem_info *minfo = 0;
-  int nErr = 0, unsigned_module = 0, ualloc_support = 0;
+  int nErr = 0, unsigned_module = 0;
   void *buf = 0;
   uint64_t pbuf;
   int fd = -1;
@@ -127,9 +127,6 @@ __QAIC_IMPL(apps_mem_request_map64)(int heapid, uint32_t lflags, uint32_t rflags
                          "len 0x%" PRIx64 ", heapid %d and unsigned PD %d",
                          __func__, rflags, lflags, len, heapid,
                          unsigned_module);
-  if (unsigned_module) {
-    ualloc_support = is_userspace_allocation_supported();
-  }
   (void)vin;
   VERIFYC(len >= 0, AEE_EBADPARM);
   VERIFYC(NULL != (minfo = malloc(sizeof(*minfo))), AEE_ENOMEMORY);
