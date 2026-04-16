@@ -398,7 +398,8 @@ int fastrpc_session_put(int domain) {
   do {
     if (hlist) {
       pthread_mutex_lock(&hlist[domain].mut);
-      hlist[domain].ref--;
+      if (hlist[domain].ref > 0)
+        hlist[domain].ref--;
       ref = hlist[domain].ref;
       pthread_mutex_unlock(&hlist[domain].mut);
       FARF(RUNTIME_RPC_HIGH, "%s, domain %d, state %d, ref %d\n", __func__, domain,
