@@ -33,20 +33,6 @@
 #define POLL_TIMEOUT	10 * 1000
 #define EVENT_SIZE		( sizeof (struct inotify_event) )
 #define EVENT_BUF_LEN	( 1024 * ( EVENT_SIZE + 16 ) )
-#define ADSP_SECURE_DEVICE_NAME "fastrpc-adsp-secure"
-#define SDSP_SECURE_DEVICE_NAME "fastrpc-sdsp-secure"
-#define MDSP_SECURE_DEVICE_NAME "fastrpc-mdsp-secure"
-#define CDSP_SECURE_DEVICE_NAME "fastrpc-cdsp-secure"
-#define CDSP1_SECURE_DEVICE_NAME "fastrpc-cdsp1-secure"
-#define GDSP0_SECURE_DEVICE_NAME "fastrpc-gdsp0-secure"
-#define GDSP1_SECURE_DEVICE_NAME "fastrpc-gdsp1-secure"
-#define ADSP_DEVICE_NAME "fastrpc-adsp"
-#define SDSP_DEVICE_NAME "fastrpc-sdsp"
-#define MDSP_DEVICE_NAME "fastrpc-mdsp"
-#define CDSP_DEVICE_NAME "fastrpc-cdsp"
-#define CDSP1_DEVICE_NAME "fastrpc-cdsp1"
-#define GDSP0_DEVICE_NAME "fastrpc-gdsp0"
-#define GDSP1_DEVICE_NAME "fastrpc-gdsp1"
 
 // Array of supported domain names and its corresponding ID's.
 static domain_t supported_domains[] = {{ADSP_DOMAIN_ID, ADSP_DOMAIN},
@@ -70,95 +56,23 @@ static domain_t *get_domain_uri(int domain_id) {
   return NULL;
 }
 
-static const char *get_secure_device_name(int domain_id) {
-	const char *name;
-	int domain = GET_DOMAIN_FROM_EFFEC_DOMAIN_ID(domain_id);
-
-	switch (domain) {
-	case ADSP_DOMAIN_ID:
-		name = ADSP_SECURE_DEVICE_NAME;
-		break;
-	case SDSP_DOMAIN_ID:
-		name = SDSP_SECURE_DEVICE_NAME;
-		break;
-	case MDSP_DOMAIN_ID:
-		name = MDSP_SECURE_DEVICE_NAME;
-		break;
-	case CDSP_DOMAIN_ID:
-		name = CDSP_SECURE_DEVICE_NAME;
-		break;
-	case CDSP1_DOMAIN_ID:
-		name = CDSP1_SECURE_DEVICE_NAME;
-		break;
-	case GDSP0_DOMAIN_ID:
-		name = GDSP0_SECURE_DEVICE_NAME;
-		break;
-	case GDSP1_DOMAIN_ID:
-		name = GDSP1_SECURE_DEVICE_NAME;
-		break;
-	default:
-		name = DEFAULT_DEVICE;
-		break;
-	}
-
-	return name;
-}
-
-static const char *get_default_device_name(int domain_id) {
-	const char *name;
-	int domain = GET_DOMAIN_FROM_EFFEC_DOMAIN_ID(domain_id);
-
-	switch (domain) {
-	case ADSP_DOMAIN_ID:
-		name = ADSP_DEVICE_NAME;
-		break;
-	case SDSP_DOMAIN_ID:
-		name = SDSP_DEVICE_NAME;
-		break;
-	case MDSP_DOMAIN_ID:
-		name = MDSP_DEVICE_NAME;
-		break;
-	case CDSP_DOMAIN_ID:
-		name = CDSP_DEVICE_NAME;
-		break;
-	case CDSP1_DOMAIN_ID:
-		name = CDSP1_DEVICE_NAME;
-		break;
-	case GDSP0_DOMAIN_ID:
-		name = GDSP0_DEVICE_NAME;
-		break;
-	case GDSP1_DOMAIN_ID:
-		name = GDSP1_DEVICE_NAME;
-		break;
-	default:
-		name = DEFAULT_DEVICE;
-		break;
-	}
-
-	return name;
-}
 
 /**
  * fastrpc_dev_exists() - Check if device exists
- * @dev_name: Device name
+ * @dev_path: Full device path (e.g., "/dev/fastrpc-adsp")
  *
  * Return:
  *	True: Device node exists
  *	False: Device node does not exist
  */
-static bool fastrpc_dev_exists(const char* dev_name)
+static bool fastrpc_dev_exists(const char* dev_path)
 {
 	struct stat buffer;
-	char *path = NULL;
-	uint64_t len;
 
-	len = snprintf(0, 0, "/dev/%s", dev_name) + 1;
-	if(NULL == (path = (char *)malloc(len * sizeof(char))))
+	if (!dev_path)
 		return false;
 
-	snprintf(path, (int)len, "/dev/%s", dev_name);
-
-	return (stat(path, &buffer) == 0);
+	return (stat(dev_path, &buffer) == 0);
 }
 
 /**
@@ -172,13 +86,12 @@ static bool fastrpc_dev_exists(const char* dev_name)
 static int fastrpc_wait_for_device(int domain)
 {
 	int inotify_fd = -1, watch_fd = -1, err = 0;
-	const char *sec_dev_name = NULL, *def_dev_name = NULL;
+	const char *sec_dev_name = NULL, *non_sec_dev_name = NULL;
 	struct pollfd pfd[1];
 
-	sec_dev_name = get_secure_device_name(domain);
-	def_dev_name = get_default_device_name(domain);
+	get_domain_device_names(domain, &sec_dev_name, &non_sec_dev_name);
 
-	if (fastrpc_dev_exists(sec_dev_name) || fastrpc_dev_exists(def_dev_name))
+	if (fastrpc_dev_exists(sec_dev_name) || fastrpc_dev_exists(non_sec_dev_name))
 		return 0;
 
 	inotify_fd = inotify_init();
@@ -194,7 +107,7 @@ static int fastrpc_wait_for_device(int domain)
 		return AEE_EINVALIDFD;
 	}
 
-	if (fastrpc_dev_exists(sec_dev_name) || fastrpc_dev_exists(def_dev_name))
+	if (fastrpc_dev_exists(sec_dev_name) || fastrpc_dev_exists(non_sec_dev_name))
 		goto bail;
 
 	memset(pfd, 0 , sizeof(pfd));
@@ -227,11 +140,21 @@ static int fastrpc_wait_for_device(int domain)
 		 /* Loop over all events in the buffer. */
 		for (char *ptr = buffer; ptr < buffer + len;
 					ptr += sizeof(struct inotify_event) + event->len) {
+			const char *sec_dev_basename = NULL, *non_sec_dev_basename = NULL;
 			event = (struct inotify_event *) ptr;
+
+			/* Extract just the device name from full path for comparison */
+			sec_dev_basename = strrchr(sec_dev_name, '/');
+			non_sec_dev_basename = strrchr(non_sec_dev_name, '/');
+
+			/* Skip the '/' character if found */
+			sec_dev_basename++;
+			non_sec_dev_basename++;
+
 			/* Check if the event corresponds to the creation of the device node. */
 			if (event->wd == watch_fd && (event->mask & IN_CREATE) &&
-				((strcmp(sec_dev_name, event->name) == 0) ||
-				(strcmp(def_dev_name, event->name) == 0))) {
+				((sec_dev_basename && strcmp(sec_dev_basename, event->name) == 0) ||
+				(non_sec_dev_basename && strcmp(non_sec_dev_basename, event->name) == 0))) {
 				/* Device node created, process proceed to open and use it. */
 				VERIFY_IPRINTF("Device node %s created!\n", event->name);
 				goto bail; /* Exit the loop after device creation is detected. */

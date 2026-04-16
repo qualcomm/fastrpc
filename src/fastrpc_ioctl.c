@@ -10,42 +10,6 @@
 #include "remote.h"
 #include <sys/ioctl.h>
 
-/* Returns the name of the domain based on the following
- ADSP/SLPI/MDSP/CDSP - Return Secure node
- */
-const char *get_secure_domain_name(int domain_id) {
-  const char *name;
-  int domain = GET_DOMAIN_FROM_EFFEC_DOMAIN_ID(domain_id);
-
-  switch (domain) {
-  case ADSP_DOMAIN_ID:
-    name = ADSPRPC_SECURE_DEVICE;
-    break;
-  case SDSP_DOMAIN_ID:
-    name = SDSPRPC_SECURE_DEVICE;
-    break;
-  case MDSP_DOMAIN_ID:
-    name = MDSPRPC_SECURE_DEVICE;
-    break;
-  case CDSP_DOMAIN_ID:
-    name = CDSPRPC_SECURE_DEVICE;
-    break;
-  case CDSP1_DOMAIN_ID:
-    name = CDSP1RPC_SECURE_DEVICE;
-    break;
-  case GDSP0_DOMAIN_ID:
-    name = GDSP0RPC_SECURE_DEVICE;
-    break;
-  case GDSP1_DOMAIN_ID:
-    name = GDSP1RPC_SECURE_DEVICE;
-    break;
-  default:
-    name = DEFAULT_DEVICE;
-    break;
-  }
-  return name;
-}
-
 int ioctl_init(int dev, uint32_t flags, int attr, unsigned char *shell, int shelllen,
                int shellfd, char *mem, int memlen, int memfd, int tessiglen) {
   int ioErr = 0;
