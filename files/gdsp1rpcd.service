@@ -1,6 +1,6 @@
 [Unit]
 Description=gDSP RPC daemon
-After=dev-fastrpc-gdsp1.device dev-fastrpc-gdsp1-secure.device
+After=dev-fastrpc\x2dgdsp1.device dev-fastrpc\x2dgdsp1\x2dsecure.device
 ConditionPathExists=|/dev/fastrpc-gdsp1
 ConditionPathExists=|/dev/fastrpc-gdsp1-secure
 

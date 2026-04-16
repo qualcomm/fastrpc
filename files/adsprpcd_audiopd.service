@@ -1,6 +1,6 @@
 [Unit]
 Description=audiopd aDSP RPC daemon
-After=dev-fastrpc-adsp.device dev-fastrpc-adsp-secure.device
+After=dev-fastrpc\x2dadsp.device dev-fastrpc\x2dadsp\x2dsecure.device
 ConditionPathExists=|/dev/fastrpc-adsp
 ConditionPathExists=|/dev/fastrpc-adsp-secure
 
