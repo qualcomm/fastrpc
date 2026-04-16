@@ -161,6 +161,46 @@ The listener implementation (`src/adsp_default_listener.c`):
 - **Resource-constrained**: Can safely omit if not using that DSP and logs aren't critical
 - **Note**: Omitting the daemon doesn't break application functionality, only static PD observability
 
+## Container Considerations
+
+When running FastRPC applications in containers (Docker, LXC, etc.),
+consider how daemons interact with container filesystem isolation:
+
+**Key limitation**: Static PD file operations (via `apps_std`) execute in
+the daemon's filesystem namespace, not the application's. If the daemon
+runs on the host, static PDs access the host filesystem - not files
+inside containers.
+
+**Workload recommendations:**
+
+- **Dynamic PD workloads** (most ML/compute applications):
+  - ✅ Work normally in containers
+  - Applications create their own dynamic PDs that communicate directly
+    with the container process
+  - Only requirement: expose `/dev/fastrpc-*` device nodes to container
+    (`--device=/dev/fastrpc-cdsp`)
+  - Examples: QNN/QAIRT inference, custom compute offload via Hexagon SDK
+
+- **Static PD workloads** (audio, system services):
+  - ⚠️ Require special consideration
+  - File operations (ACDB audio calibration, config files, dynamic
+    module loading) happen via host daemon
+  - Solutions:
+    1. Place required files on host filesystem at known paths
+    2. Bind-mount paths into containers (e.g., `-v
+       /etc/audio:/etc/audio:ro`)
+    3. Run containers with `--privileged` and shared filesystem view
+       (not recommended)
+  - Examples: AudioReach audio processing
+
+- **Exception logging**:
+  - ✅ Works regardless - logs go to host syslog/dmesg
+  - Container apps get error visibility even with host-based daemon
+
+**Recommended setup**: Run daemons on the host, expose device nodes to
+containers. For audio workloads, ensure ACDB and module files are
+accessible on the host filesystem.
+
 ## Systemd Integration
 
 Service files in `files/*.service` define unit dependencies that ensure daemons start only when the corresponding FastRPC device is available:
