@@ -5,6 +5,8 @@ ConditionPathExists=|/dev/fastrpc-cdsp1
 ConditionPathExists=|/dev/fastrpc-cdsp1-secure
 
 [Service]
+User=fastrpc
+Group=fastrpc
 Type=exec
 ExecStart=/usr/bin/cdsprpcd rootpd cdsp1
 Restart=on-failure

@@ -5,6 +5,8 @@ ConditionPathExists=|/dev/fastrpc-adsp
 ConditionPathExists=|/dev/fastrpc-adsp-secure
 
 [Service]
+User=fastrpc
+Group=fastrpc
 Type=exec
 ExecStart=/usr/bin/adsprpcd audiopd
 Restart=on-failure
