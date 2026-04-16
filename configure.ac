@@ -48,6 +48,15 @@ AC_ARG_WITH([systemdsystemunitdir],
 AC_MSG_NOTICE([systemd unit directory: $systemdsystemunitdir])
 AC_SUBST([systemdsystemunitdir])
 
+# Configure udev rules directory option (--with-udevrulesdir)
+AC_ARG_WITH([udevrulesdir],
+  [AS_HELP_STRING([--with-udevrulesdir=DIR],
+                  [Directory for udev rules files (default: /lib/udev/rules.d)])],
+  [udevrulesdir="$withval"],
+  [udevrulesdir="/lib/udev/rules.d"])
+AC_MSG_NOTICE([udev rules directory: $udevrulesdir])
+AC_SUBST([udevrulesdir])
+
 # Checks for typedefs, structures, and compiler characteristics.
 
 # Checks for library functions.

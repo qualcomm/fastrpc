@@ -135,6 +135,28 @@ Hexagon SDK documentation covers all the required details about FastRPC. Please 
 
 ## Build & Installation
 
+### Setting up the fastrpc user and group
+
+The RPC daemons run as a dedicated `fastrpc` system user for privilege separation.
+The udev rules grant the `fastrpc` group ownership of `/dev/fastrpc-*` device nodes.
+Applications that use `libfastrpc` must therefore belong to the `fastrpc` group.
+
+Create the user and group before starting the services:
+
+```bash
+groupadd --system fastrpc
+useradd --system --gid fastrpc --no-create-home --home-dir /nonexistent fastrpc
+```
+
+To grant an application user access to FastRPC devices:
+
+```bash
+usermod -aG fastrpc <username>
+```
+
+Distribution packages are expected to create the system user and group automatically
+at install time (e.g. via a `postinst` script or a `sysusers.d` entry).
+
 ### Steps to Generate Native Binaries on Device
 
 ```bash
