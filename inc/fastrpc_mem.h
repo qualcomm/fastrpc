@@ -102,4 +102,11 @@ int fastrpc_mmap_internal(int domain, int fd, void *vaddr, int offset, size_t le
  */
 int fastrpc_munmap_internal(int domain, uint64_t raddr, size_t length);
 
+#define ADSP_MMAP_HEAP_ADDR 4
+#define ADSP_MMAP_REMOTE_HEAP_ADDR 8
+#define ADSP_MMAP_ADD_PAGES 0x1000
+#define ADSP_MMAP_ADD_PAGES_LLC 0x3000
+#define FASTRPC_ALLOC_HLOS_FD                                                  \
+  0x10000 /* Flag to allocate HLOS FD to be shared with DSP */
+
 #endif //FASTRPC_MEM_H

@@ -110,6 +110,18 @@ struct static_map_list {
   pthread_mutex_t mut;
 };
 
+struct fastrpc_remote_map {
+  QNode qn;
+  uint64_t vadsp;
+  uint32_t flags;
+};
+
+struct fastrpc_remote_map_list {
+  QList ql;
+  pthread_mutex_t mut;
+};
+
+static struct fastrpc_remote_map_list memlist[NUM_DOMAINS_EXTEND];
 static struct static_map_list smaplst[NUM_DOMAINS_EXTEND];
 static struct mem_to_fd_list fdlist;
 static struct dma_handle_info dhandles[MAX_DMA_HANDLES];
@@ -128,6 +140,8 @@ int fastrpc_mem_init(void) {
   FOR_EACH_EFFECTIVE_DOMAIN_ID(ii) {
     QList_Ctor(&smaplst[ii].ql);
     pthread_mutex_init(&smaplst[ii].mut, 0);
+    QList_Ctor(&memlist[ii].ql);
+    pthread_mutex_init(&memlist[ii].mut, 0);
   }
   return 0;
 }
@@ -138,8 +152,33 @@ int fastrpc_mem_deinit(void) {
   pthread_mutex_destroy(&fdlist.mut);
   FOR_EACH_EFFECTIVE_DOMAIN_ID(ii) {
     pthread_mutex_destroy(&smaplst[ii].mut);
+    pthread_mutex_destroy(&memlist[ii].mut);
   }
   return 0;
+}
+
+static int fastrpc_remote_map_lookup(int domain, uint64_t vadsp, uint32_t *flags_out, struct fastrpc_remote_map **out)
+{
+    QNode *pn, *pnn;
+    struct fastrpc_remote_map *mNode;
+
+    if (!flags_out || !out)
+      return AEE_EBADPARM;
+
+    *out = NULL;
+    pthread_mutex_lock(&memlist[domain].mut);
+    QLIST_NEXTSAFE_FOR_ALL(&memlist[domain].ql, pn, pnn) {
+        mNode = STD_RECOVER_REC(struct fastrpc_remote_map, qn, pn);
+        if (mNode->vadsp == vadsp) {
+            *flags_out = mNode->flags;
+            *out = mNode;
+            QNode_DequeueZ(&mNode->qn);
+            pthread_mutex_unlock(&memlist[domain].mut);
+            return AEE_SUCCESS;
+        }
+    }
+    pthread_mutex_unlock(&memlist[domain].mut);
+    return AEE_ERESOURCENOTFOUND;
 }
 
 static void *remote_register_fd_attr(int fd, size_t size, int attr) {
@@ -818,8 +857,22 @@ int remote_mmap64_internal(int fd, uint32_t flags, uint64_t vaddrin,
   FASTRPC_GET_REF(domain);
   VERIFY(AEE_SUCCESS == (nErr = fastrpc_session_dev(domain, &dev)));
   VERIFYM(-1 != dev, AEE_ERPC, "Invalid device\n");
-  nErr = ioctl_mmap(dev, MMAP_64, flags, 0, fd, 0, size, vaddrin, &vaout);
+  if (flags == ADSP_MMAP_ADD_PAGES || flags == ADSP_MMAP_REMOTE_HEAP_ADDR) { 
+    nErr = ioctl_mmap(dev, MMAP_64, flags, 0, fd, 0, size, vaddrin, &vaout);
+	} else {
+    VERIFY(AEE_SUCCESS ==
+           (nErr = fastrpc_mmap_internal(domain, fd, (void *)(uintptr_t)vaddrin, 0, size,
+                                        flags, &vaout)));
+  }
   *vaddrout = vaout;
+  pthread_mutex_lock(&memlist[domain].mut);
+  struct fastrpc_remote_map *mNode = malloc(sizeof(*mNode));
+  if (mNode) {
+    mNode->vadsp = vaout;
+    mNode->flags = flags;
+    QList_AppendNode(&memlist[domain].ql, &mNode->qn);
+  }
+  pthread_mutex_unlock(&memlist[domain].mut);
 bail:
   FASTRPC_PUT_REF(domain);
   if (nErr != AEE_SUCCESS) {
@@ -874,6 +927,9 @@ bail:
 
 int remote_munmap64(uint64_t vaddrout, int64_t size) {
   int dev, domain = DEFAULT_DOMAIN_ID, nErr = AEE_SUCCESS, ref = 0;
+  uint32_t rflags;
+  QNode *pn, *pnn;
+  struct fastrpc_remote_map *mNode = NULL;
 
   VERIFY(AEE_SUCCESS == (nErr = fastrpc_init_once()));
 
@@ -883,7 +939,23 @@ int remote_munmap64(uint64_t vaddrout, int64_t size) {
   /* Don't open session in unmap. Return success if device already closed */
   FASTRPC_GET_REF(domain);
   VERIFY(AEE_SUCCESS == (nErr = fastrpc_session_dev(domain, &dev)));
-  nErr = ioctl_munmap(dev, MUNMAP_64, 0, 0, -1, size, vaddrout);
+
+  if (AEE_SUCCESS == fastrpc_remote_map_lookup(domain, vaddrout, &rflags, &mNode)) {
+    if (rflags == ADSP_MMAP_ADD_PAGES || rflags == ADSP_MMAP_REMOTE_HEAP_ADDR) { 
+      nErr = ioctl_munmap(dev, MUNMAP_64, 0, 0, -1, size, vaddrout);
+	  } else {
+      nErr = fastrpc_munmap_internal(domain, (uint64_t)vaddrout, size);
+    }
+    if (nErr == AEE_SUCCESS) {
+      free(mNode);
+    } else {
+      pthread_mutex_lock(&memlist[domain].mut);
+      QList_AppendNode(&memlist[domain].ql, &mNode->qn);
+      pthread_mutex_unlock(&memlist[domain].mut);
+    }
+  } else {
+    nErr = ioctl_munmap(dev, MUNMAP_64, 0, 0, -1, size, vaddrout);
+  }
 bail:
   FASTRPC_PUT_REF(domain);
   if (nErr != AEE_SUCCESS) {
