@@ -11,7 +11,7 @@ description: |
   a full build of the package if it were to include these changes.
 
 on:
-  pull_request_target:
+  pull_request:
     branches: [ main, development ]
     types:
       - ready_for_review
