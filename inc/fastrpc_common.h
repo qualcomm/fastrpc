@@ -49,6 +49,10 @@
 #define DOMAIN_NAME_IN_URI 1 // Domain name with standard module URI
 #define DOMAIN_NAME_STAND_ALONE 2 // Stand-alone domain name
 
+/* GDSP domain IDs - internal use only, not part of Hexagon SDK remote.h */
+#define GDSP0_DOMAIN_ID   5
+#define GDSP1_DOMAIN_ID   6
+
 #define PROFILE(time_taken, ff) \
 { \
 	struct timeval tv1, tv2; \
