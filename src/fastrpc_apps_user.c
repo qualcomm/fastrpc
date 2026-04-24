@@ -2248,7 +2248,7 @@ bail:
 static int close_domain_session(int domain) {
   QNode *pn = NULL, *pnn = NULL;
   char dlerrstr[255];
-  int dlerr = 0, nErr = AEE_SUCCESS;
+  int dlerr = 0, nErr = AEE_SUCCESS, mut_locked = 0;
   remote_handle64 proc_handle = 0;
 
   FARF(ALWAYS,
@@ -2262,13 +2262,16 @@ static int close_domain_session(int domain) {
     adsp_current_process_exit();
   }
   pthread_mutex_lock(&hlist[domain].lmut);
+  mut_locked = 1;
   if (!QList_IsEmpty(&hlist[domain].nql)) {
     QLIST_NEXTSAFE_FOR_ALL(&hlist[domain].nql, pn, pnn) {
       struct handle_info *hi = STD_RECOVER_REC(struct handle_info, qn, pn);
       VERIFYC(NULL != hi, AEE_EINVHANDLE);
       pthread_mutex_unlock(&hlist[domain].lmut);
+      mut_locked = 0;
       remote_handle_close(hi->remote);
       pthread_mutex_lock(&hlist[domain].lmut);
+      mut_locked = 1;
     }
   }
   if (!QList_IsEmpty(&hlist[domain].rql)) {
@@ -2276,8 +2279,10 @@ static int close_domain_session(int domain) {
       struct handle_info *hi = STD_RECOVER_REC(struct handle_info, qn, pn);
       VERIFYC(NULL != hi, AEE_EINVHANDLE);
       pthread_mutex_unlock(&hlist[domain].lmut);
+      mut_locked = 0;
       close_reverse_handle(hi->local, dlerrstr, sizeof(dlerrstr), &dlerr);
       pthread_mutex_lock(&hlist[domain].lmut);
+      mut_locked = 1;
     }
   }
   if (!QList_IsEmpty(&hlist[domain].ql)) {
@@ -2285,12 +2290,19 @@ static int close_domain_session(int domain) {
       struct handle_info *hi = STD_RECOVER_REC(struct handle_info, qn, pn);
       VERIFYC(NULL != hi, AEE_EINVHANDLE);
       pthread_mutex_unlock(&hlist[domain].lmut);
+      mut_locked = 0;
       remote_handle64_close(hi->local);
       pthread_mutex_lock(&hlist[domain].lmut);
+      mut_locked = 1;
     }
   }
   pthread_mutex_unlock(&hlist[domain].lmut);
+  mut_locked = 0;
 bail:
+  if (mut_locked) {
+    pthread_mutex_unlock(&hlist[domain].lmut);
+    mut_locked = 0;
+  }
   if (nErr != AEE_SUCCESS) {
     FARF(ERROR, "Error 0x%x: %s failed for domain %d (errno %s)", nErr,
          __func__, domain, strerror(errno));
@@ -3707,14 +3719,16 @@ bail:
 }
 
 static int domain_init(int domain, int *dev) {
-  int nErr = AEE_SUCCESS, dom = GET_DOMAIN_FROM_EFFEC_DOMAIN_ID(domain);
+  int nErr = AEE_SUCCESS, dom = GET_DOMAIN_FROM_EFFEC_DOMAIN_ID(domain), mut_locked = 0;
   remote_handle64 panic_handle = 0;
   struct err_codes *err_codes_to_send = NULL;
 
   pthread_mutex_lock(&hlist[domain].mut);
+  mut_locked = 1;
   if (hlist[domain].state != FASTRPC_DOMAIN_STATE_CLEAN) {
     *dev = hlist[domain].dev;
     pthread_mutex_unlock(&hlist[domain].mut);
+    mut_locked = 0;
     return AEE_SUCCESS;
   }
 
@@ -3775,6 +3789,7 @@ static int domain_init(int domain, int *dev) {
   hlist[domain].state = FASTRPC_DOMAIN_STATE_INIT;
   hlist[domain].ref = 0;
   pthread_mutex_unlock(&hlist[domain].mut);
+  mut_locked = 0;
   VERIFY(AEE_SUCCESS == (nErr = listener_android_domain_init(
                              domain, hlist[domain].th_params.update_requested,
                              &hlist[domain].th_params.r_sem)));
@@ -3787,6 +3802,10 @@ static int domain_init(int domain, int *dev) {
   }
 bail:
   if (nErr != AEE_SUCCESS) {
+    if (mut_locked) {
+      pthread_mutex_unlock(&hlist[domain].mut);
+      mut_locked = 0;
+    }
     domain_deinit(domain);
     if (hlist) {
       FARF(ERROR, "Error 0x%x: %s (%d) failed for domain %d (errno %s)\n", nErr,
