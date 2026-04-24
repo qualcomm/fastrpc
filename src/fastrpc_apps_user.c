@@ -1021,10 +1021,14 @@ static void fastrpc_clear_handle_list(uint32_t req, int domain) {
     if (!QList_IsNull(&hlist[domain].ql)) {
       while ((pn = QList_Pop(&hlist[domain].ql))) {
         struct handle_info *hi = STD_RECOVER_REC(struct handle_info, qn, pn);
+        if (hi->name)
+          free(hi->name);
         free(hi);
         hi = NULL;
       }
     }
+    hlist[domain].domainsCount = 0;
+    hlist[domain].constCount = 0;
     pthread_mutex_unlock(&hlist[domain].lmut);
     break;
   }
@@ -1033,22 +1037,32 @@ static void fastrpc_clear_handle_list(uint32_t req, int domain) {
     if (!QList_IsNull(&hlist[domain].nql)) {
       while ((pn = QList_Pop(&hlist[domain].nql))) {
         struct handle_info *h = STD_RECOVER_REC(struct handle_info, qn, pn);
+        if (h->name)
+          free(h->name);
         free(h);
         h = NULL;
       }
     }
+    hlist[domain].nondomainsCount = 0;
     pthread_mutex_unlock(&hlist[domain].lmut);
     break;
   }
   case REVERSE_HANDLE_LIST_ID: {
+    pthread_mutex_lock(&hlist[domain].lmut);
     if (!QList_IsNull(&hlist[domain].rql)) {
       while ((pn = QList_Pop(&hlist[domain].rql))) {
         struct handle_info *hi = STD_RECOVER_REC(struct handle_info, qn, pn);
+        pthread_mutex_unlock(&hlist[domain].lmut);
         close_reverse_handle(hi->local, dlerrstr, sizeof(dlerrstr), &dlerr);
+        pthread_mutex_lock(&hlist[domain].lmut);
+        if (hi->name)
+          free(hi->name);
         free(hi);
         hi = NULL;
       }
     }
+    hlist[domain].reverseCount = 0;
+    pthread_mutex_unlock(&hlist[domain].lmut);
     break;
   }
   default: {
@@ -1586,6 +1600,10 @@ int remote_handle_open_domain(int domain, const char *name, remote_handle *ph,
     } else if (!strncmp(pdName, "oispd", strlen("oispd"))) {
       *ph = OISPD_HANDLE;
       hlist[domain].dsppd = OIS_STATICPD;
+    }
+    if (pdname_uri) {
+      free(pdname_uri);
+      pdname_uri = NULL;
     }
     return AEE_SUCCESS;
   }
