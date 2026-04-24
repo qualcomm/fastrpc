@@ -180,6 +180,8 @@ void HAP_debug_runtime(int level, const char *file, int line,
     va_end(argp);
     log = (char *)malloc(sizeof(char) * MAX_FARF_LEN);
     if (log == NULL) {
+      free(buf);
+      buf = NULL;
       return;
     }
     snprintf(log, MAX_FARF_LEN, "%d:%d:%s:%s:%d: %s", getpid(), gettid(),

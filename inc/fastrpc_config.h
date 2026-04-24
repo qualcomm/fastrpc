@@ -209,6 +209,8 @@ int fastrpc_config_get_caller_stack_num(void);
   * @return integer - 0 for success, non-zero for error cases.
   **/
 int fastrpc_config_init();
+// function to release unused ptr
+void fastrpc_config_deinit();
 
 /*
  * fastrpc_config_is_setdmabufname_enabled() - Check if DMA allocated buffer

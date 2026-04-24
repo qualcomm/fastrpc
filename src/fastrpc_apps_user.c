@@ -3875,6 +3875,7 @@ static void fastrpc_apps_user_deinit(void) {
     hlist = NULL;
   }
   fastrpc_context_table_deinit();
+  fastrpc_config_deinit();
   deinit_process_signals();
   fastrpc_notif_deinit();
   apps_mem_table_deinit();
