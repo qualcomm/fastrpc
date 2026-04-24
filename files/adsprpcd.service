@@ -9,6 +9,3 @@ Type=exec
 ExecStart=/usr/bin/adsprpcd
 Restart=on-failure
 RestartSec=5
-
-[Install]
-WantedBy=multi-user.target
