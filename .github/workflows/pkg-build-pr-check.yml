@@ -35,5 +35,3 @@ jobs:
       upstream-repo-ref: ${{ github.event.pull_request.head.ref }}
       pkg-repo: ${{vars.PKG_REPO_GITHUB_NAME}}
       pr-number: ${{github.event.pull_request.number}}
-    secrets:
-      TOKEN: ${{ secrets.DEB_PKG_BOT_CI_TOKEN }}
