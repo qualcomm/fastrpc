@@ -7,8 +7,6 @@ ConditionPathExists=|/dev/fastrpc-adsp-secure
 [Service]
 Type=exec
 ExecStart=/usr/bin/adsprpcd
-Restart=on-failure
-RestartSec=5
 
 [Install]
 WantedBy=multi-user.target

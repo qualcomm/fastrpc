@@ -7,8 +7,6 @@ ConditionPathExists=|/dev/fastrpc-sdsp-secure
 [Service]
 Type=exec
 ExecStart=/usr/bin/sdsprpcd
-Restart=on-failure
-RestartSec=5
 
 [Install]
 WantedBy=multi-user.target

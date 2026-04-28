@@ -193,6 +193,11 @@ int main(int argc, char *argv[]) {
             break;
         }
 
+        if (errno == ENOMEM) {
+            VERIFY_EPRINTF("out of memory, daemon exiting...");
+            break;
+        }
+
         VERIFY_EPRINTF("%s daemon will restart after 100ms...", dsp_name);
         usleep(100000);
   }
