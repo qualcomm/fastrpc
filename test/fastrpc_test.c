@@ -24,6 +24,10 @@ static void print_usage() {
            "    1: Run the example on MDSP\n"
            "    2: Run the example on SDSP\n"
            "    3: Run the example on CDSP\n"
+           "    4: Run the example on CDSP1\n"
+           "    5: Run the example on GDSP0\n"
+           "    6: Run the example on GDSP1\n"
+
            "        Default Value: 3(CDSP) for targets having CDSP.\n"
            "-U unsigned_PD: Run on signed or unsigned PD.\n"
            "    0: Run on signed PD.\n"
