@@ -162,6 +162,15 @@ int ioctl_setmode(int dev, int mode) {
 }
 
 int ioctl_control(int dev, int req, void *c) {
+  int ioErr = AEE_SUCCESS;
+  struct fastrpc_ioctl_set_option opt = {0};
+
+  if (req == FASTRPC_POLL_MODE) {
+    opt = *(struct fastrpc_ioctl_set_option *)c;
+    ioErr = ioctl(dev, FASTRPC_IOCTL_SET_OPTION, &opt);
+
+    return ioErr;
+  }
   return AEE_EUNSUPPORTED;
 }
 
