@@ -15,7 +15,7 @@ on:
     - 'main'
     - 'development'
   workflow_dispatch:
-  pull_request_target: # requiring access to base repo
+  pull_request: # requiring access to base repo
     types: [opened, synchronize, reopened]
     branches:
     - 'main'
