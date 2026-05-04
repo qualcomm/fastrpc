@@ -24,12 +24,6 @@
 #include <sys/mman.h>
 #include "fastrpc_hash_table.h"
 
-#define ADSP_MMAP_HEAP_ADDR 4
-#define ADSP_MMAP_REMOTE_HEAP_ADDR 8
-#define ADSP_MMAP_ADD_PAGES 0x1000
-#define ADSP_MMAP_ADD_PAGES_LLC 0x3000
-#define FASTRPC_ALLOC_HLOS_FD                                                  \
-  0x10000 /* Flag to allocate HLOS FD to be shared with DSP */
 
 typedef struct {
 	QList mem_list;
@@ -163,13 +157,23 @@ __QAIC_IMPL(apps_mem_request_map64)(int heapid, uint32_t lflags, uint32_t rflags
      */
     *vadsp = (uint64_t)fd;
   } else {
-    VERIFYC(NULL != (buf = rpcmem_alloc_internal(heapid, lflags, len)),
-            AEE_ENORPCMEMORY);
-    fd = rpcmem_to_fd_internal(buf);
-    VERIFYC(fd > 0, AEE_EBADPARM);
+    /* Memory for unsignedPD's user-heap will be allocated in userspace for
+     * security reasons. Memory for signedPD's user-heap will be allocated in
+     * kernel.
+     */
+    if (((rflags != ADSP_MMAP_ADD_PAGES) &&
+         (rflags != ADSP_MMAP_ADD_PAGES_LLC)) ||
+        (((rflags == ADSP_MMAP_ADD_PAGES) ||
+          (rflags == ADSP_MMAP_ADD_PAGES_LLC)) &&
+         (unsigned_module && ualloc_support))) {
+      VERIFYC(NULL != (buf = rpcmem_alloc_internal(heapid, lflags, len)),
+              AEE_ENORPCMEMORY);
+      fd = rpcmem_to_fd_internal(buf);
+      VERIFYC(fd > 0, AEE_EBADPARM);
+    }
     VERIFY(AEE_SUCCESS ==
-           (nErr = fastrpc_mmap_internal(domain, fd, buf, 0, len,
-                                         rflags, vadsp)));
+            (nErr = remote_mmap64_internal(fd, rflags, (uint64_t)buf, len,
+                                          (uint64_t *)vadsp)));
     pbuf = (uint64_t)buf;
     *vapps = pbuf;
     minfo->vapps = *vapps;
@@ -240,27 +244,17 @@ __QAIC_IMPL(apps_mem_request_unmap64)(uint64_t vadsp,
   pthread_mutex_unlock(&me->mem_mut);
 
   /* If apps_mem_request_map64 was called with flag FASTRPC_ALLOC_HLOS_FD,
-   * use fastrpc_munmap. For ADSP_MMAP_HEAP_ADDR and ADSP_MMAP_REMOTE_HEAP_ADDR,
-   * use remote_munmap64. For other cases, use fastrpc_munmap_internal.
+   * use fastrpc_munmap else use remote_munmap64 to unmap.
    */
    if(mfree && mfree->rflags == FASTRPC_ALLOC_HLOS_FD) {
       fd = (int)vadsp;
       VERIFY(AEE_SUCCESS == (nErr = fastrpc_munmap(domain, fd, 0, len)));
-   } else if (mfree && (mfree->rflags == ADSP_MMAP_HEAP_ADDR ||
-                        mfree->rflags == ADSP_MMAP_REMOTE_HEAP_ADDR)) {
-      /* These cases use remote_mmap64_internal, so use remote_munmap64 */
-      VERIFY(AEE_SUCCESS == (nErr = remote_munmap64((uint64_t)vadsp, len)));
    } else if (mfree || fastrpc_get_pd_type(domain) == AUDIO_STATICPD){
       /*
        * Map info not available for Audio static PD after daemon reconnect,
        * So continue to unmap to avoid driver global maps leak.
-       * For other cases, use fastrpc_munmap_internal as they were mapped with fastrpc_mmap_internal.
        */
-      if (mfree) {
-         VERIFY(AEE_SUCCESS == (nErr = fastrpc_munmap_internal(domain, (uint64_t)vadsp, len)));
-      } else {
-         VERIFY(AEE_SUCCESS == (nErr = remote_munmap64((uint64_t)vadsp, len)));
-      }
+      VERIFY(AEE_SUCCESS == (nErr = remote_munmap64((uint64_t)vadsp, len)));
       if (!mfree)
          goto bail;
    }
