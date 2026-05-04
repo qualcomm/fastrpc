@@ -5,6 +5,12 @@
 #include "remote.h"
 
 #include <stdio.h>
+#ifdef __ANDROID__
+#include <android/log.h>
+#endif
+#ifdef USE_SYSLOG
+#include <syslog.h>
+#endif
 
 #define LOG_NODE_SIZE 256
 #define LOG_FILENAME_SIZE 30
@@ -54,5 +60,11 @@ int adspmsgd_apps_log(const unsigned char *log_message_buffer,
   return 0;
 }
 void adspmsgd_log_message(char *format, char *msg) {
-  printf("adsprpc:dsp: %s\n", msg);
+#ifdef __ANDROID__
+   __android_log_print(ANDROID_LOG_VERBOSE,"adsprpc",format, msg);
+#elif defined(USE_SYSLOG)
+   syslog(LOG_INFO,"adsprpc:%s ", msg);
+#else
+   printf("adsprpc:%s\n", msg);
+#endif
 }
