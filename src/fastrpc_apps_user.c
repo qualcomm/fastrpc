@@ -398,7 +398,8 @@ int fastrpc_session_put(int domain) {
   do {
     if (hlist) {
       pthread_mutex_lock(&hlist[domain].mut);
-      hlist[domain].ref--;
+      if (hlist[domain].ref > 0)
+        hlist[domain].ref--;
       ref = hlist[domain].ref;
       pthread_mutex_unlock(&hlist[domain].mut);
       FARF(RUNTIME_RPC_HIGH, "%s, domain %d, state %d, ref %d\n", __func__, domain,
@@ -3919,6 +3920,7 @@ static int fastrpc_apps_user_init(void) {
 
   VERIFY(AEE_SUCCESS == (nErr = PL_INIT(gpls)));
   VERIFY(AEE_SUCCESS == (nErr = PL_INIT(rpcmem)));
+  VERIFY(AEE_SUCCESS == (nErr = PL_INIT(apps_std)));
   VERIFY(AEE_SUCCESS == (nErr = pthread_key_create(&tlsKey, exit_thread)));
 #ifdef PARSE_YAML
   configure_dsp_paths();
@@ -3951,7 +3953,6 @@ static int fastrpc_apps_user_init(void) {
     pthread_mutex_init(&hlist[i].init, 0);
   }
   listener_android_init();
-  VERIFY(AEE_SUCCESS == (nErr = PL_INIT(apps_std)));
   GenCrc32Tab(POLY32, crc_table);
   fastrpc_notif_init();
   apps_mem_table_init();
