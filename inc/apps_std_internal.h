@@ -5,6 +5,7 @@
 #define __APPS_STD_INTERNAL_H__
 
 #include "apps_std.h"
+#include "AEEQList.h"
 
 /**
   * @brief Macros used in apps_std
@@ -28,7 +29,25 @@
 #define VENDOR_DOM_LOCATION "/vendor/dsp/xdsp/"
 #endif
 
-int fopen_from_dirlist(const char *dirList, const char *delim, 
-    const char *mode, const char *name, apps_std_FILE *psout);
+/**
+ * @brief Try to open a file from the global directory list
+ * @param name File name to open
+ * @param mode File open mode
+ * @param psout Output file descriptor
+ * @return AEE_SUCCESS on success, error code otherwise
+ */
+int fopen_from_global_dirlist(const char *name, 
+    const char *mode, apps_std_FILE *psout);
+
+/**
+ * @brief Initialize global directory path lists from environment variables and config
+ * @return AEE_SUCCESS on success, error code otherwise
+ */
+int apps_std_init_dir_lists(void);
+
+/**
+ * @brief Cleanup global directory path lists
+ */
+void apps_std_deinit_dir_lists(void);
 
 #endif /*__APPS_STD_INTERNAL_H__*/
