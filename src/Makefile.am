@@ -1,6 +1,8 @@
 lib_LTLIBRARIES =
 
-LIBDSPRPC_CFLAGS = -fno-short-enums -U_DEBUG -DARM_ARCH_7A -DLE_ENABLE -DENABLE_UPSTREAM_DRIVER_INTERFACE -DUSE_SYSLOG -DCONFIG_BASE_DIR='"$(CONFIG_BASE_DIR)"' -DMACHINE_NAME_PATH='"/sys/firmware/devicetree/base/model"' -I$(top_srcdir)/inc
+LIBDSPRPC_CFLAGS = -fno-short-enums -U_DEBUG -DARM_ARCH_7A -DLE_ENABLE -DENABLE_UPSTREAM_DRIVER_INTERFACE -DUSE_SYSLOG -DCONFIG_BASE_DIR='"$(CONFIG_BASE_DIR)"' -DMACHINE_NAME_PATH='"/sys/firmware/devicetree/base/model"' -I$(top_srcdir)/inc @STRICTER_CFLAGS@ @STRICTER_CPPFLAGS@
+
+LIBDSPRPC_LDFLAGS = @STRICTER_LDFLAGS@
 
 if ANDROID_CC
 LIBDSPRPC_CFLAGS += -DDEFAULT_DSP_SEARCH_PATHS='";/vendor/lib/rfsa/adsp;/vendor/dsp;"'
@@ -70,58 +72,46 @@ else
 libadsprpc_la_LIBADD = -ldl -lm $(USE_LOG) @YAML_LIBS@ @BSD_LIBS@
 libcdsprpc_la_LIBADD = -ldl -lm $(USE_LOG) @YAML_LIBS@ @BSD_LIBS@
 libsdsprpc_la_LIBADD = -ldl -lm $(USE_LOG) @YAML_LIBS@ @BSD_LIBS@
-libgdsprpc_la_LIBADD = -ldl -lm $(USE_LOG) @YAML_LIBS@ @BSD_LIBS@
 endif
 
 ADSP_CFLAGS = $(LIBDSPRPC_CFLAGS) -DDEFAULT_DOMAIN_ID=0
 
 lib_LTLIBRARIES += libadsprpc.la
 libadsprpc_la_SOURCES = $(LIBDSPRPC_SOURCES)
-libadsprpc_la_LDFLAGS = -version-number @LT_VERSION_NUMBER@
+libadsprpc_la_LDFLAGS = -version-number @LT_VERSION_NUMBER@ $(LIBDSPRPC_LDFLAGS)
 libadsprpc_la_CFLAGS = $(ADSP_CFLAGS)
 
 lib_LTLIBRARIES += libadsp_default_listener.la
 libadsp_default_listener_la_SOURCES = $(LIBDEFAULT_LISTENER_SOURCES)
 libadsp_default_listener_la_DEPENDENCIES = libadsprpc.la
-libadsp_default_listener_la_LDFLAGS = libadsprpc.la -shared -module $(USE_LOG) -version-number @LT_VERSION_NUMBER@
+libadsp_default_listener_la_LDFLAGS = libadsprpc.la -shared -module $(USE_LOG) -version-number @LT_VERSION_NUMBER@ $(LIBDSPRPC_LDFLAGS)
 libadsp_default_listener_la_CFLAGS = $(ADSP_CFLAGS) -DUSE_SYSLOG
 
 CDSP_CFLAGS = $(LIBDSPRPC_CFLAGS) -DDEFAULT_DOMAIN_ID=3
 
 lib_LTLIBRARIES += libcdsprpc.la
 libcdsprpc_la_SOURCES = $(LIBDSPRPC_SOURCES)
-libcdsprpc_la_LDFLAGS = -version-number @LT_VERSION_NUMBER@
+libcdsprpc_la_LDFLAGS = -version-number @LT_VERSION_NUMBER@ $(LIBDSPRPC_LDFLAGS)
 libcdsprpc_la_CFLAGS = $(CDSP_CFLAGS)
 
 lib_LTLIBRARIES += libcdsp_default_listener.la
 libcdsp_default_listener_la_SOURCES = $(LIBDEFAULT_LISTENER_SOURCES)
 libcdsp_default_listener_la_DEPENDENCIES = libcdsprpc.la
-libcdsp_default_listener_la_LDFLAGS = libcdsprpc.la -shared -module $(USE_LOG) -version-number @LT_VERSION_NUMBER@
+libcdsp_default_listener_la_LDFLAGS = libcdsprpc.la -shared -module $(USE_LOG) -version-number @LT_VERSION_NUMBER@ $(LIBDSPRPC_LDFLAGS)
 libcdsp_default_listener_la_CFLAGS = $(CDSP_CFLAGS) -DUSE_SYSLOG
 
 SDSP_CFLAGS = $(LIBDSPRPC_CFLAGS) -DDEFAULT_DOMAIN_ID=2
 
 lib_LTLIBRARIES += libsdsprpc.la
 libsdsprpc_la_SOURCES = $(LIBDSPRPC_SOURCES)
-libsdsprpc_la_LDFLAGS = -version-number @LT_VERSION_NUMBER@
+libsdsprpc_la_LDFLAGS = -version-number @LT_VERSION_NUMBER@ $(LIBDSPRPC_LDFLAGS)
 libsdsprpc_la_CFLAGS = $(SDSP_CFLAGS)
 
 lib_LTLIBRARIES += libsdsp_default_listener.la
 libsdsp_default_listener_la_SOURCES = $(LIBDEFAULT_LISTENER_SOURCES)
 libsdsp_default_listener_la_DEPENDENCIES = libsdsprpc.la
-libsdsp_default_listener_la_LDFLAGS = libsdsprpc.la -shared -module $(USE_LOG) -version-number @LT_VERSION_NUMBER@
+libsdsp_default_listener_la_LDFLAGS = libsdsprpc.la -shared -module $(USE_LOG) -version-number @LT_VERSION_NUMBER@ $(LIBDSPRPC_LDFLAGS)
 libsdsp_default_listener_la_CFLAGS = $(SDSP_CFLAGS) -DUSE_SYSLOG
-
-GDSP_CFLAGS = $(LIBDSPRPC_CFLAGS) -DDEFAULT_DOMAIN_ID=5
-
-libgdsprpc_la_SOURCES = $(LIBDSPRPC_SOURCES)
-libgdsprpc_la_LDFLAGS = -version-number @LT_VERSION_NUMBER@
-libgdsprpc_la_CFLAGS = $(GDSP_CFLAGS)
-
-libgdsp_default_listener_la_SOURCES = $(LIBDEFAULT_LISTENER_SOURCES)
-libgdsp_default_listener_la_DEPENDENCIES = libcdsprpc.la
-libgdsp_default_listener_la_LDFLAGS = libcdsprpc.la -shared -module $(USE_LOG) -version-number @LT_VERSION_NUMBER@
-libgdsp_default_listener_la_CFLAGS = $(GDSP_CFLAGS) -DUSE_SYSLOG
 
 bin_PROGRAMS = adsprpcd cdsprpcd sdsprpcd gdsprpcd
 
@@ -145,7 +135,7 @@ sdsprpcd_DEPENDENCIES = libsdsp_default_listener.la
 sdsprpcd_CFLAGS = -I$(top_srcdir)/inc -DDEFAULT_DOMAIN_ID=2 -DUSE_SYSLOG -DUSE_SDSP
 sdsprpcd_LDADD =  -ldl $(USE_LOG)
 
-
+# GDSP daemon shares CDSP libraries (not a typo)
 gdsprpcddir = $(libdir)
 gdsprpcd_SOURCES = dsprpcd.c
 gdsprpcd_DEPENDENCIES = libcdsp_default_listener.la

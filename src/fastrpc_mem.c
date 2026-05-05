@@ -782,8 +782,8 @@ int remote_mem_map(int domain, int fd, int flags, uint64_t vaddr, size_t size,
   VERIFY(AEE_SUCCESS == (nErr = fastrpc_init_once()));
 
   FARF(RUNTIME_RPC_HIGH,
-       "%s: domain %d fd %d addr 0x%llx size 0x%zx flags 0x%x", __func__,
-       domain, fd, vaddr, size, flags);
+       "%s: domain %d fd %d addr 0x%" PRIx64 " size 0x%zx flags 0x%x",
+       __func__, domain, fd, vaddr, size, flags);
 
   VERIFYC(fd >= 0, AEE_EBADPARM);
   VERIFYC(size >= 0, AEE_EBADPARM);
@@ -805,8 +805,8 @@ bail:
     nErr = convert_kernel_to_user_error(nErr, errno);
     if (0 == check_rpc_error(nErr)) {
       FARF(ERROR,
-           "Error 0x%x: %s failed to map buffer fd %d addr 0x%llx size 0x%zx "
-           "domain %d flags %d errno %s",
+           "Error 0x%x: %s failed to map buffer fd %d addr 0x%" PRIx64
+           " size 0x%zx domain %d flags %d errno %s",
            nErr, __func__, fd, vaddr, size, domain, flags, strerror(errno));
     }
   }
@@ -820,8 +820,8 @@ int remote_mem_unmap(int domain, uint64_t raddr, size_t size) {
 
   VERIFYC(size >= 0, AEE_EBADPARM);
   VERIFYC(raddr != 0, AEE_EBADPARM);
-  FARF(RUNTIME_RPC_HIGH, "%s: domain %d addr 0x%llx size 0x%zx", __func__,
-       domain, raddr, size);
+  FARF(RUNTIME_RPC_HIGH, "%s: domain %d addr 0x%" PRIx64 " size 0x%zx",
+       __func__, domain, raddr, size);
   if (domain == -1) {
     domain = get_current_domain();
   }
@@ -837,8 +837,8 @@ bail:
     nErr = convert_kernel_to_user_error(nErr, errno);
     if (0 == check_rpc_error(nErr)) {
       FARF(ERROR,
-           "Error 0x%x: %s failed to unmap buffer addr 0x%llx size 0x%zx "
-           "domain %d errno %s",
+           "Error 0x%x: %s failed to unmap buffer addr 0x%" PRIx64
+           " size 0x%zx domain %d errno %s",
            nErr, __func__, raddr, size, domain, strerror(errno));
     }
   }
@@ -878,8 +878,8 @@ bail:
   if (nErr != AEE_SUCCESS) {
     nErr = convert_kernel_to_user_error(nErr, errno);
     FARF(ERROR,
-         "Error 0x%x: %s failed for fd 0x%x of size %lld (flags 0x%x, vaddrin "
-         "0x%llx) errno %s\n",
+         "Error 0x%x: %s failed for fd 0x%x of size %" PRId64 " (flags 0x%x, "
+         "vaddrin 0x%" PRIx64 ") errno %s\n",
          nErr, __func__, fd, size, flags, vaddrin, strerror(errno));
   }
   return nErr;
@@ -905,8 +905,8 @@ int remote_mmap64(int fd, uint32_t flags, uint64_t vaddrin, int64_t size,
 bail:
   if ((nErr != AEE_SUCCESS) && (log == 1)) {
     FARF(ERROR,
-         "Error 0x%x: %s failed for fd 0x%x of size %lld (flags 0x%x, vaddrin "
-         "0x%llx)\n",
+         "Error 0x%x: %s failed for fd 0x%x of size %" PRId64 " (flags 0x%x, "
+         "vaddrin 0x%" PRIx64 ")\n",
          nErr, __func__, fd, size, flags, vaddrin);
   }
   return nErr;
@@ -961,8 +961,8 @@ bail:
   if (nErr != AEE_SUCCESS) {
     nErr = convert_kernel_to_user_error(nErr, errno);
     FARF(ERROR,
-         "Error 0x%x: %s failed for size %lld (vaddrout 0x%llx) errno %s\n",
-         nErr, __func__, size, vaddrout, strerror(errno));
+         "Error 0x%x: %s failed for size %" PRId64 " (vaddrout 0x%" PRIx64 ") "
+         "errno %s\n", nErr, __func__, size, vaddrout, strerror(errno));
   }
   return nErr;
 }

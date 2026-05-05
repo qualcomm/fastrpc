@@ -17,6 +17,7 @@
 #include <string.h>
 #include <sys/eventfd.h>
 #include <unistd.h>
+#include <inttypes.h>
 
 #include "AEEStdErr.h"
 #include "AEEstd.h"
@@ -132,8 +133,8 @@ static void listener(listener_config *me) {
   memset(args, 0, sizeof(args));
   if (eheap || eflags || emin) {
     FARF(RUNTIME_RPC_HIGH,
-         "listener using ion heap: %d flags: %x cache: %lld\n", (int)heapid,
-         (int)flags, cache_size);
+         "listener using ion heap: %d flags: %x cache: %" PRId64 "\n",
+         (int)heapid, (int)flags, cache_size);
   }
 
   do {

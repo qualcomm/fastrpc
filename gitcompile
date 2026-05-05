@@ -2,11 +2,15 @@
 
 autoreconf -is
 
-export CFLAGS='-O2 -Wall -pipe -g'
+# Set default build flags if not already set
+# Users can override by setting CFLAGS before running this script
+if [ -z "$CFLAGS" ]; then
+  export CFLAGS="-O2 -Wall -pipe -g"
+fi
+
 echo "CFLAGS=$CFLAGS"
 echo "./configure $@"
 ./configure $@ || exit 1
-unset CFLAGS
 if [ -z "$GITCOMPILE_NO_MAKE" ]; then
   make
 fi
