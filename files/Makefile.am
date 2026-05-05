@@ -12,3 +12,7 @@ dist_systemdsystemunit_DATA = \
 	gdsp0rpcd.service \
 	gdsp1rpcd.service \
 	sdsprpcd.service
+
+# udev rules
+udevrulesdir = @udevrulesdir@
+dist_udevrules_DATA = 60-fastrpc.rules

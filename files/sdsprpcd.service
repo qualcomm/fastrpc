@@ -1,10 +1,12 @@
 [Unit]
 Description=sDSP RPC daemon
-After=dev-fastrpc-sdsp.device dev-fastrpc-sdsp-secure.device
+After=dev-fastrpc\x2dsdsp.device dev-fastrpc\x2dsdsp\x2dsecure.device
 ConditionPathExists=|/dev/fastrpc-sdsp
 ConditionPathExists=|/dev/fastrpc-sdsp-secure
 
 [Service]
+User=fastrpc
+Group=fastrpc
 Type=exec
 ExecStart=/usr/bin/sdsprpcd
 Restart=on-failure

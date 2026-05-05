@@ -1,0 +1,16 @@
+# FastRPC DSP device nodes
+# Grant ownership to the fastrpc user/group and start the corresponding daemon.
+# Applications that use libfastrpc must belong to the fastrpc group.
+
+ACTION=="add", SUBSYSTEM=="misc", KERNEL=="fastrpc-adsp",        OWNER="fastrpc", GROUP="fastrpc", MODE="0660", TAG+="systemd", ENV{SYSTEMD_WANTS}+="adsprpcd.service"
+ACTION=="add", SUBSYSTEM=="misc", KERNEL=="fastrpc-adsp-secure",  OWNER="fastrpc", GROUP="fastrpc", MODE="0660", TAG+="systemd", ENV{SYSTEMD_WANTS}+="adsprpcd.service"
+ACTION=="add", SUBSYSTEM=="misc", KERNEL=="fastrpc-cdsp",         OWNER="fastrpc", GROUP="fastrpc", MODE="0660", TAG+="systemd", ENV{SYSTEMD_WANTS}+="cdsprpcd.service"
+ACTION=="add", SUBSYSTEM=="misc", KERNEL=="fastrpc-cdsp-secure",  OWNER="fastrpc", GROUP="fastrpc", MODE="0660", TAG+="systemd", ENV{SYSTEMD_WANTS}+="cdsprpcd.service"
+ACTION=="add", SUBSYSTEM=="misc", KERNEL=="fastrpc-cdsp1",        OWNER="fastrpc", GROUP="fastrpc", MODE="0660", TAG+="systemd", ENV{SYSTEMD_WANTS}+="cdsp1rpcd.service"
+ACTION=="add", SUBSYSTEM=="misc", KERNEL=="fastrpc-cdsp1-secure", OWNER="fastrpc", GROUP="fastrpc", MODE="0660", TAG+="systemd", ENV{SYSTEMD_WANTS}+="cdsp1rpcd.service"
+ACTION=="add", SUBSYSTEM=="misc", KERNEL=="fastrpc-gdsp0",        OWNER="fastrpc", GROUP="fastrpc", MODE="0660", TAG+="systemd", ENV{SYSTEMD_WANTS}+="gdsp0rpcd.service"
+ACTION=="add", SUBSYSTEM=="misc", KERNEL=="fastrpc-gdsp0-secure", OWNER="fastrpc", GROUP="fastrpc", MODE="0660", TAG+="systemd", ENV{SYSTEMD_WANTS}+="gdsp0rpcd.service"
+ACTION=="add", SUBSYSTEM=="misc", KERNEL=="fastrpc-gdsp1",        OWNER="fastrpc", GROUP="fastrpc", MODE="0660", TAG+="systemd", ENV{SYSTEMD_WANTS}+="gdsp1rpcd.service"
+ACTION=="add", SUBSYSTEM=="misc", KERNEL=="fastrpc-gdsp1-secure", OWNER="fastrpc", GROUP="fastrpc", MODE="0660", TAG+="systemd", ENV{SYSTEMD_WANTS}+="gdsp1rpcd.service"
+ACTION=="add", SUBSYSTEM=="misc", KERNEL=="fastrpc-sdsp",         OWNER="fastrpc", GROUP="fastrpc", MODE="0660", TAG+="systemd", ENV{SYSTEMD_WANTS}+="sdsprpcd.service"
+ACTION=="add", SUBSYSTEM=="misc", KERNEL=="fastrpc-sdsp-secure",  OWNER="fastrpc", GROUP="fastrpc", MODE="0660", TAG+="systemd", ENV{SYSTEMD_WANTS}+="sdsprpcd.service"

@@ -1,10 +1,12 @@
 [Unit]
 Description=gDSP RPC daemon
-After=dev-fastrpc-gdsp0.device dev-fastrpc-gdsp0-secure.device
+After=dev-fastrpc\x2dgdsp0.device dev-fastrpc\x2dgdsp0\x2dsecure.device
 ConditionPathExists=|/dev/fastrpc-gdsp0
 ConditionPathExists=|/dev/fastrpc-gdsp0-secure
 
 [Service]
+User=fastrpc
+Group=fastrpc
 Type=exec
 ExecStart=/usr/bin/gdsprpcd rootpd gdsp0
 Restart=on-failure
