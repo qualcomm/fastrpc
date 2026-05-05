@@ -41,6 +41,28 @@
 #include "HAP_farf.h"
 #include "apps_std_internal.h"
 #include "fastrpc_config_parser.h"
+#include "fastrpc_internal.h"
+
+const char *DSP_ARCH_KEY[NUM_DOMAINS] = {
+  "ADSP_ARCH",
+  "MDSP_ARCH",
+  "SDSP_ARCH",
+  "CDSP_ARCH",
+  "CDSP0_ARCH",
+  "GDSP0_ARCH",
+  "GDSP1_ARCH",
+  NULL,
+};
+
+static char DSP_ARCH_FROM_YAML[NUM_DOMAINS][8] = {{0}};
+
+const char *get_dsp_arch_from_yaml(int domain) {
+  if (!IS_VALID_DOMAIN_ID(domain))
+    return NULL;
+  if (DSP_ARCH_FROM_YAML[domain][0] == '\0')
+    return NULL;
+  return DSP_ARCH_FROM_YAML[domain];
+}
 
 static int compare_strings(const void *a, const void *b) {
   return strcmp(*(const char **)a, *(const char **)b);
@@ -90,9 +112,25 @@ static void get_dsp_lib_path(const char *machine_name, const char *filepath, cha
           yaml_event_delete(&event);
           if (yaml_parser_parse(&parser, &event) && event.type == YAML_SCALAR_EVENT) {
             strlcpy(dsp_lib_paths, (const char *)event.data.scalar.value, PATH_MAX);
-			FARF(ALWAYS, "dsp_lib_paths is %s", dsp_lib_paths);
+            FARF(ALWAYS, "dsp_lib_paths is %s", dsp_lib_paths);
             found_dsp_path = 1;
-            done = 1;
+          }
+        } else if (in_target_machine) {
+          /* Check if this scalar is one of the per-domain ARCH keys */
+          int d;
+          for (d = 0; d < NUM_DOMAINS; d++) {
+            if (DSP_ARCH_KEY[d] && strcmp(value, DSP_ARCH_KEY[d]) == 0) {
+              yaml_event_delete(&event);
+              if (yaml_parser_parse(&parser, &event) &&
+                  event.type == YAML_SCALAR_EVENT) {
+                strlcpy(DSP_ARCH_FROM_YAML[d],
+                        (const char *)event.data.scalar.value,
+                        sizeof(DSP_ARCH_FROM_YAML[d]));
+                FARF(ALWAYS, "%s: YAML arch for domain %d (%s): %s",
+                     __func__, d, DSP_ARCH_KEY[d], DSP_ARCH_FROM_YAML[d]);
+              }
+              break;
+            }
           }
         }
         break;
@@ -101,9 +139,7 @@ static void get_dsp_lib_path(const char *machine_name, const char *filepath, cha
         if (in_target_machine) {
           // Exiting the target machine mapping
           in_target_machine = 0;
-          if (found_dsp_path) {
-            done = 1;
-          }
+          done = 1;
         }
         break;
       case YAML_STREAM_END_EVENT:
