@@ -210,6 +210,20 @@ static void *rpcmem_qda_import_shared_buffer(int shared_dma_fd, size_t size, int
 
   /* Map the imported GEM handle for CPU access */
   buf = rpcmem_qda_mmap(size, imported_gem_handle);
+  /*
+   * The mmap holds its own kernel reference to the GEM object via the mapped
+   * offset.  Release the userspace GEM handle immediately — it is no longer
+   * needed and keeping it open would leak the per-process handle-table entry.
+   */
+  {
+    struct drm_gem_close gem_close = {
+        .handle = (uint32_t)imported_gem_handle
+    };
+    if (ioctl(qdafd, DRM_IOCTL_GEM_CLOSE, &gem_close) != 0) {
+      FARF(ERROR, "Warning %d: DRM_IOCTL_GEM_CLOSE failed for imported gem_handle=%d",
+           errno, imported_gem_handle);
+    }
+  }
   if (!buf) {
     FARF(ERROR, "Failed to mmap imported GEM handle %d", imported_gem_handle);
     return NULL;
@@ -301,23 +315,13 @@ int rpcmem_to_fd_internal(void *po) {
 int rpcmem_to_fd(void *po) { return rpcmem_to_fd_internal(po); }
 
 int rpcmem_to_handle_internal(void *po) {
-  struct rpc_info *rinfo, *rfree = 0;
-  QNode *pn, *pnn;
-
-  pthread_mutex_lock(&rpcmt);
-  QLIST_NEXTSAFE_FOR_ALL(&rpclst, pn, pnn) {
-    rinfo = STD_RECOVER_REC(struct rpc_info, qn, pn);
-    if (rinfo->aligned_buf == po) {
-      rfree = rinfo;
-      break;
-    }
-  }
-  pthread_mutex_unlock(&rpcmt);
-
-  if (rfree)
-    return rfree->gem_handle;
-
-  return -1;
+  /*
+   * Return the DMA-BUF fd (same as rpcmem_to_fd_internal) for uniformity
+   * with the standard Linux path (rpcmem_linux.c).  The gem_handle field
+   * is kept in rpc_info for internal mmap operations only and is no longer
+   * exposed through this API.
+   */
+  return rpcmem_to_fd_internal(po);
 }
 
 int rpcmem_to_handle(void *po) { return rpcmem_to_handle_internal(po); }
@@ -483,6 +487,26 @@ void rpcmem_free_internal(void *po) {
   if (rfree) {
     remote_register_buf(rfree->buf, rfree->size, -1);
     munmap(rfree->buf, rfree->size);
+#ifdef USE_ACCEL_DRIVER
+    /*
+     * Close the GEM handle if one was allocated or imported for this buffer.
+     * DRM_IOCTL_QDA_GEM_CREATE and DRM_IOCTL_PRIME_FD_TO_HANDLE both create
+     * a per-process GEM handle reference that must be explicitly released with
+     * DRM_IOCTL_GEM_CLOSE.  The DMA-BUF fd (rinfo->fd) holds a separate
+     * reference and is closed below; the GEM handle must be closed first so
+     * that closing the DMA-BUF fd can be the final release that frees the
+     * underlying GEM object.
+     */
+    if (rfree->gem_handle != -1 && rfree->device_fd != -1) {
+      struct drm_gem_close gem_close = {
+          .handle = (uint32_t)rfree->gem_handle
+      };
+      if (ioctl(rfree->device_fd, DRM_IOCTL_GEM_CLOSE, &gem_close) != 0) {
+        FARF(ERROR, "Warning %d: DRM_IOCTL_GEM_CLOSE failed for gem_handle=%d device_fd=%d",
+             errno, rfree->gem_handle, rfree->device_fd);
+      }
+    }
+#endif
     close(rfree->fd);
     free(rfree);
   } else {
@@ -600,7 +624,12 @@ void *rpcmem_alloc_internal(int heapid, uint32_t flags, size_t size) {
   }
 #endif
 
-  remote_register_buf(rinfo->buf, rinfo->size, rinfo->gem_handle);
+  /*
+   * Register using the DMA-BUF fd (rinfo->fd) for uniformity with the
+   * standard Linux path.  gem_handle is retained in rpc_info solely for
+   * internal QDA mmap operations.
+   */
+  remote_register_buf(rinfo->buf, rinfo->size, rinfo->fd);
 
   return rinfo->aligned_buf;
 
@@ -766,8 +795,8 @@ int rpcmem_import_shared_buffer_with_device(int fd, size_t size, int device_fd, 
   rinfo->buf = buf;
   rinfo->aligned_buf = buf;  /* Assume already aligned from import */
   rinfo->size = size;
-  rinfo->fd = -1;  /* Store the original DMA-BUF fd (NOT the GEM handle) - this is what should be closed */
-  rinfo->gem_handle = imported_gem_handle;  /* Store the imported GEM handle for reference only */
+  rinfo->fd = fd;  /* Store the DMA-BUF fd — used for registration, rpcmem_to_handle_internal, and close on free */
+  rinfo->gem_handle = imported_gem_handle;  /* Retained for internal mmap operations only */
   rinfo->device_fd = device_fd; /* Store F2's device fd used for import */
   
   /* Add to our tracking list */
@@ -775,8 +804,8 @@ int rpcmem_import_shared_buffer_with_device(int fd, size_t size, int device_fd, 
   QList_AppendNode(&rpclst, &rinfo->qn);
   pthread_mutex_unlock(&rpcmt);
   
-  /* Register with remote subsystem using the imported GEM handle */
-  remote_register_buf(rinfo->buf, rinfo->size, rinfo->gem_handle);
+  /* Register with remote subsystem using the DMA-BUF fd for uniformity with the Linux path */
+  remote_register_buf(rinfo->buf, rinfo->size, rinfo->fd);
   
   FARF(ALWAYS, "Successfully imported shared buffer fd=%d -> ptr=%p, gem_handle=%d, using device_fd=%d", 
        fd, buf, imported_gem_handle, device_fd);
