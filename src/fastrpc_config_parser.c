@@ -90,7 +90,7 @@ static void get_dsp_lib_path(const char *machine_name, const char *filepath, cha
           yaml_event_delete(&event);
           if (yaml_parser_parse(&parser, &event) && event.type == YAML_SCALAR_EVENT) {
             strlcpy(dsp_lib_paths, (const char *)event.data.scalar.value, PATH_MAX);
-			FARF(ALWAYS, "dsp_lib_paths is %s", dsp_lib_paths);
+            FARF(ALWAYS, "dsp_lib_paths is %s", dsp_lib_paths);
             found_dsp_path = 1;
             done = 1;
           }
@@ -118,11 +118,6 @@ static void get_dsp_lib_path(const char *machine_name, const char *filepath, cha
 
   yaml_parser_delete(&parser);
   fclose(file);
-
-  if (!found_dsp_path) {
-    FARF(ALWAYS, "Warning: DSP_LIBRARY_PATH not found for machine [%s] in configuration file %s\n", 
-         machine_name, filepath);
-  }
 }
 
 static void parse_config_dir(char *machine_name) {
@@ -154,10 +149,26 @@ static void parse_config_dir(char *machine_name) {
   }
 
   if (dsp_lib_paths[0] != '\0') {
-    strlcpy(DSP_LIBS_LOCATION, CONFIG_BASE_DIR, sizeof(DSP_LIBS_LOCATION));
-    //append slash in case user passed config base dir doesn't end with slash '/'
-    strlcat(DSP_LIBS_LOCATION, "/", sizeof(DSP_LIBS_LOCATION));
-    strlcat(DSP_LIBS_LOCATION, dsp_lib_paths, sizeof(DSP_LIBS_LOCATION));
+    char resolved[PATH_MAX] = {0};
+    char tmp[PATH_MAX];
+    char *token, *saveptr;
+    /*
+     * Iterate over all semicolon-separated entries in dsp_lib_paths.
+     * Prefix CONFIG_BASE_DIR to every relative path (i.e. any path that
+     * does not begin with '/') so that no entry is left unresolved.
+     */
+    strlcpy(tmp, dsp_lib_paths, sizeof(tmp));
+    token = strtok_r(tmp, ";", &saveptr);
+    while (token != NULL) {
+      char entry_buf[PATH_MAX] = {0};
+
+      snprintf(entry_buf, sizeof(entry_buf), "%s/%s", CONFIG_BASE_DIR, token);
+      if (resolved[0] != '\0')
+        strlcat(resolved, ";", sizeof(resolved));
+      strlcat(resolved, entry_buf, sizeof(resolved));
+      token = strtok_r(NULL, ";", &saveptr);
+    }
+    strlcpy(DSP_LIBS_LOCATION, resolved, sizeof(DSP_LIBS_LOCATION));
     strlcat(DSP_LIBS_LOCATION, DEFAULT_DSP_SEARCH_PATHS, sizeof(DSP_LIBS_LOCATION));
   } else {
     FARF(ALWAYS, "Warning: No DSP library path found for machine [%s] in any configuration file\n", 
