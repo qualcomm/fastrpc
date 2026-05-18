@@ -148,7 +148,7 @@ __QAIC_IMPL(apps_mem_request_map64)(int heapid, uint32_t lflags, uint32_t rflags
      */
     VERIFY(AEE_SUCCESS == (nErr = fastrpc_mmap(domain, fd, buf, 0, len,
                                                FASTRPC_MAP_FD_DELAYED)));
-    pbuf = (uint64_t)buf;
+    pbuf = (uint64_t)(uintptr_t)buf;
     *vapps = pbuf;
     minfo->vapps = *vapps;
 
@@ -173,9 +173,9 @@ __QAIC_IMPL(apps_mem_request_map64)(int heapid, uint32_t lflags, uint32_t rflags
       VERIFYC(fd > 0, AEE_EBADPARM);
     }
     VERIFY(AEE_SUCCESS ==
-            (nErr = remote_mmap64_internal(fd, rflags, (uint64_t)buf, len,
+            (nErr = remote_mmap64_internal(fd, rflags, (uint64_t)(uintptr_t)buf, len,
                                           (uint64_t *)vadsp)));
-    pbuf = (uint64_t)buf;
+    pbuf = (uint64_t)(uintptr_t)buf;
     *vapps = pbuf;
     minfo->vapps = *vapps;
   }
@@ -313,8 +313,8 @@ __QAIC_IMPL(apps_mem_share_map)(int fd, int size, uint64_t *vapps,
                                             MAP_SHARED, fd, 0)),
           AEE_ERPC);
   VERIFY(AEE_SUCCESS == (nErr = remote_mmap64_internal(
-                             fd, 0, (uint64_t)buf, size, (uint64_t *)vadsp)));
-  pbuf = (uint64_t)buf;
+                             fd, 0, (uint64_t)(uintptr_t)buf, size, (uint64_t *)vadsp)));
+  pbuf = (uint64_t)(uintptr_t)buf;
   *vapps = pbuf;
   minfo->vapps = *vapps;
   minfo->vadsp = *vadsp;

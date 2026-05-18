@@ -54,12 +54,12 @@
 						free(args);	\
 					}
 
-#define set_args(i, pra, len, filedesc, attrs)	args[i].ptr = (uint64_t)pra; \
+#define set_args(i, pra, len, filedesc, attrs)	args[i].ptr = (uint64_t)(uintptr_t)(pra); \
 						args[i].length = len;	\
 						args[i].fd = filedesc;	\
 						args[i].attr = attrs;
 
-#define set_args_ptr(i, pra)		args[i].ptr = (uint64_t)pra
+#define set_args_ptr(i, pra)		args[i].ptr = (uint64_t)(uintptr_t)(pra)
 #define set_args_len(i, len)		args[i].length = len
 #define set_args_attr(i, attrs)		args[i].attr = attrs
 #define set_args_fd(i, filedesc)	args[i].fd = filedesc
