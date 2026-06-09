@@ -1,0 +1,192 @@
+.TH dsprpcd 8 "May 2026" "fastrpc" "System Administration"
+
+.SH NAME
+adsprpcd, cdsprpcd, gdsprpcd, sdsprpcd \- FastRPC DSP daemon
+
+.SH SYNOPSIS
+.B adsprpcd
+[\fB\-h\fR | \fB\-\-help\fR]
+\fIpd_name\fR \fIdomain\fR
+.br
+.B cdsprpcd
+[\fB\-h\fR | \fB\-\-help\fR]
+\fIpd_name\fR \fIdomain\fR
+.br
+.B gdsprpcd
+[\fB\-h\fR | \fB\-\-help\fR]
+\fIpd_name\fR \fIdomain\fR
+.br
+.B sdsprpcd
+[\fB\-h\fR | \fB\-\-help\fR]
+\fIpd_name\fR \fIdomain\fR
+
+
+.SH DESCRIPTION
+.B dsprpcd
+is a userspace daemon that establishes and maintains FastRPC communication between the 
+application processor (HLOS: High-Level Operating System, e.g., Linux) and a Digital Signal Processor (DSP).
+
+The daemon is typically executed under different names (adsprpcd, cdsprpcd, gdsprpcd, sdsprpcd), 
+with each name targeting a specific DSP domain:
+.TP
+.B adsprpcd
+Audio DSP (ADSP)
+.TP
+.B cdsprpcd
+Compute DSP (CDSP)
+.TP
+.B gdsprpcd
+General purpose DSP (GDSP)
+.TP
+.B sdsprpcd
+Sensor DSP (SDSP)
+
+.PP
+The daemon acts as a default listener for DSP Protection Domains (PDs),
+handling reverse-RPC requests from DSP firmware that require host-side
+services.
+
+A Protection Domain is an isolated process and memory space that lets a
+component run independently so it can be restarted without affecting
+others.
+
+These services include:
+.IP \[bu] 2
+File system access via host-side interfaces (e.g., file open, read, write operations)
+.IP \[bu]
+Dynamic memory allocation requests from DSP to host memory
+.IP \[bu]
+Logging of DSP messages and exceptions
+
+.PP
+The daemon typically runs in the foreground and may be managed by init systems 
+(e.g., systemd) for automatic restart and lifecycle management.
+
+It communicates with the DSP through FastRPC device nodes, typically located under:
+.I /dev/fastrpc-*
+
+The daemon requires appropriate permissions to access these device nodes 
+and to perform system-level operations.
+
+.PP
+When running, the daemon maintains a persistent session with the DSP and 
+processes incoming requests in an event-driven manner.
+
+.SH OPTIONS
+.TP
+.BR \-h ", " \-\-help
+Display help information and exit.
+
+.TP
+.I pd_name domain
+Start the daemon for a specific Protection Domain (PD) and DSP domain.
+
+
+The domain identifies the specific DSP instance. Some DSP types
+provide multiple instances (e.g., cdsp0, cdsp1), while others have
+a single instance (e.g., adsp). In such cases, the domain argument
+is primarily relevant for DSPs with multiple instances.
+
+.PP
+Examples:
+.br
+\fBrootpd adsp\fR
+.br
+\fBrootpd cdsp0\fR
+.br
+\fBrootpd gdsp0\fR
+.br
+\fBrootpd sdsp\fR
+
+.SH FUNCTIONALITY
+
+.SS rootpd (Root PD / Guest OS)
+.PP
+\fBUsage:\fR
+.nf
+cdsprpcd
+cdsprpcd rootpd cdsp1
+.fi
+
+.PP
+\fBPurpose:\fR
+Attaches to the DSP Root Protection Domain (PD), which runs the guest
+operating system (typically QuRT). It acts as the default listener for
+reverse-RPC requests.
+
+Provides file operations for components running in the Root PD. Dynamic
+loading (dlopen) is not supported in Root PD due to security constraints.
+
+Routes DSP exception logs to host logging (syslog/dmesg), which is the
+primary client-facing use case.
+
+.PP
+\fBServices:\fR
+.IP \[bu] 2
+Exception logging via host logging facilities
+.IP \[bu]
+Remote file system access for Root PD components
+
+\fBNote:\fR
+It is recommended to run the root PD daemon if visibility of DSP
+exception logs from dynamic Protection Domains is required.
+
+
+.SS audiopd (Audio PD)
+.PP
+\fBUsage:\fR
+.nf
+adsprpcd audiopd adsp
+.fi
+
+.PP
+\fBPurpose:\fR
+Attaches to the Audio Protection Domain and serves reverse-RPC for audio
+workloads.
+
+Supports dynamic loading of audio modules and manages memory allocation
+requests originating from audio components.
+
+.PP
+\fBServices:\fR
+.IP \[bu] 2
+Dynamic memory allocation via RPC mechanisms
+.IP \[bu]
+Dynamic module loading for audio components
+
+.SS sensorspd (Sensors PD)
+.PP
+\fBUsage:\fR
+.nf
+adsprpcd sensorspd
+.fi
+
+.PP
+\fBPurpose:\fR
+Handles FastRPC requests originating from sensor DSP components and
+processed by a host-side daemon. Unlike typical FastRPC usage, Sensors PD supports 
+connections from multiple applications simultaneously rather than a one-to-one
+process mapping.
+
+\fBServices:\fR
+.IP \[bu] 2
+File system operations on behalf of sensor DSP components
+.IP \[bu]
+Dynamic loading of shared objects required by sensor workloads
+.IP \[bu]
+Handling of FastRPC requests from multiple client applications connected
+to Sensors PD
+
+.SH FILES
+.TP
+.I libadsp_default_listener.so
+Listener implementation for ADSP
+.TP
+.I libsdsp_default_listener.so
+Listener implementation for SDSP
+.TP
+.I libcdsp_default_listener.so
+Listener implementation for CDSP and GDSP
+
+.SH SEE ALSO
+.BR fastrpc (3)
