@@ -162,44 +162,59 @@ void HAP_debug_runtime(int level, const char *file, int line,
                        const char *format, ...) {
   int len = 0;
   va_list argp;
-  char *buf = NULL, *log = NULL;
+  char *buf = NULL;
+  const uint32_t level_mask = (1 << level);
+  const bool log_enabled = (level_mask & fastrpc_logmask);
+  const bool is_critical = (level == HAP_LEVEL_RPC_CRITICAL);
+  const bool need_persist = is_critical && persist_buf.buf;
+  const bool need_file_log = (log_userspace_file_fd != NULL);
 
-  /*
-   * Adding logs to persist buffer when level is set to
-   * RUNTIME_RPC_CRITICAL and fastrpc_log mask is disabled.
-   */
-  if (((1 << level) & (fastrpc_logmask)) ||
-      ((level == HAP_LEVEL_RPC_CRITICAL) && persist_buf.buf) ||
-      log_userspace_file_fd != NULL) {
-    buf = (char *)malloc(sizeof(char) * MAX_FARF_LEN);
-    if (buf == NULL) {
-      return;
-    }
-    va_start(argp, format);
-    len = vsnprintf(buf, MAX_FARF_LEN, format, argp);
-    va_end(argp);
-    log = (char *)malloc(sizeof(char) * MAX_FARF_LEN);
-    if (log == NULL) {
-      return;
-    }
-    snprintf(log, MAX_FARF_LEN, "%d:%d:%s:%s:%d: %s", getpid(), gettid(),
-             __progname, file, line, buf);
+  /* Early return if no logging is needed */
+  if (!log_enabled && !need_persist && !need_file_log) {
+    return;
   }
 
-  print_dbgbuf_data(log, len);
-  if (((1 << level) & (fastrpc_logmask))) {
-    if (log_userspace_file_fd != NULL) {
-      fputs(log, log_userspace_file_fd);
-      fputs("\n", log_userspace_file_fd);
+  /* Allocate buffer only when needed */
+  buf = (char *)malloc(sizeof(char) * MAX_FARF_LEN);
+  if (buf == NULL) {
+    return;
+  }
+
+  /* Format the message once */
+  va_start(argp, format);
+  len = vsnprintf(buf, MAX_FARF_LEN, format, argp);
+  va_end(argp);
+
+  /* Validate length */
+  if (len <= 0 || len >= MAX_FARF_LEN) {
+    free(buf);
+    return;
+  }
+
+  /* Handle persist buffer for critical logs */
+  if (need_persist || (log_enabled && IS_PERSIST_BUF_DATA(len, level))) {
+    print_dbgbuf_data(buf, len);
+  }
+
+  /* Handle regular logging when enabled */
+  if (log_enabled) {
+    /* File logging */
+    if (need_file_log) {
+      char *filelog = (char *)malloc(sizeof(char) * MAX_FARF_LEN);
+      if (filelog) {
+        if (snprintf(filelog, MAX_FARF_LEN, "%d:%d:%s:%s:%d: %s",
+                     getpid(), gettid(), __progname, file, line, buf) > 0) {
+          fputs(filelog, log_userspace_file_fd);
+          fputs("\n", log_userspace_file_fd);
+        }
+        free(filelog);
+      }
     }
+    /* Debug output */
     HAP_debug(buf, level, file, line);
   }
-  if (buf) {
-    free(buf);
-  }
-  if (log) {
-    free(log);
-  }
+
+  free(buf);
 }
 
 #ifdef __LE_TVM__
