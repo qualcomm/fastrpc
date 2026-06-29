@@ -1,0 +1,18 @@
+// Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
+// SPDX-License-Identifier: BSD-3-Clause
+#include "AEEStdDef.idl"
+
+// Interface used by the ADSP to send log messages back to the APPS (reverse invoke)
+interface adspmsgd_apps {
+    enum Level{
+        LOW,
+        MEDIUM,
+        HIGH,
+        ERROR,
+        FATAL
+    };
+
+    typedef sequence <octet> octetSeq;
+
+    long log(in octetSeq log_message_buffer);
+};

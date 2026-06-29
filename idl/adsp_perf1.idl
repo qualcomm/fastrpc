@@ -1,0 +1,59 @@
+// Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
+// SPDX-License-Identifier: BSD-3-Clause
+#ifndef ADSP_PERF1_IDL
+#define ADSP_PERF1_IDL
+
+#include "remote.idl"
+#include "AEEStdDef.idl"
+
+/**
+ * Interface for querying the adsp for counter data
+ * For example, to enable all the perf numbers:
+ * 
+ *     int perf_on(void) {
+ *       int nErr = 0;
+ *       int numKeys = 0, maxLen = 0, ii;
+ *       char keys[512];
+ *       char* buf = &keys[0];
+ *       VERIFY(0 == adsp_perf_get_keys(keys, 512, &maxLen, &numKeys)); 
+ *       assert(maxLen < 512);
+ *       for(ii = 0; ii < numKeys; ++ii) {
+ *          char* name = buf;
+ *          buf += strlen(name) + 1;
+ *          printf("perf on: %s\n", name);
+ *          VERIFY(0 == adsp_perf_enable(ii));
+ *       }
+ *    bail:
+ *       return nErr;
+ *    }
+ *
+ * To read all the results:
+ *
+ *    int rpcperf_perf_result(void) {
+ *       int nErr = 0;
+ *       int numKeys, maxLen, ii;
+ *       char keys[512];
+ *       char* buf = &keys[0];
+ *       long long usecs[16];
+ *       VERIFY(0 == adsp_perf_get_keys(keys, 512, &maxLen, &numKeys)); 
+ *       printf("perf keys: %d\n", numKeys);
+ *       VERIFY(0 == adsp_perf_get_usecs(usecs, 16));
+ *       assert(maxLen < 512);
+ *       assert(numKeys < 16);
+ *       for(ii = 0; ii < numKeys; ++ii) {
+ *          char* name = buf;
+ *          buf += strlen(name) + 1;
+ *          printf("perf result: %s %lld\n", name, usecs[ii]);
+ *       }
+ *    bail:
+ *       return nErr;
+ *    }
+ */
+const long _const_adsp_perf1_handle = 9;
+interface adsp_perf1 : remote_handle64 {
+   long enable(in long ix);
+   long get_usecs(rout sequence<long long> dst);
+   long get_keys(rout sequence<char> keys, rout long maxLen, rout long numKeys);
+};
+
+#endif

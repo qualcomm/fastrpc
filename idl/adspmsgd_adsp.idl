@@ -1,0 +1,11 @@
+// Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
+// SPDX-License-Identifier: BSD-3-Clause
+#include "AEEStdDef.idl"
+
+// Interface used by APPS to initialize the adspmsgd service on the ADSP (forward invoke)
+interface adspmsgd_adsp {
+    long init(in long heapid, in uint32 ion_flags, in uint32 filter, in uint32 buf_size, rout long buff_addr);
+    long init2();
+    long deinit();
+};
+

@@ -1,0 +1,15 @@
+// Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
+// SPDX-License-Identifier: BSD-3-Clause
+#include "AEEStdDef.idl"
+#include "remote.idl"
+
+const long _const_adspmsgd_adsp1_handle = 5;
+
+// Interface used by APPS to initialize the adspmsgd service on the ADSP (forward invoke)
+interface adspmsgd_adsp1 : remote_handle64 {
+    long init2();
+    long deinit();
+//	To enable adspmsgd with shared memory implementation
+	long init3(in long heapid, in uint32 ion_flags, in uint32 filter, in uint64 buf_size, rout uint64 buff_addr);
+	long wait(rout uint64 bytes_to_read);
+};
