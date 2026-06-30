@@ -326,7 +326,7 @@ int rpcmem_to_handle_internal(void *po) {
 
 int rpcmem_to_handle(void *po) { return rpcmem_to_handle_internal(po); }
 
-void *rpcmem_alloc_internal2(int heapid, uint32_t flags, size_t size) {
+void *rpcmem_alloc_internal(int heapid, uint32_t flags, size_t size) {
   struct rpc_info *rinfo;
   int nErr = 0, fd = -1, prime_fd = -1;
   struct dma_heap_allocation_data dmabuf = {
@@ -518,11 +518,7 @@ void rpcmem_free_internal(void *po) {
 
 void rpcmem_free(void *po) { rpcmem_free_internal(po); }
 
-void *rpcmem_alloc3(int heapid, uint32_t flags, int size) {
-  return rpcmem_alloc_internal2(heapid, flags, size);
-}
-
-void *rpcmem_alloc_internal(int heapid, uint32_t flags, size_t size) {
+void *rpcmem_alloc_internal2(int heapid, uint32_t flags, size_t size) {
   struct rpc_info *rinfo;
   int nErr = 0, fd = -1;
   struct dma_heap_allocation_data dmabuf = {

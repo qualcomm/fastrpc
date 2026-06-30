@@ -144,16 +144,20 @@ struct drm_qda_gem_mmap_offset {
 };
 
 /**
- * struct qda_invoke_args - Individual argument descriptor for invoke
+ * struct qda_invoke_args - Individual argument descriptor for invoke (kernel UAPI)
  * @ptr: Pointer to argument data or value
  * @length: Length of the argument data
- * @fd: File descriptor (for GEM objects) or -1 for direct data
+ * @handle: GEM handle for buffer arguments; 0 for scalar/inline arguments
  * @attr: Argument attributes
+ *
+ * This is the structure sent directly to the QDA kernel driver.  The driver
+ * only accepts GEM handles; userspace must import any DMA-BUF fd to a GEM
+ * handle via DRM_IOCTL_PRIME_FD_TO_HANDLE before filling this field.
  */
 struct qda_invoke_args {
 	__u64 ptr;
 	__u64 length;
-	__s32 fd;
+	__u32 handle;
 	__u32 attr;
 };
 
@@ -179,10 +183,10 @@ struct qda_invoke {
  * struct qda_mem_map - Map memory for accelerator access
  * @request: Request type (QDA_MAP_REQUEST_LEGACY or QDA_MAP_REQUEST_ATTR)
  * @flags: Mapping flags
- * @fd: File descriptor of the buffer to map
+ * @handle: GEM handle of the buffer to map (used for kernel buffer lookup)
  * @attrs: SMMU attributes (used for QDA_MAP_REQUEST_ATTR)
  * @offset: Offset within buffer (used for QDA_MAP_REQUEST_ATTR)
- * @reserved: Reserved for alignment/future use
+ * @dsp_handle: Original DMA-BUF fd forwarded to DSP as the buffer identifier
  * @vaddrin: Input virtual address (optional)
  * @size: Size of the mapping
  * @vaddrout: [out] Output DSP virtual address
@@ -190,10 +194,10 @@ struct qda_invoke {
 struct qda_mem_map {
 	__u32 request;	/* Request type: QDA_MAP_REQUEST_* */
 	__u32 flags;	/* Flags for DSP to map with */
-	__s32 fd;	/* File descriptor */
+	__u32 handle;	/* GEM handle for kernel buffer lookup */
 	__u32 attrs;	/* SMMU attributes (for ATTR request) */
 	__u32 offset;	/* Offset within buffer (for ATTR request) */
-	__u32 reserved;	/* Reserved for alignment/future use */
+	__s32 dsp_handle;	/* Original DMA-BUF fd forwarded to DSP as buffer identifier */
 	__u64 vaddrin;	/* Optional virtual address */
 	__u64 size;	/* Size of mapping */
 	__u64 vaddrout;	/* DSP virtual address (output) */
@@ -202,14 +206,17 @@ struct qda_mem_map {
 /**
  * struct qda_mem_unmap - Unmap memory from accelerator
  * @request: Request type (QDA_MUNMAP_REQUEST_LEGACY or QDA_MUNMAP_REQUEST_ATTR)
- * @fd: File descriptor (used for ATTR request)
+ * @handle: GEM handle for kernel buffer lookup (used for ATTR request)
+ * @dsp_handle: Original DMA-BUF fd forwarded to DSP as the buffer identifier
  * @vaddr: Virtual address to unmap (used for ATTR request)
  * @vaddrout: DSP virtual address to unmap (used for LEGACY request)
  * @size: Size of the mapping to unmap
  */
 struct qda_mem_unmap {
 	__u32 request;	/* Request type: QDA_MUNMAP_REQUEST_* */
-	__s32 fd;	/* File descriptor (for ATTR request) */
+	__u32 handle;	/* GEM handle for kernel buffer lookup */
+	__s32 dsp_handle;	/* Original DMA-BUF fd forwarded to DSP as buffer identifier */
+	__u32 pad;	/* Padding for alignment */
 	__u64 vaddr;	/* Virtual address (for ATTR request) */
 	__u64 vaddrout;	/* DSP virtual address (for LEGACY request) */
 	__u64 size;	/* Size of mapping */
@@ -218,14 +225,15 @@ struct qda_mem_unmap {
 /**
  * struct qda_init_create - Initialize and create a process on accelerator
  * @filelen: Length of the ELF file
- * @filefd: File descriptor containing the ELF file (GEM object)
+ * @filehandle: GEM handle for the buffer containing the ELF file; 0 if using
+ *              the direct file pointer
  * @attrs: Process attributes (debug, privileged, etc.)
  * @siglen: Length of signature data
- * @file: Pointer to ELF file data (if not using filefd)
+ * @file: Pointer to ELF file data (if not using filehandle)
  */
 struct qda_init_create {
 	__u32 filelen;
-	__s32 filefd;
+	__u32 filehandle;
 	__u32 attrs;
 	__u32 siglen;
 	__u64 file;

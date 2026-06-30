@@ -14,6 +14,46 @@
 #include <stdlib.h>
 #include <string.h>
 
+/*
+ * import_fd_to_gem_handle() - Import a DMA-BUF fd into the QDA device as a GEM handle
+ *
+ * The driver only accepts GEM handles in ioctl structures.  This helper
+ * performs the fd→handle import (DRM_IOCTL_PRIME_FD_TO_HANDLE) so that
+ * any DMA-BUF fd obtained from fdlist can be translated before an ioctl call.
+ * The caller must release the handle with close_gem_handle() after the ioctl.
+ *
+ * Returns 0 on success, -errno on failure.
+ */
+static int import_fd_to_gem_handle(int dev, int fd, uint32_t *handle_out)
+{
+  struct drm_prime_handle ph;
+
+  memset(&ph, 0, sizeof(ph));
+  ph.fd = fd;
+  ph.handle = 0;
+
+  if (ioctl(dev, DRM_IOCTL_PRIME_FD_TO_HANDLE, &ph) != 0)
+    return -1;
+
+  *handle_out = ph.handle;
+  return 0;
+}
+
+/*
+ * close_gem_handle() - Release a GEM handle imported for a single ioctl call
+ *
+ * Imported handles (from import_fd_to_gem_handle) must be closed after use
+ * to avoid leaking handle table entries in the driver.
+ */
+static int close_gem_handle(int dev, uint32_t handle)
+{
+  struct drm_gem_close gc;
+
+  memset(&gc, 0, sizeof(gc));
+  gc.handle = handle;
+  return ioctl(dev, DRM_IOCTL_GEM_CLOSE, &gc);
+}
+
 /* Returns the name of the domain based on the following
  ADSP/CDSP - Return accel device node
  */
@@ -36,24 +76,74 @@ const char *get_secure_domain_name(int domain_id) {
   return name;
 }
 
-/* Helper function to convert fastrpc invoke args to qda invoke args */
-static void convert_invoke_args(struct fastrpc_invoke_args *fastrpc_args, 
-                               struct qda_invoke_args *qda_args, 
-                               int num_args) {
+int ioctl_invoke(int dev, int req, remote_handle handle, uint32_t sc, void *pra,
+                 int *fds, unsigned int *attrs, unsigned int *crc,
+                 uint64_t *perf_kernel, uint64_t *perf_dsp) {
+  int ioErr = AEE_SUCCESS;
+  struct qda_invoke invoke = {0};
+  struct fastrpc_invoke_args *fastrpc_args = (struct fastrpc_invoke_args *)pra;
+  struct qda_invoke_args *qda_args = NULL;
+  uint32_t *imported_handles = NULL;
+  int num_args = 0;
   int i;
 
-  for (i = 0; i < num_args; i++) {
-    qda_args[i].ptr = fastrpc_args[i].ptr;
-    qda_args[i].length = fastrpc_args[i].length;
-    qda_args[i].fd = fastrpc_args[i].fd;
-    qda_args[i].attr = fastrpc_args[i].attr;
+  /* Calculate number of arguments from scalars */
+  num_args = ((sc >> 16) & 0xff) + ((sc >> 8) & 0xff);
+
+  if (num_args > 0 && fastrpc_args) {
+    qda_args = (struct qda_invoke_args *)calloc(num_args, sizeof(struct qda_invoke_args));
+    if (!qda_args)
+      return AEE_ENOMEMORY;
+
+    imported_handles = (uint32_t *)calloc(num_args, sizeof(uint32_t));
+    if (!imported_handles) {
+      free(qda_args);
+      return AEE_ENOMEMORY;
+    }
+
+    for (i = 0; i < num_args; i++) {
+      qda_args[i].ptr    = fastrpc_args[i].ptr;
+      qda_args[i].length = fastrpc_args[i].length;
+      qda_args[i].attr   = fastrpc_args[i].attr;
+      qda_args[i].handle = 0;
+
+      if (fastrpc_args[i].fd > 0) {
+        if (import_fd_to_gem_handle(dev, fastrpc_args[i].fd, &qda_args[i].handle) != 0) {
+          FARF(ERROR, "%s: Failed to import fd %d to GEM handle", __func__,
+               fastrpc_args[i].fd);
+          ioErr = AEE_EFAILED;
+          goto bail_handles;
+        }
+        imported_handles[i] = qda_args[i].handle;
+      }
+    }
   }
+
+  invoke.handle = handle;
+  invoke.sc = sc;
+  invoke.args = (uint64_t)qda_args;
+
+  if (req >= INVOKE && req <= INVOKE_FD)
+    ioErr = ioctl(dev, DRM_IOCTL_QDA_INVOKE, &invoke);
+  else
+    ioErr = AEE_EUNSUPPORTED;
+
+bail_handles:
+  if (imported_handles) {
+    free(imported_handles);
+  }
+
+  if (qda_args)
+    free(qda_args);
+
+  return ioErr;
 }
 
 int ioctl_init(int dev, uint32_t flags, int attr, unsigned char *shell, int shelllen,
                int shellfd, char *mem, int memlen, int memfd, int tessiglen) {
   int ioErr = 0;
   struct qda_init_create init = {0};
+  uint32_t filehandle = 0;
 
   switch (flags) {
   case FASTRPC_INIT_ATTACH:
@@ -64,18 +154,18 @@ int ioctl_init(int dev, uint32_t flags, int attr, unsigned char *shell, int shel
     ioErr = ioctl(dev, DRM_IOCTL_QDA_INIT_ATTACH, NULL);
     break;
   case FASTRPC_INIT_CREATE_STATIC:
-    /* Static PD creation not directly supported, use regular create */
-    init.file = (uint64_t)shell;
-    init.filelen = shelllen;
-    init.filefd = shellfd;
-    init.attrs = attr;
-    init.siglen = tessiglen;
-    ioErr = ioctl(dev, DRM_IOCTL_QDA_INIT_CREATE, &init);
-    break;
   case FASTRPC_INIT_CREATE:
+    /* Import ELF file DMA-BUF fd to GEM handle; driver only accepts handles */
+    if (shellfd > 0) {
+      if (import_fd_to_gem_handle(dev, shellfd, &filehandle) != 0) {
+        FARF(ERROR, "ERROR: %s Failed to import shellfd %d to GEM handle",
+             __func__, shellfd);
+        return AEE_EFAILED;
+      }
+    }
     init.file = (uint64_t)shell;
     init.filelen = shelllen;
-    init.filefd = shellfd;
+    init.filehandle = filehandle;
     init.attrs = attr;
     init.siglen = tessiglen;
     ioErr = ioctl(dev, DRM_IOCTL_QDA_INIT_CREATE, &init);
@@ -84,43 +174,6 @@ int ioctl_init(int dev, uint32_t flags, int attr, unsigned char *shell, int shel
     FARF(ERROR, "ERROR: %s Invalid init flags passed %d", __func__, flags);
     ioErr = AEE_EBADPARM;
     break;
-  }
-
-  return ioErr;
-}
-
-int ioctl_invoke(int dev, int req, remote_handle handle, uint32_t sc, void *pra,
-                 int *fds, unsigned int *attrs, unsigned int *crc,
-                 uint64_t *perf_kernel, uint64_t *perf_dsp) {
-  int ioErr = AEE_SUCCESS;
-  struct qda_invoke invoke = {0};
-  struct fastrpc_invoke_args *fastrpc_args = (struct fastrpc_invoke_args *)pra;
-  struct qda_invoke_args *qda_args = NULL;
-  int num_args = 0;
-
-  /* Calculate number of arguments from scalars */
-  num_args = ((sc >> 16) & 0xff) + ((sc >> 8) & 0xff);
-  
-  if (num_args > 0 && fastrpc_args) {
-    qda_args = (struct qda_invoke_args *)malloc(num_args * sizeof(struct qda_invoke_args));
-    if (!qda_args) {
-      return AEE_ENOMEMORY;
-    }
-    convert_invoke_args(fastrpc_args, qda_args, num_args);
-  }
-
-  invoke.handle = handle;
-  invoke.sc = sc;
-  invoke.args = (uint64_t)qda_args;
-  
-  if (req >= INVOKE && req <= INVOKE_FD) {
-    ioErr = ioctl(dev, DRM_IOCTL_QDA_INVOKE, &invoke);
-  } else {
-    ioErr = AEE_EUNSUPPORTED;
-  }
-
-  if (qda_args) {
-    free(qda_args);
   }
 
   return ioErr;
@@ -140,13 +193,23 @@ int ioctl_mmap(int dev, int req, uint32_t flags, int attr, int fd, int offset,
                size_t len, uintptr_t vaddrin, uint64_t *vaddrout) {
   int ioErr = AEE_SUCCESS;
   struct qda_mem_map qda_map = {0};
+  uint32_t gem_handle = 0;
+
+  /* Import DMA-BUF fd to GEM handle; driver only accepts GEM handles */
+  if (fd > 0) {
+    if (import_fd_to_gem_handle(dev, fd, &gem_handle) != 0) {
+      FARF(ERROR, "ERROR: %s Failed to import fd %d to GEM handle", __func__, fd);
+      return AEE_EFAILED;
+    }
+  }
 
   switch (req) {
   case MEM_MAP: {
-    /* FD-based mapping with attributes */
+    /* Handle-based mapping with attributes */
     qda_map.request = QDA_MAP_REQUEST_ATTR;
     qda_map.flags = flags;
-    qda_map.fd = fd;
+    qda_map.handle = gem_handle;
+    qda_map.dsp_handle = fd;
     qda_map.attrs = attr;
     qda_map.offset = offset;
     qda_map.vaddrin = (uint64_t)vaddrin;
@@ -165,7 +228,8 @@ int ioctl_mmap(int dev, int req, uint32_t flags, int attr, int fd, int offset,
     /* Legacy mapping operation */
     qda_map.request = QDA_MAP_REQUEST_LEGACY;
     qda_map.flags = flags;
-    qda_map.fd = fd;
+    qda_map.handle = gem_handle;
+    qda_map.dsp_handle = fd;
     qda_map.vaddrin = (uint64_t)vaddrin;
     qda_map.size = len;
     /* attrs and offset remain 0 for legacy */
@@ -183,6 +247,7 @@ int ioctl_mmap(int dev, int req, uint32_t flags, int attr, int fd, int offset,
     ioErr = AEE_EBADPARM;
     break;
   }
+
   return ioErr;
 }
 
@@ -190,13 +255,23 @@ int ioctl_munmap(int dev, int req, int attr, void *buf, int fd, int len,
                  uint64_t vaddr) {
   int ioErr = AEE_SUCCESS;
   struct qda_mem_unmap qda_unmap = {0};
+  uint32_t gem_handle = 0;
+
+  /* Import DMA-BUF fd to GEM handle; driver only accepts GEM handles */
+  if (fd > 0) {
+    if (import_fd_to_gem_handle(dev, fd, &gem_handle) != 0) {
+      FARF(ERROR, "ERROR: %s Failed to import fd %d to GEM handle", __func__, fd);
+      return AEE_EFAILED;
+    }
+  }
 
   switch (req) {
   case MEM_UNMAP:
   case MUNMAP_FD: {
-    /* FD-based unmapping with attributes */
+    /* Handle-based unmapping with attributes */
     qda_unmap.request = QDA_MUNMAP_REQUEST_ATTR;
-    qda_unmap.fd = fd;
+    qda_unmap.handle = gem_handle;
+    qda_unmap.dsp_handle = fd;
     qda_unmap.vaddr = vaddr;
     qda_unmap.size = len;
 
