@@ -32,4 +32,4 @@ jobs:
     - name: Compile code for LE platform
       run: |
         GITCOMPILE_NO_MAKE=true ./gitcompile --enable-stricter
-        make distcheck DISTCHECK_CONFIGURE_FLAGS="--with-systemdsystemunitdir='lib/systemd/system' --enable-stricter"
+        make distcheck DISTCHECK_CONFIGURE_FLAGS="--with-systemdsystemunitdir='lib/systemd/system' --with-udevrulesdir='lib/udev/rules.d' --with-sysusersdir='lib/sysusers.d' --enable-stricter"
