@@ -442,3 +442,14 @@ bail:
   }
   return nErr;
 }
+
+void fastrpc_config_deinit() {
+  if (frpc_config.farf_log_filename) {
+    free(frpc_config.farf_log_filename);
+    frpc_config.farf_log_filename = NULL;
+  }
+  if (frpc_config.farf_log_filename_userspace) {
+    free(frpc_config.farf_log_filename_userspace);
+    frpc_config.farf_log_filename_userspace = NULL;
+  }
+}
