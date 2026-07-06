@@ -370,6 +370,7 @@ enum handle_control_req_id {
     DSPRPC_NOTIF_WAKE,                 /** Request ID to exit notif  thread */
     DSPRPC_REMOTE_PROCESS_KILL,        /** Request ID to kill remote process */
     DSPRPC_SET_MODE,                   /** Request ID to set mode */
+    FASTRPC_HANDLE_THREAD_PRIORITY,    /** Set DSP thread priority for RPC calls on a specific handle */
 };
 
 /**
@@ -402,6 +403,17 @@ struct remote_rpc_relative_thread_priority {
                                      * So a negative relative thread priority value will 'increase' the thread priority,
                                      * a positive value will 'decrease' the thread priority.
                                      */
+};
+
+/**
+ * Structure used for request ID `FASTRPC_HANDLE_THREAD_PRIORITY`
+ * in remote handle control interface.
+ * Sets the DSP thread priority for RPC calls made through a specific remote handle.
+ * Multiple handles in the same PD can run at different priorities.
+ * DSP thread priorities run from 1 (highest) to 255 (lowest).
+ **/
+struct remote_rpc_handle_thread_priority {
+    int prio;   /** DSP thread priority (1 to 255), pass -1 to use the domain default */
 };
 
 /**

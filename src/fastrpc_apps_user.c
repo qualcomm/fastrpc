@@ -281,6 +281,8 @@ struct handle_info {
   remote_handle64 local;
   remote_handle64 remote;
   char *name;
+  /* Per-handle DSP thread priority override; 0 means use domain default */
+  int handle_thread_priority;
 };
 
 // Fastrpc client notification request node to be queued to <notif_list>
@@ -2098,6 +2100,51 @@ bail:
   return nErr;
 }
 
+/*
+ * Send per-handle thread priority to the DSP via remotectl.
+ * params[0] = thread priority, params[1] = remote handle (lower 32 bits).
+ * The DSP skel uses FASTRPC_HANDLE_THREAD_PRIORITY reqID to apply priority
+ * only to threads serving the specified remote handle.
+ */
+static int fastrpc_set_handle_thread_priority(int domain, remote_handle64 remote,
+                                              int thread_priority) {
+  int nErr = AEE_SUCCESS;
+  remote_handle64 ctlhandle = INVALID_HANDLE;
+  uint32_t params[2];
+
+  params[0] = (uint32_t)thread_priority;
+  params[1] = (uint32_t)(remote & 0xFFFFFFFF);
+
+  if ((ctlhandle = get_remotectl1_handle(domain)) != INVALID_HANDLE) {
+    nErr = remotectl1_set_param(ctlhandle, FASTRPC_HANDLE_THREAD_PRIORITY,
+                                params, 2);
+    if (nErr) {
+      FARF(ALWAYS,
+           "Warning 0x%x: %s: remotectl1 not supported for domain %d, falling back\n",
+           nErr, __func__, domain);
+      fastrpc_update_module_list(DOMAIN_LIST_DEQUEUE, domain,
+                                 _const_remotectl1_handle, NULL, NULL);
+      hlist[domain].remotectlhandle = INVALID_HANDLE;
+      VERIFY(AEE_SUCCESS == (nErr = remotectl_set_param(
+                                 FASTRPC_HANDLE_THREAD_PRIORITY, params, 2)));
+    }
+  } else {
+    VERIFY(AEE_SUCCESS == (nErr = remotectl_set_param(
+                               FASTRPC_HANDLE_THREAD_PRIORITY, params, 2)));
+  }
+bail:
+  if (nErr != AEE_SUCCESS)
+    FARF(ERROR,
+         "Error 0x%x: %s failed for domain %d handle 0x%" PRIx64
+         " priority %d (errno %s)",
+         nErr, __func__, domain, remote, thread_priority, strerror(errno));
+  else
+    FARF(ALWAYS,
+         "%s: set handle 0x%" PRIx64 " thread priority %d on domain %d",
+         __func__, remote, thread_priority, domain);
+  return nErr;
+}
+
 int remote_handle_control_domain(int domain, remote_handle64 h, uint32_t req,
                                  void *data, uint32_t len) {
   int nErr = AEE_SUCCESS;
@@ -2182,6 +2229,37 @@ int remote_handle_control_domain(int domain, remote_handle64 h, uint32_t req,
     VERIFYC(pGet, AEE_EBADPARM);
     VERIFYC(len == sizeof(remote_rpc_get_domain_t), AEE_EBADPARM);
     pGet->domain = domain;
+    break;
+  }
+  case FASTRPC_HANDLE_THREAD_PRIORITY: {
+    struct remote_rpc_handle_thread_priority *hp =
+        (struct remote_rpc_handle_thread_priority *)data;
+    struct handle_info *hinfo = (struct handle_info *)(uintptr_t)h;
+    int prio;
+
+    VERIFYC(hp, AEE_EBADPARM);
+    VERIFYC(len == sizeof(struct remote_rpc_handle_thread_priority), AEE_EBADPARM);
+    VERIFYC(h != INVALID_HANDLE, AEE_EINVHANDLE);
+    VERIFYC(is_valid_local_handle(domain, hinfo), AEE_EINVHANDLE);
+
+    prio = hp->prio;
+    if (prio == -1)
+      prio = DEFAULT_UTHREAD_PRIORITY;
+
+    if ((prio < MIN_THREAD_PRIORITY) || (prio > MAX_THREAD_PRIORITY)) {
+      nErr = AEE_EBADPARM;
+      FARF(ERROR,
+           "%s: priority %d is invalid, must be between %d and %d or -1 for default",
+           __func__, hp->prio, MIN_THREAD_PRIORITY, MAX_THREAD_PRIORITY);
+      goto bail;
+    }
+
+    hinfo->handle_thread_priority = prio;
+
+    if (hlist[domain].dev != -1) {
+      VERIFY(AEE_SUCCESS == (nErr = fastrpc_set_handle_thread_priority(
+                                 domain, hinfo->remote, prio)));
+    }
     break;
   }
   default:
