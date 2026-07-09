@@ -80,17 +80,15 @@ static void get_dsp_lib_path(const char *machine_name, const char *filepath, cha
         if (!in_machines && strcmp(value, "machines") == 0) {
           in_machines = 1;
         } else if (in_machines && !in_target_machine) {
-          // This is a machine name key
           strlcpy(current_machine, value, sizeof(current_machine));
           if (strcmp(current_machine, machine_name) == 0) {
             in_target_machine = 1;
           }
         } else if (in_target_machine && strcmp(value, DSP_LIB_KEY) == 0) {
-          // Next scalar will be the DSP_LIBRARY_PATH value
           yaml_event_delete(&event);
           if (yaml_parser_parse(&parser, &event) && event.type == YAML_SCALAR_EVENT) {
             strlcpy(dsp_lib_paths, (const char *)event.data.scalar.value, PATH_MAX);
-			FARF(ALWAYS, "dsp_lib_paths is %s", dsp_lib_paths);
+            FARF(ALWAYS, "dsp_lib_paths is %s", dsp_lib_paths);
             found_dsp_path = 1;
             done = 1;
           }
@@ -99,7 +97,6 @@ static void get_dsp_lib_path(const char *machine_name, const char *filepath, cha
       }
       case YAML_MAPPING_END_EVENT:
         if (in_target_machine) {
-          // Exiting the target machine mapping
           in_target_machine = 0;
           if (found_dsp_path) {
             done = 1;
@@ -118,11 +115,6 @@ static void get_dsp_lib_path(const char *machine_name, const char *filepath, cha
 
   yaml_parser_delete(&parser);
   fclose(file);
-
-  if (!found_dsp_path) {
-    FARF(ALWAYS, "Warning: DSP_LIBRARY_PATH not found for machine [%s] in configuration file %s\n", 
-         machine_name, filepath);
-  }
 }
 
 static void parse_config_dir(char *machine_name) {
