@@ -2793,8 +2793,8 @@ int remote_session_control(uint32_t req, void *data, uint32_t datalen) {
     VERIFYC(IS_VALID_DOMAIN_ID(domain), AEE_EBADPARM);
     VERIFYC(rpc_uri->module_uri != NULL && rpc_uri->module_uri_len > 0,
             AEE_EBADPARM);
-    VERIFYC(rpc_uri->uri != NULL && rpc_uri->uri_len > rpc_uri->module_uri_len,
-            AEE_EBADPARM);
+    VERIFYC(rpc_uri->uri != NULL, AEE_EBADPARM);
+    VERIFYC(rpc_uri->uri_len > rpc_uri->module_uri_len, AEE_EBADSIZE);
     ret_val = snprintf(0, 0, "%s%s%s%s%d", rpc_uri->module_uri,
                        FASTRPC_DOMAIN_URI, SUBSYSTEM_NAME[domain],
                        FASTRPC_SESSION_URI, rpc_uri->session_id);

@@ -932,6 +932,7 @@ int remote_munmap64(uint64_t vaddrout, int64_t size) {
 
   VERIFY(AEE_SUCCESS == (nErr = fastrpc_init_once()));
 
+  VERIFYC(size > 0, AEE_EBADPARM);
   domain = get_current_domain();
   VERIFYC(IS_VALID_EFFECTIVE_DOMAIN_ID(domain), AEE_ERPC);
 
