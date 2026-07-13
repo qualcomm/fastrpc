@@ -77,16 +77,11 @@ struct rpc_info {
   QNode qn;
   void *buf;
   void *aligned_buf;
-  int size;
+  size_t size;
   int fd;
   int dma;
 };
 
-struct fastrpc_alloc_dma_buf {
-  int fd;         /* fd */
-  uint32_t flags; /* flags to map with */
-  uint64_t size;  /* size */
-};
 
 void rpcmem_init() {
   QList_Ctor(&rpclst);
@@ -110,10 +105,14 @@ void rpcmem_init() {
 
 void rpcmem_deinit() {
   pthread_mutex_lock(&rpcmt);
-  if (dmafd != -1)
+  if (dmafd != -1) {
     close(dmafd);
-  if (rpcfd != -1)
+    dmafd = -1;
+  }
+  if (rpcfd != -1) {
     close(rpcfd);
+    rpcfd = -1;
+  }
   pthread_mutex_unlock(&rpcmt);
   pthread_mutex_destroy(&rpcmt);
 }
@@ -148,7 +147,7 @@ void *rpcmem_alloc_internal(int heapid, uint32_t flags, size_t size) {
       .fd_flags = O_RDWR | O_CLOEXEC,
   };
 
-  if ((dmafd == -1 && rpcfd == -1) || size <= 0) {
+  if ((dmafd == -1 && rpcfd == -1) || size == 0) {
     FARF(ERROR,
            "Error: Unable to allocate memory dmaheap fd %d, rpcfd %d, size "
            "%zu, flags %u",
@@ -171,6 +170,10 @@ void *rpcmem_alloc_internal(int heapid, uint32_t flags, size_t size) {
   } else {
     struct fastrpc_ioctl_alloc_dma_buf buf;
 
+    if (size > SIZE_MAX - PAGE_SIZE) {
+      FARF(ERROR, "Error: size overflow detected, size %zu", size);
+      goto bail;
+    }
     buf.size = size + PAGE_SIZE;
     buf.fd = -1;
     buf.flags = 0;
@@ -185,11 +188,13 @@ void *rpcmem_alloc_internal(int heapid, uint32_t flags, size_t size) {
     }
     fd = buf.fd;
   }
-  VERIFY(0 != (rinfo->buf = mmap(0, size, PROT_READ | PROT_WRITE, MAP_SHARED,
-                                 fd, 0)));
+  rinfo->buf = mmap(0, size, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
+  if (rinfo->buf == MAP_FAILED) {
+    rinfo->buf = NULL;
+    FARF(ERROR, "Error %d: mmap failed for fd %d size %zu", errno, fd, size);
+    goto bail;
+  }
   rinfo->fd = fd;
-  rinfo->aligned_buf =
-      (void *)(((uintptr_t)rinfo->buf /*+ PAGE_SIZE*/) & PAGE_MASK);
   rinfo->aligned_buf = rinfo->buf;
   rinfo->size = size;
   pthread_mutex_lock(&rpcmt);
@@ -200,14 +205,10 @@ void *rpcmem_alloc_internal(int heapid, uint32_t flags, size_t size) {
   remote_register_buf(rinfo->buf, rinfo->size, rinfo->fd);
   return rinfo->aligned_buf;
 bail:
-  if (nErr) {
-    if (rinfo) {
-      if (rinfo->buf) {
-        free(rinfo->buf);
-      }
-      free(rinfo);
-    }
-  }
+  if (fd >= 0)
+    close(fd);
+  if (rinfo)
+    free(rinfo);
   return NULL;
 }
 
@@ -237,6 +238,8 @@ void rpcmem_free_internal(void *po) {
 void rpcmem_free(void *po) { rpcmem_free_internal(po); }
 
 void *rpcmem_alloc(int heapid, uint32_t flags, int size) {
+  if (size <= 0)
+    return NULL;
   return rpcmem_alloc_internal(heapid, flags, size);
 }
 
