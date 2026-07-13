@@ -9,3 +9,4 @@ Type=exec
 ExecStart=@sbindir@/adsprpcd
 Restart=on-failure
 RestartSec=5
+RestartForceExitStatus=SIGTERM

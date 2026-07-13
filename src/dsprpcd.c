@@ -194,6 +194,10 @@ int main(int argc, char *argv[]) {
             VERIFY_EPRINTF("fastRPC device is not accessible, daemon exiting...");
             break;
         }
+        if (nErr == AEE_ENOMEMORY) {
+            VERIFY_EPRINTF("out of memory, daemon exiting without restart...");
+            break;
+        }
 
         VERIFY_EPRINTF("%s daemon will restart after 100ms...", dsp_name);
         usleep(100000);

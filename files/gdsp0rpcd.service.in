@@ -9,3 +9,4 @@ Type=exec
 ExecStart=@sbindir@/gdsprpcd rootpd gdsp0
 Restart=on-failure
 RestartSec=5
+RestartForceExitStatus=SIGTERM
