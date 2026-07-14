@@ -3106,7 +3106,12 @@ int open_device_node(int domain_id) {
   /* Try device discovery first for DRM-based accel devices */
   nErr = fastrpc_discovery_get_device_path(domain, dev_path, sizeof(dev_path));
   if (nErr == AEE_SUCCESS) {
-    dev = open(dev_path, O_NONBLOCK);
+    /*
+     * The DRM accel device fd is also used to mmap() GEM buffers (e.g. the
+     * per-thread scratch pool in ioctl_invoke()), which requires PROT_WRITE
+     * access. The fd must therefore be opened O_RDWR, not read-only.
+     */
+    dev = open(dev_path, O_RDWR | O_NONBLOCK);
     if (dev >= 0) {
       FARF(ALWAYS, "Opened device %s for domain %d via discovery", dev_path, domain);
     } else {
