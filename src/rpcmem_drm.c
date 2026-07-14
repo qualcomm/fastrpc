@@ -143,9 +143,23 @@ static void rpcmem_qda_deinit(void) {
   }
 }
 
+/*
+ * rpcmem_qda_alloc() - Allocate a QDA GEM buffer of at least @size bytes.
+ *
+ * The underlying GEM allocation is padded by one extra page beyond the
+ * requested size, mirroring the FASTRPC_IOCTL_ALLOC_DMA_BUFF path in
+ * rpcmem_linux.c (buf.size = size + PAGE_SIZE). Buffer arguments are
+ * page-aligned on the DSP side by rounding ptr+len up to the next full
+ * page; without this padding, a buffer allocated with exactly the
+ * requested size can have its computed physical page range extend one
+ * page past the end of the actual allocation whenever a scratch slice's
+ * end lands exactly on a page boundary. The caller still mmaps only
+ * @size bytes (see rpcmem_qda_mmap() below); only the backing allocation
+ * itself is padded.
+ */
 static int rpcmem_qda_alloc(size_t size, int *fd_out) {
   struct drm_qda_gem_create gem_create = {
-      .size = size,
+      .size = size + PAGE_SIZE,
       .handle = 0
   };
 

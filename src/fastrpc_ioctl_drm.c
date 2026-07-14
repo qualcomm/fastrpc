@@ -7,12 +7,35 @@
 #include "fastrpc_notif.h"
 #include "remote.h"
 #include "fastrpc_ioctl_drm.h"
+#include "rpcmem_internal.h"
 #include <sys/ioctl.h>
 #include <fcntl.h>
 #include <unistd.h>
 #include <sys/mman.h>
 #include <stdlib.h>
 #include <string.h>
+
+/*
+ * Alignment used for individual scratch-buffer slices allocated via
+ * rpcmem_alloc_internal(). This intentionally matches FASTRPC_ALIGN
+ * (128 bytes) as defined in the kernel driver's qda_fastrpc.h -- the same
+ * granularity the kernel's own (now-removed) process_direct_buffer() used
+ * to pack multiple small buffer arguments tightly within a single physical
+ * page. The kernel's GEM-handle buffer path (process_fd_buffer(), via
+ * calculate_vma_offset()/calculate_page_aligned_size()) computes physical
+ * page descriptors purely from each argument's own pointer + length, so
+ * slices are free to share a physical page with other slices; there is no
+ * requirement for each slice to start on its own page. Using 128-byte
+ * alignment instead of a full page per slice avoids wasting up to
+ * (QDA_PAGE_SIZE - 1) bytes of scratch-buffer space for every small/scalar
+ * argument (e.g. a 4-byte length or an 8-byte result), which matters since
+ * the vast majority of "direct" buffer arguments are only a few bytes long.
+ */
+#define QDA_SCRATCH_ALIGN 128
+#define QDA_SCRATCH_ALIGN_UP(x) (((x) + (QDA_SCRATCH_ALIGN - 1)) & ~(QDA_SCRATCH_ALIGN - 1))
+
+static int import_fd_to_gem_handle(int dev, int fd, uint32_t *handle_out);
+static int close_gem_handle(int dev, uint32_t handle);
 
 /*
  * import_fd_to_gem_handle() - Import a DMA-BUF fd into the QDA device as a GEM handle
@@ -76,6 +99,32 @@ const char *get_secure_domain_name(int domain_id) {
   return name;
 }
 
+/*
+ * ioctl_invoke() - Issue a FastRPC invoke ioctl to the QDA DRM driver.
+ *
+ * Scratch buffer for "direct"/inline FastRPC buffer arguments
+ * ============================================================
+ * Buffer arguments that do not carry a caller-supplied dma-buf fd
+ * (fastrpc_invoke_args[i].fd <= 0) need to be backed by DMA-capable memory
+ * so the driver can map them to the DSP.  A single contiguous scratch
+ * buffer is allocated from the system heap via rpcmem_alloc_internal() for
+ * every ioctl_invoke() call that needs one.  Each such argument gets a
+ * 128-byte-aligned slice of this buffer:
+ *
+ *   - IN  buffers: caller data is copied into the slice before the ioctl.
+ *   - OUT buffers: driver-written data is copied back to the caller after
+ *                  the ioctl completes.
+ *
+ * Unlike the upstream fastrpc driver (which accepts a dma-buf fd directly
+ * on each invoke arg), the QDA driver only accepts GEM handles.  The
+ * scratch buffer's dma-buf fd is therefore imported once, up front, to a
+ * single GEM handle shared by every scratch-backed argument in this call;
+ * caller-supplied fds are imported individually per argument.  All
+ * imported handles are closed again before returning.
+ *
+ * A fresh scratch buffer is allocated per call and freed before returning,
+ * keeping its lifetime strictly bounded to a single invoke.
+ */
 int ioctl_invoke(int dev, int req, remote_handle handle, uint32_t sc, void *pra,
                  int *fds, unsigned int *attrs, unsigned int *crc,
                  uint64_t *perf_kernel, uint64_t *perf_dsp) {
@@ -83,38 +132,101 @@ int ioctl_invoke(int dev, int req, remote_handle handle, uint32_t sc, void *pra,
   struct qda_invoke invoke = {0};
   struct fastrpc_invoke_args *fastrpc_args = (struct fastrpc_invoke_args *)pra;
   struct qda_invoke_args *qda_args = NULL;
-  uint32_t *imported_handles = NULL;
-  int num_args = 0;
+  uint8_t *scratch_used = NULL;
+  void *scratch_buf = NULL;
+  uint32_t scratch_gem_handle = 0;
+  int scratch_fd = -1;
+  int num_bufs = 0;
+  int num_inbufs = 0;
   int i;
+  size_t scratch_needed = 0;
+  size_t scratch_off = 0;
 
-  /* Calculate number of arguments from scalars */
-  num_args = ((sc >> 16) & 0xff) + ((sc >> 8) & 0xff);
+  /* Calculate number of buffer arguments from scalars (in + out) */
+  num_inbufs = (sc >> 16) & 0xff;
+  num_bufs = num_inbufs + ((sc >> 8) & 0xff);
 
-  if (num_args > 0 && fastrpc_args) {
-    qda_args = (struct qda_invoke_args *)calloc(num_args, sizeof(struct qda_invoke_args));
+  if (num_bufs > 0 && fastrpc_args) {
+    qda_args = (struct qda_invoke_args *)calloc(num_bufs, sizeof(struct qda_invoke_args));
     if (!qda_args)
       return AEE_ENOMEMORY;
 
-    imported_handles = (uint32_t *)calloc(num_args, sizeof(uint32_t));
-    if (!imported_handles) {
+    scratch_used = (uint8_t *)calloc(num_bufs, sizeof(uint8_t));
+    if (!scratch_used) {
       free(qda_args);
       return AEE_ENOMEMORY;
     }
 
-    for (i = 0; i < num_args; i++) {
+    /*
+     * First pass: calculate total scratch space needed for buffer
+     * arguments that have no caller-supplied fd.  Each slice is rounded
+     * up to QDA_SCRATCH_ALIGN so that adjacent slices remain properly
+     * aligned.
+     */
+    for (i = 0; i < num_bufs; i++) {
+      if (fastrpc_args[i].fd <= 0 && fastrpc_args[i].length > 0) {
+        scratch_needed += QDA_SCRATCH_ALIGN_UP(fastrpc_args[i].length);
+      }
+    }
+
+    if (scratch_needed > 0) {
+      /*
+       * Allocate a single contiguous scratch buffer from the system heap.
+       * rpcmem_alloc_internal() returns DMA-capable memory backed by a
+       * dma-buf allocation; import its fd to the single GEM handle shared
+       * by every scratch-backed argument in this call.
+       */
+      scratch_buf = rpcmem_alloc_internal(RPCMEM_HEAP_ID_SYSTEM, RPCMEM_DEFAULT_FLAGS,
+                                          scratch_needed);
+      if (!scratch_buf) {
+        FARF(ERROR, "%s: Failed to allocate scratch buffer of size %zu",
+             __func__, scratch_needed);
+        ioErr = AEE_ENOMEMORY;
+        goto bail;
+      }
+
+      scratch_fd = rpcmem_to_fd_internal(scratch_buf);
+      if (import_fd_to_gem_handle(dev, scratch_fd, &scratch_gem_handle) != 0) {
+        FARF(ERROR, "%s: Failed to import scratch fd %d to GEM handle",
+             __func__, scratch_fd);
+        ioErr = AEE_EFAILED;
+        goto bail;
+      }
+    }
+
+    /*
+     * Second pass: populate qda_args.  For args with a valid caller fd,
+     * import that fd to its own GEM handle.  For args without fd, redirect
+     * ptr to the corresponding scratch slice, set the shared scratch GEM
+     * handle, and copy IN data if needed.
+     */
+    for (i = 0; i < num_bufs; i++) {
       qda_args[i].ptr    = fastrpc_args[i].ptr;
       qda_args[i].length = fastrpc_args[i].length;
       qda_args[i].attr   = fastrpc_args[i].attr;
       qda_args[i].handle = 0;
 
-      if (fastrpc_args[i].fd > 0) {
+      if (fastrpc_args[i].fd <= 0 && fastrpc_args[i].length > 0) {
+        void *slice = (uint8_t *)scratch_buf + scratch_off;
+
+        qda_args[i].handle = scratch_gem_handle;
+        qda_args[i].ptr    = (uint64_t)(uintptr_t)slice;
+
+        /* IN buffer: copy caller data into the scratch slice before the ioctl */
+        if (i < num_inbufs && fastrpc_args[i].ptr) {
+          memcpy(slice, (void *)(uintptr_t)fastrpc_args[i].ptr,
+                 (size_t)fastrpc_args[i].length);
+        }
+
+        scratch_used[i] = 1;
+        scratch_off += QDA_SCRATCH_ALIGN_UP(fastrpc_args[i].length);
+      } else if (fastrpc_args[i].fd > 0) {
         if (import_fd_to_gem_handle(dev, fastrpc_args[i].fd, &qda_args[i].handle) != 0) {
           FARF(ERROR, "%s: Failed to import fd %d to GEM handle", __func__,
                fastrpc_args[i].fd);
           ioErr = AEE_EFAILED;
-          goto bail_handles;
+          goto bail;
         }
-        imported_handles[i] = qda_args[i].handle;
       }
     }
   }
@@ -128,13 +240,38 @@ int ioctl_invoke(int dev, int req, remote_handle handle, uint32_t sc, void *pra,
   else
     ioErr = AEE_EUNSUPPORTED;
 
-bail_handles:
-  if (imported_handles) {
-    free(imported_handles);
+  if (ioErr != 0) {
+    FARF(ERROR, "%s: DRM_IOCTL_QDA_INVOKE failed ioErr=%d errno=%d",
+         __func__, ioErr, errno);
   }
 
-  if (qda_args)
+  /* Copy OUT buffers backed by the scratch pool back to the caller */
+  if (ioErr == 0 && scratch_used) {
+    for (i = num_inbufs; i < num_bufs; i++) {
+      if (scratch_used[i] && fastrpc_args[i].ptr && fastrpc_args[i].length > 0) {
+        memcpy((void *)(uintptr_t)fastrpc_args[i].ptr,
+               (void *)(uintptr_t)qda_args[i].ptr,
+               (size_t)fastrpc_args[i].length);
+      }
+    }
+  }
+
+bail:
+  if (scratch_gem_handle)
+    close_gem_handle(dev, scratch_gem_handle);
+  if (scratch_buf)
+    rpcmem_free_internal(scratch_buf);
+  if (scratch_used)
+    free(scratch_used);
+
+  /* Close per-argument GEM handles imported for caller-supplied fds */
+  if (qda_args) {
+    for (i = 0; i < num_bufs; i++) {
+      if (fastrpc_args[i].fd > 0 && qda_args[i].handle)
+        close_gem_handle(dev, qda_args[i].handle);
+    }
     free(qda_args);
+  }
 
   return ioErr;
 }
