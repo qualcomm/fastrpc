@@ -1,0 +1,172 @@
+.TH fastrpc 3 "May 2026" "fastrpc" "Library Functions"
+.SH NAME
+fastrpc \- Qualcomm FastRPC C API
+.SH SYNOPSIS
+.B #include <fastrpc/remote.h>
+.br
+.B #include <fastrpc/rpcmem.h>
+.br
+
+
+.SS Remote Handle Functions
+.B int remote_handle64_open(const char* name, remote_handle64 *ph);
+.br
+.B int remote_handle64_invoke(remote_handle64 h, uint32_t dwScalars, remote_arg *pra);
+.br
+.B int remote_handle64_invoke_async(remote_handle64 h, fastrpc_async_descriptor_t *desc, uint32_t dwScalars, remote_arg *pra);
+.br
+.B int remote_handle64_control(remote_handle64 h, uint32_t req, void* data, uint32_t datalen);
+.br
+.B int remote_handle64_close(remote_handle64 h);
+
+.SS RPC Memory Functions (rpcmem)
+.B void rpcmem_init(void);
+.br
+.B void rpcmem_deinit(void);
+.br
+.B void* rpcmem_alloc(int heapid, uint32_t flags, int size);
+.br
+.B void* rpcmem_alloc2(int heapid, uint32_t flags, size_t size);
+.br
+.B static inline void* rpcmem_alloc_def(int size);
+.br
+.B void rpcmem_free(void* po);
+.br
+.B int rpcmem_to_fd(void* po);
+
+.SS DSP Queue Functions (dspqueue_rpc)
+.B int dspqueue_rpc_open(const char* uri, remote_handle64* h);
+.br
+.B int dspqueue_rpc_close(remote_handle64 h);
+.br
+.B AEEResult dspqueue_rpc_init_process_state(remote_handle64 _h, int32_t process_state_fd);
+.br
+.B AEEResult dspqueue_rpc_create_queue(remote_handle64 _h, uint32_t id, int32_t queue_fd, uint32_t count, uint64_t* queue_id);
+.br
+.B AEEResult dspqueue_rpc_destroy_queue(remote_handle64 _h, uint64_t queue_id);
+.br
+.B AEEResult dspqueue_rpc_is_imported(remote_handle64 _h, uint64_t queue_id, int32_t* imported);
+.br
+.B AEEResult dspqueue_rpc_wait_signal(remote_handle64 _h, int32_t* signal);
+.br
+.B AEEResult dspqueue_rpc_cancel_wait_signal(remote_handle64 _h);
+.br
+.B AEEResult dspqueue_rpc_signal(remote_handle64 _h);
+
+.SH DESCRIPTION
+The
+.B fastRPC
+library provides mechanisms to offload execution of compute-intensive tasks from the Application Processor (CPU) to remote DSP domains (such as ADSP, CDSP, SDSP, and GDSP). It uses an IDL compiler to generate stub (CPU) and skel (DSP) code, which communicate via the APIs exposed in this header.
+
+.SS Remote Handle Functions
+.TP
+.B remote_handle64_open()
+Opens a multi-domain remote handle for a specific device or URI. The handle is stored in
+.I ph
+upon success.
+.TP
+.B remote_handle64_invoke()
+Invokes a remote procedure call synchronously on the DSP using the given handle
+.IR h .
+.I dwScalars
+specifies the signature of the arguments, and
+.I pra
+points to the array of arguments.
+.TP
+.B remote_handle64_invoke_async()
+Asynchronously invokes a remote procedure call on the DSP. The completion is tracked via the
+.I desc
+asynchronous descriptor.
+.TP
+.B remote_handle64_control()
+Sends a control request (such as getting the domain ID) to the DSP driver for an open handle.
+.TP
+.B remote_handle64_close()
+Closes an open remote handle and releases associated resources.
+
+.SS RPC Memory (rpcmem) Functions
+The
+.B rpcmem
+functions provide memory allocation routines that guarantee memory buffers are correctly mapped and contiguous, enabling zero-copy transfers between the CPU and DSP. Memory heaps are identified by an ID (e.g., \fBRPCMEM_HEAP_ID_SYSTEM\fR, \fBRPCMEM_HEAP_ID_CONTIG\fR) and constrained by flags (e.g., \fBRPCMEM_FLAG_UNCACHED\fR, \fBRPCMEM_FLAG_CACHED\fR, \fBRPCMEM_DEFAULT_FLAGS\fR).
+
+.TP
+.B rpcmem_init() / rpcmem_deinit()
+Initializes and deinitializes the RPC memory subsystem. If a client links with \fBlibadsprpc.so\fR, \fBlibcdsprpc.so\fR, or \fBlibsdsprpc.so\fR directly, the initialization is handled automatically.
+.TP
+.B rpcmem_alloc() / rpcmem_alloc2()
+Allocates RPC memory from a specific ION/DMA heap
+.IR heapid .
+.I flags
+specify caching and alignment constraints. Use
+.B rpcmem_alloc2()
+for allocations larger than 2 GB.
+.br
+Example: \fBrpcmem_alloc(RPCMEM_HEAP_ID_SYSTEM, RPCMEM_DEFAULT_FLAGS, 4096);\fR
+.TP
+.B rpcmem_alloc_def()
+A convenience inline wrapper for allocating system heap memory using default cached flags.
+.TP
+.B rpcmem_free()
+Frees memory previously allocated by
+.B rpcmem_alloc()
+or
+.BR rpcmem_alloc2() .
+.TP
+.B rpcmem_to_fd()
+Retrieves the file descriptor (FD) underlying an RPC memory allocation. This is useful for passing the buffer directly to other sub-systems (like DMA-BUF).
+
+.SS DSP Queue (dspqueue_rpc) Functions
+The
+.B dspqueue_rpc
+API allows the setup and management of shared DSP queues, enabling highly efficient, stateful asynchronous communication and signaling.
+.TP
+.B dspqueue_rpc_open()
+Opens a fastRPC connection to the DSP queue interface using the specified
+.I uri
+(e.g., "file:///libdspqueue_rpc_skel.so?dspqueue_rpc_skel_handle_invoke&_modver=1.0").
+.TP
+.B dspqueue_rpc_close()
+Closes the given DSP queue handle
+.IR h .
+.TP
+.B dspqueue_rpc_init_process_state()
+Initializes the overall process state on the DSP utilizing the provided
+.IR process_state_fd .
+.TP
+.B dspqueue_rpc_create_queue()
+Creates a shared communication queue on the remote DSP bound to the given memory file descriptor
+.I queue_fd
+and
+.IR count .
+Outputs the identifier into
+.IR queue_id .
+.TP
+.B dspqueue_rpc_destroy_queue()
+Destroys and reclaims a previously created remote queue matching
+.IR queue_id .
+.TP
+.B dspqueue_rpc_is_imported()
+Verifies if a specific
+.I queue_id
+has been successfully imported by the DSP side.
+.TP
+.B dspqueue_rpc_wait_signal()
+Blocks and waits for a remote queue signal to be emitted by the DSP.
+.TP
+.B dspqueue_rpc_cancel_wait_signal()
+Cancels a pending wait signal operation on the remote handle.
+.TP
+.B dspqueue_rpc_signal()
+Fires a signal event from the CPU to awake the associated DSP queue loop.
+
+.SH RETURN VALUE
+On success, handle functions and most
+.B dspqueue
+functions return \fB0\fR (\fBAEE_SUCCESS\fR). On error, they return a non-zero error code. 
+.B rpcmem_alloc()
+and its variants return a valid pointer on success, or \fBNULL\fR on failure.
+
+
+.SH SEE ALSO
+.BR dsprpcd (8)
+

@@ -177,5 +177,6 @@ inc/Makefile
 src/Makefile
 test/Makefile
 files/Makefile
+Docs/manpages/Makefile
 ])
 AC_OUTPUT
