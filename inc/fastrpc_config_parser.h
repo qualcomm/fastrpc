@@ -4,14 +4,24 @@
 #ifndef FASTRPC_YAML_PARSER_H
 #define FASTRPC_YAML_PARSER_H
 
+#include "fastrpc_common.h"
+
 // DEFAULT_DSP_SEARCH_PATHS intentionally left empty - these paths should be provided through configuration files
 #ifndef DEFAULT_DSP_SEARCH_PATHS
 #define DEFAULT_DSP_SEARCH_PATHS ""
 #endif
 #define DSP_LIB_KEY "DSP_LIBRARY_PATH"
 
+/*
+ * Per-domain YAML keys for the Hexagon architecture version string (e.g. "v65").
+ * Only legacy domains (ADSP=0, MDSP=1, SDSP=2, CDSP=3) are supported;
+ * newer domains use the ARCH_VER capability instead.
+ */
+extern const char *DSP_ARCH_KEY[NUM_DOMAINS];
+
 extern char DSP_LIBS_LOCATION[PATH_MAX];
 
 void configure_dsp_paths();
+const char *get_dsp_arch_from_yaml(int domain);
 
 #endif /*FASTRPC_YAML_PARSER_H*/

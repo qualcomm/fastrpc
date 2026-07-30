@@ -16,46 +16,52 @@ The YAML configuration file enables **fastrpc** to set machine-specific configur
   (fastrpc uses same path for matching machine names)
 ---
 ### 📄 **Current Properties**
-- **DSP_LIBRARY_PATH**: Specifies the path to DSP binaries and resources for the Machine.
+- **DSP_LIBRARY_PATH**: Specifies the path to DSP binaries and resources for the Machine. Path is relative to `/usr/share/qcom/`.
+- **ADSP_ARCH / MDSP_ARCH / SDSP_ARCH / CDSP_ARCH** *(optional)*:
+  Specifies the Hexagon architecture version for the corresponding DSP domain. Used as a fallback on
+  legacy targets where the `ARCH_VER` kernel capability is not supported. Value must match `v[0-9a-f]+`
+  (e.g. `v60`, `v65`, `v66`). Only the domain(s) present on the target need to be specified.
 ---
 
 ### 📁 **Format Guidelines**
-The configuration uses YAML format with the following structure:
+Each machine has its own `.yaml` file under the configuration directory:
 ```
 machines:
-  "Machine Name":
-    DSP_LIBRARY_PATH: "/relative/path/to/dsp/binaries/"
+  Machine Name:
+    DSP_LIBRARY_PATH: relative/path/to/dsp/binaries
+    CDSP_ARCH: v60   # optional, for legacy targets
 ```
 
 **Key Points:**
 - The root element is `machines:`
-- Each machine name is a quoted string key under `machines:`
+- Machine name is an unquoted key under `machines:`
 - Properties are indented under each machine name
 - Use proper YAML indentation
-- Paths should be quoted strings
+- `DSP_LIBRARY_PATH` is a relative path (relative to `/usr/share/qcom/`), unquoted, no leading slash
+- Avoid tabs (use spaces only)
 
 ---
 
 ### ✅ **Example Configuration**
 ```
 machines:
-  "Qualcomm Technologies, Inc. DB820c":
-    DSP_LIBRARY_PATH: "/apq8096/Qualcomm/db820c/"
-  "Thundercomm Dragonboard 845c":
-    DSP_LIBRARY_PATH: "/sdm845/Thundercomm/db845c/"
+  Qualcomm Technologies, Inc. DB820c:
+    DSP_LIBRARY_PATH: apq8096/Qualcomm/db820c/dsp
+    ADSP_ARCH: v60
 ```
+
 
 ---
 
 ### ⚠️ **Important Notes**
 - Do **not** modify machine names unless adding a new supported Machine.
 - Ensure `DSP_LIBRARY_PATH` values:
-  - Are enclosed in double quotes (`"..."`).
-  - Are **relative to `/usr/share/qcom/`**.
+  - Are **relative to `/usr/share/qcom/`** with no leading slash.
+  - Are unquoted.
+- Ensure `*_ARCH` values match the pattern `v[0-9a-f]+` (e.g. `v60`, `v65`, `v66`).
 - Follow YAML syntax rules:
   - Use consistent indentation.
   - Ensure proper spacing after colons (`: `).
-  - Quote strings containing special characters or spaces.
   - Avoid tabs (use spaces only).
 - Maintain:
   - Proper YAML structure and hierarchy.
@@ -69,11 +75,13 @@ machines:
 ---
 
 ### ➕ **Adding New Platforms**
-To add a new Machine, follow the existing YAML format:
+Create a new file under the configuration directory:
 ```
 machines:
-  "New Machine Name":
-    DSP_LIBRARY_PATH: "/new_machine/path/"
+  New Machine Name:
+    DSP_LIBRARY_PATH: new_machine/path/dsp
+    ADSP_ARCH: v<XY>   # optional, for legacy targets
+    CDSP_ARCH: v<XY>   # optional, for legacy targets
 ```
 
 Ensure the new entry is properly indented under the `machines:` root element and follows YAML syntax conventions.
