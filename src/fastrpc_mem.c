@@ -530,7 +530,7 @@ static int fastrpc_mmap_helper(int *domain, int fd, void *vaddr, int offset,
   map.m.vaddrout = 0;
   mNode->map = map.m;
   iocErr = ioctl_mmap(dev, MEM_MAP, flags, attrs, fd, offset, length,
-                      (uint64_t)vaddr, vaddrout);
+                      (uint64_t)(uintptr_t)vaddr, vaddrout);
   if (!iocErr) {
     mNode->map.vaddrout = *vaddrout;
     mNode->refs = 1;

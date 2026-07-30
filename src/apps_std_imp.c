@@ -1561,7 +1561,7 @@ __QAIC_HEADER(apps_std_opendir)(const char *name,
   errno = 0;
   odir = opendir(name);
   if (odir != NULL) {
-    dir->handle = (uint64_t)odir;
+    dir->handle = (uint64_t)(uintptr_t)odir;
     dirinfo =
         (struct apps_std_dir_info *)calloc(1, sizeof(struct apps_std_dir_info));
     VERIFYC(dirinfo != NULL, ENOMEM);
@@ -1592,7 +1592,7 @@ __QAIC_IMPL_EXPORT int __QAIC_HEADER(apps_std_closedir)(const apps_std_DIR *dir)
   errno = 0;
   VERIFY(AEE_SUCCESS == (nErr = apps_std_get_dirinfo(dir, &dirinfo)));
 
-  nErr = closedir((DIR *)dir->handle);
+  nErr = closedir((DIR *)(uintptr_t)dir->handle);
   if (nErr != AEE_SUCCESS) {
     nErr = ERRNO;
     goto bail;

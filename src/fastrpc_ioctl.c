@@ -26,12 +26,12 @@ int ioctl_init(int dev, uint32_t flags, int attr, unsigned char *shell, int shel
   case FASTRPC_INIT_CREATE_STATIC:
     init_static.namelen = shelllen;
     init_static.memlen = memlen;
-    init_static.name = (uint64_t)shell;
+    init_static.name = (uint64_t)(uintptr_t)shell;
     ioErr = ioctl(dev, FASTRPC_IOCTL_INIT_CREATE_STATIC,
                   (unsigned long)&init_static);
     break;
   case FASTRPC_INIT_CREATE:
-    init.file = (uint64_t)shell;
+    init.file = (uint64_t)(uintptr_t)shell;
     init.filelen = shelllen;
     init.filefd = shellfd;
     init.attrs = attr;
@@ -55,7 +55,7 @@ int ioctl_invoke(int dev, int req, remote_handle handle, uint32_t sc, void *pra,
 
   invoke.handle = handle;
   invoke.sc = sc;
-  invoke.args = (uint64_t)pra;
+  invoke.args = (uint64_t)(uintptr_t)pra;
   if (req >= INVOKE && req <= INVOKE_FD)
     ioErr = ioctl(dev, FASTRPC_IOCTL_INVOKE, (unsigned long)&invoke);
   else
