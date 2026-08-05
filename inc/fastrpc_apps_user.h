@@ -39,7 +39,7 @@ typedef enum {
 /*
  * API to initialize rpcmem data structures for ION allocation
  */
-int rpcmem_init_internal();
+void rpcmem_init_internal();
 
 /*
  * API to clean-up rpcmem data structures

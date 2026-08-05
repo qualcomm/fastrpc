@@ -25,6 +25,7 @@
 #include "rpcmem.h"
 #include "verify.h"
 #include "fastrpc_mem.h"
+#include "fastrpc_apps_user.h"
 #include <drm/drm.h>
 #include "fastrpc_ioctl_drm.h"
 

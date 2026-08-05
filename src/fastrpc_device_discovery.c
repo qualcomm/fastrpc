@@ -140,10 +140,10 @@ static int discover_devices_locked(void) {
     
     while ((entry = readdir(dir)) != NULL) {
         if (strncmp(entry->d_name, "accel", 5) == 0) {
-            char dev_path[64];
+            char dev_path[280];
             char dsp_type_name[16];
             int domain;
-            
+
             snprintf(dev_path, sizeof(dev_path), "/dev/accel/%s", entry->d_name);
             
             if (query_device_type(dev_path, dsp_type_name, sizeof(dsp_type_name)) == AEE_SUCCESS) {
