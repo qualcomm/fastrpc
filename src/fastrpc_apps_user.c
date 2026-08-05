@@ -1166,7 +1166,7 @@ int remote_handle_invoke_domain(int domain, remote_handle handle,
   fastrpc_timer frpc_timer;
   int trace_marker_fd = hlist[domain].trace_marker_fd;
   bool trace_enabled = false;
-  struct fastrpc_invoke_args* args = NULL; 
+  struct qda_invoke_args* args = NULL;
 
   if (IS_QTF_TRACING_ENABLED(hlist[domain].procattrs) &&
       !IS_STATIC_HANDLE(handle) && trace_marker_fd > 0) {
@@ -2838,7 +2838,7 @@ bail:
  */
 int get_domain_from_name(const char *uri, uint32_t type) {
   int domain = DEFAULT_DOMAIN_ID;
-  char *session_uri = NULL;
+  const char *session_uri = NULL;
   int session_id = 0;
 
   if (uri && type == DOMAIN_NAME_STAND_ALONE) {

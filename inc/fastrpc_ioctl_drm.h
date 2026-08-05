@@ -60,17 +60,17 @@ extern "C" {
 
 #define set_args(i, pra, len, filedesc, attrs)	args[i].ptr = (uint64_t)pra; \
 						args[i].length = len;	\
-						args[i].fd = filedesc;	\
+						args[i].handle = (uint32_t)(filedesc);	\
 						args[i].attr = attrs;
 
 #define set_args_ptr(i, pra)		args[i].ptr = (uint64_t)pra
 #define set_args_len(i, len)		args[i].length = len
 #define set_args_attr(i, attrs)		args[i].attr = attrs
-#define set_args_fd(i, filedesc)	args[i].fd = filedesc
+#define set_args_fd(i, filedesc)	args[i].handle = (uint32_t)(filedesc)
 #define get_args_ptr(i)			args[i].ptr
 #define get_args_len(i)			args[i].length
 #define get_args_attr(i)		args[i].attr
-#define get_args_fd(i)			args[i].fd
+#define get_args_fd(i)			args[i].handle
 #define append_args_attr(i, attrs)	args[i].attr |= attrs
 #define get_args()			args
 #define is_upstream()			1
