@@ -16,26 +16,59 @@
 #include <string.h>
 
 /*
- * Alignment used for individual scratch-buffer slices allocated via
- * rpcmem_alloc_internal(). This intentionally matches FASTRPC_ALIGN
- * (128 bytes) as defined in the kernel driver's qda_fastrpc.h -- the same
- * granularity the kernel's own (now-removed) process_direct_buffer() used
- * to pack multiple small buffer arguments tightly within a single physical
- * page. The kernel's GEM-handle buffer path (process_fd_buffer(), via
- * calculate_vma_offset()/calculate_page_aligned_size()) computes physical
+ * Alignment used for individual scratch-buffer slices (see
+ * scratch_gem_alloc()). This intentionally matches FASTRPC_ALIGN
+ * (128 bytes), identical to the upstream fastrpc path (fastrpc_ioctl.c),
+ * which packs multiple small buffer arguments tightly within a single
+ * physical page. The kernel's GEM-handle buffer path (process_fd_buffer(),
+ * via calculate_vma_offset()/calculate_page_aligned_size()) computes physical
  * page descriptors purely from each argument's own pointer + length, so
  * slices are free to share a physical page with other slices; there is no
  * requirement for each slice to start on its own page. Using 128-byte
  * alignment instead of a full page per slice avoids wasting up to
- * (QDA_PAGE_SIZE - 1) bytes of scratch-buffer space for every small/scalar
+ * (PAGE_SIZE - 1) bytes of scratch-buffer space for every small/scalar
  * argument (e.g. a 4-byte length or an 8-byte result), which matters since
  * the vast majority of "direct" buffer arguments are only a few bytes long.
  */
 #define QDA_SCRATCH_ALIGN 128
 #define QDA_SCRATCH_ALIGN_UP(x) (((x) + (QDA_SCRATCH_ALIGN - 1)) & ~(QDA_SCRATCH_ALIGN - 1))
 
+/* Page granularity used for the scratch GEM's tail padding (see below). */
+#define QDA_SCRATCH_PAGE_SIZE 4096
+
+/*
+ * fastrpc_scratch_wc_drain() - Drain userspace write-combine buffers before
+ * handing the scratch buffer to the DSP.
+ *
+ * scratch_gem_alloc() backs the scratch buffer with a QDA GEM object, i.e.
+ * dma_alloc_coherent() memory, which dma_mmap_coherent() maps into user space
+ * as write-combine (Normal Non-Cacheable) on ARM.  The IN-data memcpy() into a
+ * scratch slice
+ * may therefore leave bytes sitting in a CPU write-combine buffer.  The QDA
+ * driver's dma_wmb() runs in a different context/CPU and does not guarantee
+ * that this userspace WC buffer has drained, so the DSP can observe stale
+ * data on the first invoke (a subsequent rpmsg retry appears to work only
+ * because the WC buffer has drained by then).
+ *
+ * A Data Synchronization Barrier forces all prior memory writes to complete
+ * (drain the WC buffer to memory) before the DRM_IOCTL_QDA_INVOKE ioctl makes
+ * the buffer visible to the DSP.
+ */
+static inline void fastrpc_scratch_wc_drain(void) {
+#if defined(__aarch64__)
+  __asm__ __volatile__("dsb sy" ::: "memory");
+#elif defined(__arm__)
+  __asm__ __volatile__("dsb" ::: "memory");
+#else
+  __sync_synchronize();
+#endif
+}
+
 static int import_fd_to_gem_handle(int dev, int fd, uint32_t *handle_out);
 static int close_gem_handle(int dev, uint32_t handle);
+static int scratch_gem_alloc(int dev, size_t size, uint32_t *handle_out,
+                             void **virt_out);
+static void scratch_gem_free(int dev, uint32_t handle, void *virt, size_t size);
 
 /*
  * import_fd_to_gem_handle() - Import a DMA-BUF fd into the QDA device as a GEM handle
@@ -77,6 +110,86 @@ static int close_gem_handle(int dev, uint32_t handle)
   return ioctl(dev, DRM_IOCTL_GEM_CLOSE, &gc);
 }
 
+/*
+ * scratch_gem_alloc() - Allocate and mmap a scratch GEM on the invoke device fd
+ *
+ * The scratch buffer MUST be created on the very same DRM file (@dev) that
+ * issues DRM_IOCTL_QDA_INVOKE.
+ *
+ * The QDA driver assigns an IOMMU device per drm_file (keyed by the opening
+ * task's pid, see qda_open()/qda_memory_manager_assign_device()), and
+ * qda_dma_alloc() folds that device's stream ID into the buffer address as
+ * (sid << 32) at *allocation* time.  process_fd_buffer() then reports this
+ * allocation-time dma_addr to the DSP verbatim (plus the page-aligned vma
+ * offset).  Consequently, a scratch buffer allocated from any *other* fd --
+ * e.g. rpcmem's global qdafd, which is opened on a different device node
+ * and/or a different thread than the invoke fd -- can carry a SID belonging to
+ * a different IOMMU context than the invoke session, and the DSP will
+ * translate those pages in the wrong context.
+ *
+ * Allocating here on @dev places the scratch buffer in exactly the same IOMMU
+ * context as ctx->msg (the message GEM, which the driver creates with the
+ * invoke file_priv).  That is precisely why the process_direct_buffer() path --
+ * which carries data inside the message GEM -- has always worked, while the
+ * fd/handle path did not.  It also removes the PRIME export/import round-trip
+ * entirely.
+ *
+ * One extra page is added to the allocation so that the page-aligned range
+ * calculate_page_aligned_size() derives for the final slice can never extend
+ * past the end of the GEM object.  Only @size bytes are mmapped.
+ *
+ * Returns 0 on success, -1 on failure.
+ */
+static int scratch_gem_alloc(int dev, size_t size, uint32_t *handle_out,
+                             void **virt_out)
+{
+  struct drm_qda_gem_create gem_create;
+  struct drm_qda_gem_mmap_offset mmap_offset;
+  void *virt;
+
+  memset(&gem_create, 0, sizeof(gem_create));
+  gem_create.size = size + QDA_SCRATCH_PAGE_SIZE;
+  if (ioctl(dev, DRM_IOCTL_QDA_GEM_CREATE, &gem_create) != 0) {
+    FARF(ERROR, "%s: DRM_IOCTL_QDA_GEM_CREATE failed for size %zu (errno %d)",
+         __func__, size, errno);
+    return -1;
+  }
+
+  memset(&mmap_offset, 0, sizeof(mmap_offset));
+  mmap_offset.handle = gem_create.handle;
+  if (ioctl(dev, DRM_IOCTL_QDA_GEM_MMAP_OFFSET, &mmap_offset) != 0) {
+    FARF(ERROR,
+         "%s: DRM_IOCTL_QDA_GEM_MMAP_OFFSET failed for handle %u (errno %d)",
+         __func__, gem_create.handle, errno);
+    close_gem_handle(dev, gem_create.handle);
+    return -1;
+  }
+
+  virt = mmap(NULL, size, PROT_READ | PROT_WRITE, MAP_SHARED, dev,
+              (off_t)mmap_offset.offset);
+  if (virt == MAP_FAILED) {
+    FARF(ERROR, "%s: mmap failed for handle %u, size %zu (errno %d)",
+         __func__, gem_create.handle, size, errno);
+    close_gem_handle(dev, gem_create.handle);
+    return -1;
+  }
+
+  *handle_out = gem_create.handle;
+  *virt_out = virt;
+  return 0;
+}
+
+/*
+ * scratch_gem_free() - Unmap and release a scratch GEM allocated on @dev
+ */
+static void scratch_gem_free(int dev, uint32_t handle, void *virt, size_t size)
+{
+  if (virt)
+    munmap(virt, size);
+  if (handle)
+    close_gem_handle(dev, handle);
+}
+
 /* Returns the name of the domain based on the following
  ADSP/CDSP - Return accel device node
  */
@@ -106,21 +219,21 @@ const char *get_secure_domain_name(int domain_id) {
  * ============================================================
  * Buffer arguments that do not carry a caller-supplied dma-buf fd
  * (fastrpc_invoke_args[i].fd <= 0) need to be backed by DMA-capable memory
- * so the driver can map them to the DSP.  A single contiguous scratch
- * buffer is allocated from the system heap via rpcmem_alloc_internal() for
- * every ioctl_invoke() call that needs one.  Each such argument gets a
- * 128-byte-aligned slice of this buffer:
+ * so the driver can map them to the DSP.  A single contiguous scratch GEM is
+ * allocated on this invoke fd for every ioctl_invoke() call that needs one.
+ * Each such argument gets a 128-byte-aligned slice of this buffer:
  *
  *   - IN  buffers: caller data is copied into the slice before the ioctl.
  *   - OUT buffers: driver-written data is copied back to the caller after
  *                  the ioctl completes.
  *
  * Unlike the upstream fastrpc driver (which accepts a dma-buf fd directly
- * on each invoke arg), the QDA driver only accepts GEM handles.  The
- * scratch buffer's dma-buf fd is therefore imported once, up front, to a
- * single GEM handle shared by every scratch-backed argument in this call;
- * caller-supplied fds are imported individually per argument.  All
- * imported handles are closed again before returning.
+ * on each invoke arg), the QDA driver only accepts GEM handles.  The scratch
+ * buffer is therefore allocated directly as a GEM object on this same @dev fd
+ * (see scratch_gem_alloc()), giving a single GEM handle shared by every
+ * scratch-backed argument in this call and guaranteeing it lives in the invoke
+ * session's IOMMU context.  Caller-supplied fds are imported individually per
+ * argument.  All handles are released again before returning.
  *
  * A fresh scratch buffer is allocated per call and freed before returning,
  * keeping its lifetime strictly bounded to a single invoke.
@@ -135,7 +248,6 @@ int ioctl_invoke(int dev, int req, remote_handle handle, uint32_t sc, void *pra,
   uint8_t *scratch_used = NULL;
   void *scratch_buf = NULL;
   uint32_t scratch_gem_handle = 0;
-  int scratch_fd = -1;
   int num_bufs = 0;
   int num_inbufs = 0;
   int i;
@@ -171,25 +283,16 @@ int ioctl_invoke(int dev, int req, remote_handle handle, uint32_t sc, void *pra,
 
     if (scratch_needed > 0) {
       /*
-       * Allocate a single contiguous scratch buffer from the system heap.
-       * rpcmem_alloc_internal() returns DMA-capable memory backed by a
-       * dma-buf allocation; import its fd to the single GEM handle shared
-       * by every scratch-backed argument in this call.
+       * Allocate a single contiguous scratch GEM on this invoke fd.  This
+       * keeps the buffer in the invoke session's IOMMU context (same as the
+       * driver's message GEM), which is required because process_fd_buffer()
+       * forwards the allocation-time dma_addr (including sid<<32) to the DSP.
        */
-      scratch_buf = rpcmem_alloc_internal(RPCMEM_HEAP_ID_SYSTEM, RPCMEM_DEFAULT_FLAGS,
-                                          scratch_needed);
-      if (!scratch_buf) {
-        FARF(ERROR, "%s: Failed to allocate scratch buffer of size %zu",
+      if (scratch_gem_alloc(dev, scratch_needed, &scratch_gem_handle,
+                            &scratch_buf) != 0) {
+        FARF(ERROR, "%s: Failed to allocate scratch GEM of size %zu",
              __func__, scratch_needed);
         ioErr = AEE_ENOMEMORY;
-        goto bail;
-      }
-
-      scratch_fd = rpcmem_to_fd_internal(scratch_buf);
-      if (import_fd_to_gem_handle(dev, scratch_fd, &scratch_gem_handle) != 0) {
-        FARF(ERROR, "%s: Failed to import scratch fd %d to GEM handle",
-             __func__, scratch_fd);
-        ioErr = AEE_EFAILED;
         goto bail;
       }
     }
@@ -235,6 +338,14 @@ int ioctl_invoke(int dev, int req, remote_handle handle, uint32_t sc, void *pra,
   invoke.sc = sc;
   invoke.args = (uint64_t)qda_args;
 
+  /*
+   * Ensure all IN-data written into the write-combine scratch mapping above
+   * has drained to memory before the DSP reads it via DRM_IOCTL_QDA_INVOKE.
+   * Only required when a scratch buffer was actually used for this call.
+   */
+  if (scratch_buf)
+    fastrpc_scratch_wc_drain();
+
   if (req >= INVOKE && req <= INVOKE_FD)
     ioErr = ioctl(dev, DRM_IOCTL_QDA_INVOKE, &invoke);
   else
@@ -257,10 +368,8 @@ int ioctl_invoke(int dev, int req, remote_handle handle, uint32_t sc, void *pra,
   }
 
 bail:
-  if (scratch_gem_handle)
-    close_gem_handle(dev, scratch_gem_handle);
-  if (scratch_buf)
-    rpcmem_free_internal(scratch_buf);
+  if (scratch_gem_handle || scratch_buf)
+    scratch_gem_free(dev, scratch_gem_handle, scratch_buf, scratch_needed);
   if (scratch_used)
     free(scratch_used);
 

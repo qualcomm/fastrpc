@@ -299,11 +299,7 @@ struct fastrpc_ioctl_control {
 struct drm_qda_query {
 	__u32 query_type;
 	__u32 pad;
-	union {
-		__u8 dsp_name[16];
-		__u64 capabilities;
-		__u64 reserved[4];
-	};
+	__u8 dsp_name[16];
 };
 
 /* DRM IOCTLs for QDA */
