@@ -38,4 +38,6 @@ dist_sysusers_DATA = fastrpc.conf
 
 # udev rules
 udevrulesdir = @udevrulesdir@
-dist_udevrules_DATA = 60-fastrpc.rules
+dist_udevrules_DATA = \
+	59-fastrpc-remoteproc.rules \
+	60-fastrpc.rules

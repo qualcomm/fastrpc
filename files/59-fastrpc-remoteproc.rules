@@ -1,0 +1,46 @@
+# Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
+# SPDX-License-Identifier: BSD-3-Clause
+
+# Bring up DSP remote processors that the kernel left permanently offline.
+#
+# Workaround for https://github.com/qualcomm-linux/kernel/issues/923: when
+# qcom_q6v5_pas is loaded from the initramfs, rproc_add() auto-boots the core
+# before the root filesystem is mounted. /lib/firmware is not reachable yet, so
+# request_firmware() fails with -ENOENT, and the remoteproc core has no retry
+# path -- the DSP stays "offline" for the whole boot even though the firmware is
+# present on disk. Without a DSP there is no rpmsg channel, so no /dev/fastrpc-*
+# node is ever created and none of the daemons in 60-fastrpc.rules can start.
+#
+# Numbered below 60-fastrpc.rules to reflect that a running DSP is a
+# precondition for the FastRPC device nodes that rule set matches on.
+#
+# These events fire twice: once in the initramfs, where the write still fails
+# because the firmware remains unreachable, and again from the coldplug pass
+# that systemd-udev-trigger.service runs after switch_root, where it succeeds.
+# The first pass therefore logs
+#     Failed to write "start" to sysfs attribute "state", ignoring
+# which is expected and harmless -- udev ignores a failed ATTR{} write, so the
+# event and the boot both complete. A genuinely missing firmware blob logs the
+# same message, so that line on its own does not indicate a problem.
+#
+# Only cores that qcom_q6v5_pas auto-boots and that FastRPC actually uses are
+# matched.
+#
+# ATTR{name} is the remoteproc name, which for qcom_q6v5_pas comes from the
+# descriptor's .sysmon_name -- not from the FastRPC domain name. The sensor DSP
+# is "slpi" there; "sdsp" is only its FastRPC-side name (/dev/fastrpc-sdsp,
+# SDSP_DOMAIN_NAME), and no remoteproc is ever exposed under it.
+#
+# Deliberately not matched:
+#   - modem: .auto_boot = false on many SoCs, and some (e.g. qcs6490) ship no
+#     modem firmware at all, so it is offline by design.
+#   - wpss: .auto_boot = false, and it is booted on demand by ath11k, which
+#     owns its lifecycle.
+#   - lpaicp: auto-booted, but not a FastRPC domain.
+#
+# The ATTR{state}=="offline" gate is required: rproc_boot() increments
+# rproc->power unconditionally, so writing to an already-running core pins an
+# extra reference and prevents a later shutdown or subsystem restart from taking
+# effect. udev sorts all match tokens ahead of all assignments within a rule
+# line, so the gate is evaluated before the write even though both name state.
+ACTION=="add", SUBSYSTEM=="remoteproc", ATTR{name}=="adsp|cdsp|cdsp1|gpdsp0|gpdsp1|slpi", ATTR{state}=="offline", ATTR{state}="start"
