@@ -3299,12 +3299,83 @@ static void get_process_testsig(apps_std_FILE *fp, uint64_t *ptrlen) {
   return;
 }
 
-static int open_shell(int domain_id, apps_std_FILE *fh, int unsigned_shell) {
+/*
+ * try_open_shell_file() - Search all known DSP locations for the given shell
+ * file name and open it.
+ *
+ * Search order for the given @shell_name:
+ *   1. Every ';'-separated directory in DSP_LIBS_LOCATION. For each directory
+ *      fopen_from_dirlist() tries "<dir>/<subsystem>/<name>" first and then
+ *      "<dir>/<name>".
+ *   2. VENDOR_DSP_LOCATION "<name>"
+ *   3. VENDOR_DSP_LOCATION "<subsystem>/<name>"
+ *
+ * Args
+ *	@domain		: DSP domain ID (not effective domain ID)
+ *	@shell_name	: Shell file name to look for
+ *	@fh		: [out] Handle of the opened file
+ *
+ * Return	: AEE_SUCCESS if the file was opened, error code otherwise
+ */
+static int try_open_shell_file(int domain, const char *shell_name,
+                               apps_std_FILE *fh) {
   char *absName = NULL;
+  size_t absNameLen = 0;
+  int nErr = AEE_SUCCESS;
+
+  /*
+   * domain is always masked with DOMAIN_ID_MASK by the caller, so it is in
+   * [0, NUM_DOMAINS) and safe to use as a SUBSYSTEM_NAME[] index.
+   */
+  VERIFYC(IS_VALID_DOMAIN_ID(domain) && shell_name && fh, AEE_EBADPARM);
+
+  /* 1. Search the configured DSP library locations. */
+  nErr = fopen_from_dirlist(DSP_LIBS_LOCATION, ";", "r", shell_name, fh);
+  if (!nErr)
+    goto bail;
+
+  /* 2. Fallback to /vendor/dsp/<shell_name> */
+  absNameLen = strlen(VENDOR_DSP_LOCATION) + strlen(shell_name) + 1;
+  VERIFYC(NULL != (absName = (char *)malloc(absNameLen)), AEE_ENOMEMORY);
+  strlcpy(absName, VENDOR_DSP_LOCATION, absNameLen);
+  strlcat(absName, shell_name, absNameLen);
+
+  nErr = apps_std_fopen(absName, "r", fh);
+  if (!nErr)
+    goto bail;
+
+  /* 3. Fallback to /vendor/dsp/<subsystem>/<shell_name> */
+  free(absName);
+  absName = NULL;
+  /* "<vendor>" + "<subsys>" + "/" + "<name>" + NUL */
+  absNameLen = strlen(VENDOR_DSP_LOCATION) + strlen(SUBSYSTEM_NAME[domain]) +
+               1 + strlen(shell_name) + 1;
+  VERIFYC(NULL != (absName = (char *)malloc(absNameLen)), AEE_ENOMEMORY);
+  strlcpy(absName, VENDOR_DSP_LOCATION, absNameLen);
+  strlcat(absName, SUBSYSTEM_NAME[domain], absNameLen);
+  strlcat(absName, "/", absNameLen);
+  strlcat(absName, shell_name, absNameLen);
+
+  nErr = apps_std_fopen(absName, "r", fh);
+bail:
+  free(absName);
+  if (nErr != AEE_SUCCESS) {
+    /*
+     * Do not log the search paths here: DSP_LIBS_LOCATION can be up to
+     * PATH_MAX and this helper is called once per candidate name. The final
+     * error path in open_shell() logs the paths once.
+     */
+    FARF(RUNTIME_RPC_HIGH, "%s: 0x%x: '%s' not found for domain %d", __func__,
+         nErr, shell_name, domain);
+  }
+  return nErr;
+}
+
+static int open_shell(int domain_id, apps_std_FILE *fh, int unsigned_shell) {
   char *shell_absName = NULL;
-  char *domain_str = NULL;
-  char dir_list[PATH_MAX] = {0};
-  uint16_t shell_absNameLen = 0, absNameLen = 0;
+  char *shell_baseName = NULL;
+  char domain_str[16] = {0};
+  size_t shell_absNameLen = 0, shell_baseNameLen = 0;
   int nErr = AEE_SUCCESS;
   int domain = GET_DOMAIN_FROM_EFFEC_DOMAIN_ID(domain_id);
   const char *shell_name = SIGNED_SHELL;
@@ -3316,68 +3387,68 @@ static int open_shell(int domain_id, apps_std_FILE *fh, int unsigned_shell) {
   if (domain == MDSP_DOMAIN_ID) {
     return nErr;
   }
-  VERIFYC(NULL != (domain_str = (char *)malloc(sizeof(domain))), AEE_ENOMEMORY);
-  snprintf(domain_str, sizeof(domain), "%d", domain);
+  /*
+   * Guard the out-param: apps_std_fopen() dereferences it unconditionally on
+   * success, so a NULL here would fault instead of returning an error.
+   */
+  VERIFYC(fh != NULL, AEE_EBADPARM);
+  snprintf(domain_str, sizeof(domain_str), "%d", domain);
 
+  /*
+   * Preferred name is the domain-suffixed one, e.g. "fastrpc_shell_3" /
+   * "fastrpc_shell_unsigned_3".
+   */
   shell_absNameLen = strlen(shell_name) + strlen(domain_str) + 1;
-
-  VERIFYC(NULL !=
-              (shell_absName = (char *)malloc(sizeof(char) * shell_absNameLen)),
+  VERIFYC(NULL != (shell_absName = (char *)malloc(shell_absNameLen)),
           AEE_ENOMEMORY);
   strlcpy(shell_absName, shell_name, shell_absNameLen);
   strlcat(shell_absName, domain_str, shell_absNameLen);
 
-  strlcpy(dir_list, DSP_LIBS_LOCATION, sizeof(dir_list));
-  nErr = fopen_from_dirlist(dir_list, ";", "r", shell_absName, fh);
-
-  if (nErr) {
-    absNameLen = strlen(VENDOR_DSP_LOCATION) + shell_absNameLen + 1;
-    VERIFYC(NULL !=
-                (absName = (char *)realloc(absName, sizeof(char) * absNameLen)),
-            AEE_ENOMEMORY);
-    strlcpy(absName, VENDOR_DSP_LOCATION, absNameLen);
-    strlcat(absName, shell_absName, absNameLen);
-
-    nErr = apps_std_fopen(absName, "r", fh);
-    if (nErr) {
-      absNameLen = strlen(VENDOR_DOM_LOCATION) + shell_absNameLen + 1;
-      VERIFYC(NULL != (absName =
-                           (char *)realloc(absName, sizeof(char) * absNameLen)),
-              AEE_ENOMEMORY);
-      strlcpy(absName, VENDOR_DSP_LOCATION, absNameLen);
-      strlcat(absName, SUBSYSTEM_NAME[domain], absNameLen);
-      strlcat(absName, "/", absNameLen);
-      strlcat(absName, shell_absName, absNameLen);
-
-      nErr = apps_std_fopen(absName, "r", fh);
-    }
+  nErr = try_open_shell_file(domain, shell_absName, fh);
+  if (!nErr) {
+    FARF(RUNTIME_RPC_HIGH, "Successfully opened %s, domain %d", shell_absName,
+         domain);
+    goto bail;
   }
+
+  /*
+   * Some targets ship the shell without the domain ID suffix. Retry with the
+   * base name, i.e. "fastrpc_shell" / "fastrpc_shell_unsigned". Both
+   * SIGNED_SHELL and UNSIGNED_SHELL end with a trailing '_', so the base
+   * name is shell_name with that trailing '_' dropped.
+   */
+  VERIFYC(strlen(shell_name) > 1, AEE_EBADPARM);
+  shell_baseNameLen = strlen(shell_name) - 1;
+  VERIFYC(NULL != (shell_baseName = (char *)malloc(shell_baseNameLen + 1)),
+          AEE_ENOMEMORY);
+  strlcpy(shell_baseName, shell_name, shell_baseNameLen + 1);
+
+  nErr = try_open_shell_file(domain, shell_baseName, fh);
   if (!nErr)
-    FARF(RUNTIME_RPC_HIGH, "Successfully opened %s, domain %d", shell_absName, domain);
+    FARF(RUNTIME_RPC_HIGH, "Successfully opened %s, domain %d", shell_baseName,
+         domain);
 bail:
-  if (domain_str) {
-    free(domain_str);
-    domain_str = NULL;
-  }
-  if (shell_absName) {
-    free(shell_absName);
-    shell_absName = NULL;
-  }
-  if (absName) {
-    free(absName);
-    absName = NULL;
-  }
+  /*
+   * Log before releasing the name buffers, so the exact names attempted can be
+   * printed. Either buffer may be NULL if its allocation failed or if the
+   * first candidate already succeeded.
+   */
   if (nErr != AEE_SUCCESS) {
     if (domain == SDSP_DOMAIN_ID && fh != NULL) {
       nErr = AEE_SUCCESS;
       *fh = -1;
     } else {
       FARF(ERROR,
-           "Error 0x%x: %s failed for domain %d search paths used are %s "
-           "(errno %s)\n",
-           nErr, __func__, domain, DSP_LIBS_LOCATION, strerror(errno));
+           "Error 0x%x: %s failed for domain %d, tried '%s' and '%s', search "
+           "paths used are %s and %s (errno %s)\n",
+           nErr, __func__, domain,
+           shell_absName ? shell_absName : "<not built>",
+           shell_baseName ? shell_baseName : "<not built>",
+           DSP_LIBS_LOCATION, VENDOR_DSP_LOCATION, strerror(errno));
     }
   }
+  free(shell_absName);
+  free(shell_baseName);
   return nErr;
 }
 
