@@ -26,6 +26,7 @@
 #include "verify.h"
 #include "fastrpc_mem.h"
 #include "fastrpc_apps_user.h"
+#include "fastrpc_device_discovery.h"
 #include <drm/drm.h>
 #include "fastrpc_ioctl_drm.h"
 
@@ -73,6 +74,37 @@ struct fastrpc_alloc_dma_buf {
 #ifdef USE_ACCEL_DRIVER
 /* QDA-specific functions */
 static int rpcmem_qda_init(void) {
+  char dev_path[280] = {0};
+  int nErr;
+
+  /*
+   * rpcmem GEM buffers must be created on the SAME DRM device node that the
+   * FastRPC invoke session for the domain uses.  GEM handles/objects are
+   * per-drm_device: a buffer exported from one /dev/accel/accelN node cannot
+   * be re-imported into the invoke session opened on a different node
+   * (qda_gem_prime_import()'s check_own_buffer() fails because
+   * existing_gem->dev != invoke dev, and the full dma_buf_attach import path
+   * is rejected by the driver, surfacing as "Failed to attach dma_buf: -38").
+   *
+   * The /dev/accel/accelN number is assigned dynamically at boot and is not
+   * fixed per DSP, so resolve the node for the default domain via device
+   * discovery (the same mechanism open_device_node() uses for the invoke
+   * device) instead of a hardcoded DEFAULT_DEVICE.
+   */
+  nErr = fastrpc_discovery_get_device_path(DEFAULT_DOMAIN_ID, dev_path,
+                                           sizeof(dev_path));
+  if (nErr == AEE_SUCCESS) {
+    qdafd = open(dev_path, O_RDWR | O_CLOEXEC);
+    if (qdafd >= 0) {
+      FARF(ALWAYS, "%s: opened rpcmem device %s for default domain %d",
+           __func__, dev_path, DEFAULT_DOMAIN_ID);
+      return 0;
+    }
+    FARF(ERROR, "%s: failed to open discovered device %s (errno %d), "
+         "falling back to %s", __func__, dev_path, errno, DEFAULT_DEVICE);
+  }
+
+  /* Fall back to the legacy hardcoded node if discovery is unavailable */
   qdafd = open(DEFAULT_DEVICE, O_RDWR | O_CLOEXEC);
   if (qdafd >= 0)
     return 0;
