@@ -73,6 +73,7 @@
 #include "fastrpc_context.h"
 #include "fastrpc_process_attributes.h"
 #include "fastrpc_trace.h"
+#include "fastrpc_platform.h"
 #include "fastrpc_config_parser.h"
 
 #define VENDOR_DSP_LOCATION "/vendor/dsp/"
@@ -82,16 +83,7 @@
 char DSP_LIBS_LOCATION[PATH_MAX] = DEFAULT_DSP_SEARCH_PATHS;
 static char DSP_SEARCH_PATHS_CACHE[NUM_DOMAINS][PATH_MAX] = {{0}};
 
-#ifdef LE_ENABLE
-#define PROPERTY_VALUE_MAX                                                     \
-  92 // as this macro is defined in cutils for Android platforms, defined
-     // explicitly for LE platform
-#elif (defined _ANDROID) || (defined ANDROID)
-/// TODO: Bharath #include "cutils/properties.h"
 #define PROPERTY_VALUE_MAX 92
-#else
-#define PROPERTY_VALUE_MAX 92
-#endif
 
 #ifndef _WIN32
 #include <poll.h>
@@ -233,28 +225,7 @@ const char *ENV_DEBUG_VAR_NAME[] = {"FASTRPC_PROCESS_ATTRS",
                                     "FASTRPC_PERF_FREQ",
                                     "FASTRPC_DEBUG_SYSTRACE",
                                     "FASTRPC_DEBUG_PDDUMP",
-                                    "FASTRPC_PROCESS_ATTRS_PERSISTENT",
-                                    "ro.debuggable"};
-const char *ANDROIDP_DEBUG_VAR_NAME[] = {"vendor.fastrpc.process.attrs",
-                                         "vendor.fastrpc.debug.trace",
-                                         "vendor.fastrpc.debug.testsig",
-                                         "vendor.fastrpc.perf.kernel",
-                                         "vendor.fastrpc.perf.adsp",
-                                         "vendor.fastrpc.perf.freq",
-                                         "vendor.fastrpc.debug.systrace",
-                                         "vendor.fastrpc.debug.pddump",
-                                         "persist.vendor.fastrpc.process.attrs",
-                                         "ro.build.type"};
-const char *ANDROID_DEBUG_VAR_NAME[] = {"fastrpc.process.attrs",
-                                        "fastrpc.debug.trace",
-                                        "fastrpc.debug.testsig",
-                                        "fastrpc.perf.kernel",
-                                        "fastrpc.perf.adsp",
-                                        "fastrpc.perf.freq",
-                                        "fastrpc.debug.systrace",
-                                        "fastrpc.debug.pddump",
-                                        "persist.fastrpc.process.attrs",
-                                        "ro.build.type"};
+                                    "FASTRPC_PROCESS_ATTRS_PERSISTENT"};
 
 const char *SUBSYSTEM_NAME[] = {"adsp", "mdsp", "sdsp", "cdsp", "cdsp1", "gdsp0", "gdsp1", "reserved"};
 
@@ -268,10 +239,6 @@ static const size_t invoke_end_trace_strlen = sizeof(INVOKE_END_TRACE_STR) - 1;
 
 int NO_ENV_DEBUG_VAR_NAME_ARRAY_ELEMENTS =
     sizeof(ENV_DEBUG_VAR_NAME) / sizeof(char *);
-int NO_ANDROIDP_DEBUG_VAR_NAME_ARRAY_ELEMENTS =
-    sizeof(ANDROIDP_DEBUG_VAR_NAME) / sizeof(char *);
-int NO_ANDROID_DEBUG_VAR_NAME_ARRAY_ELEMENTS =
-    sizeof(ANDROID_DEBUG_VAR_NAME) / sizeof(char *);
 
 /* Shell prefix for signed and unsigned */
 const char *const SIGNED_SHELL = "fastrpc_shell_";
@@ -566,12 +533,8 @@ static uint32_t crc32_lut(unsigned char *data, int nbyte, uint32_t *crctab) {
   return crc;
 }
 
-int property_get_int32(const char *name, int value) { return 0; }
-
-int property_get(const char *name, int *def, int *value) { return 0; }
-
 int fastrpc_get_property_int(fastrpc_properties UserPropKey, int defValue) {
-  if (((int)UserPropKey > NO_ENV_DEBUG_VAR_NAME_ARRAY_ELEMENTS)) {
+  if (((int)UserPropKey >= NO_ENV_DEBUG_VAR_NAME_ARRAY_ELEMENTS)) {
     FARF(ERROR,
          "%s: Index %d out-of-bound for ENV_DEBUG_VAR_NAME array of len %d",
          __func__, UserPropKey, NO_ENV_DEBUG_VAR_NAME_ARRAY_ELEMENTS);
@@ -580,34 +543,12 @@ int fastrpc_get_property_int(fastrpc_properties UserPropKey, int defValue) {
   const char *env = getenv(ENV_DEBUG_VAR_NAME[UserPropKey]);
   if (env != 0)
     return (int)atoi(env);
-#if !defined(LE_ENABLE) // Android platform
-#if !defined(SYSTEM_RPC_LIBRARY) // vendor library
-  if (((int)UserPropKey > NO_ANDROIDP_DEBUG_VAR_NAME_ARRAY_ELEMENTS)) {
-    FARF(
-        ERROR,
-        "%s: Index %d out-of-bound for ANDROIDP_DEBUG_VAR_NAME array of len %d",
-        __func__, UserPropKey, NO_ANDROIDP_DEBUG_VAR_NAME_ARRAY_ELEMENTS);
-    return defValue;
-  }
-  return (int)property_get_int32(ANDROIDP_DEBUG_VAR_NAME[UserPropKey],
-                                 defValue);
-#else // system library
-  if (((int)UserPropKey > NO_ANDROID_DEBUG_VAR_NAME_ARRAY_ELEMENTS)) {
-    FARF(ERROR,
-         "%s: Index %d out-of-bound for ANDROID_DEBUG_VAR_NAME array of len %d",
-         __func__, UserPropKey, NO_ANDROID_DEBUG_VAR_NAME_ARRAY_ELEMENTS);
-    return defValue;
-  }
-  return (int)property_get_int32(ANDROID_DEBUG_VAR_NAME[UserPropKey], defValue);
-#endif
-#else // non-Android platforms
-  return defValue;
-#endif
+  return fastrpc_platform_get_property_int(UserPropKey, defValue);
 }
 int fastrpc_get_property_string(fastrpc_properties UserPropKey, char *value,
                                 char *defValue) {
   int len = 0;
-  if (((int)UserPropKey > NO_ENV_DEBUG_VAR_NAME_ARRAY_ELEMENTS)) {
+  if (((int)UserPropKey >= NO_ENV_DEBUG_VAR_NAME_ARRAY_ELEMENTS)) {
     FARF(ERROR,
          "%s: Index %d out-of-bound for ENV_DEBUG_VAR_NAME array of len %d",
          __func__, UserPropKey, NO_ENV_DEBUG_VAR_NAME_ARRAY_ELEMENTS);
@@ -619,34 +560,7 @@ int fastrpc_get_property_string(fastrpc_properties UserPropKey, char *value,
     value[PROPERTY_VALUE_MAX - 1] = '\0';
     return strlen(env);
   }
-#if !defined(LE_ENABLE) // Android platform
-#if !defined(SYSTEM_RPC_LIBRARY) // vendor library
-  if (((int)UserPropKey > NO_ANDROIDP_DEBUG_VAR_NAME_ARRAY_ELEMENTS)) {
-    FARF(
-        ERROR,
-        "%s: Index %d out-of-bound for ANDROIDP_DEBUG_VAR_NAME array of len %d",
-        __func__, UserPropKey, NO_ANDROIDP_DEBUG_VAR_NAME_ARRAY_ELEMENTS);
-    return len;
-  }
-  return property_get(ANDROIDP_DEBUG_VAR_NAME[UserPropKey], (int *)value,
-                      (int *)defValue);
-#else // system library
-  if (((int)UserPropKey > NO_ANDROID_DEBUG_VAR_NAME_ARRAY_ELEMENTS)) {
-    FARF(ERROR,
-         "%s: Index %d out-of-bound for ANDROID_DEBUG_VAR_NAME array of len %d",
-         __func__, UserPropKey, NO_ANDROID_DEBUG_VAR_NAME_ARRAY_ELEMENTS);
-    return len;
-  }
-  return property_get(ANDROID_DEBUG_VAR_NAME[UserPropKey], value, defValue);
-#endif
-#else // non-Android platforms
-  if (defValue != NULL) {
-    strncpy(value, defValue, PROPERTY_VALUE_MAX - 1);
-    value[PROPERTY_VALUE_MAX - 1] = '\0';
-    return strlen(defValue);
-  }
-  return len;
-#endif
+  return fastrpc_platform_get_property_string(UserPropKey, value, defValue);
 }
 
 /*

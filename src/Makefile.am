@@ -52,11 +52,10 @@ LIBDSPRPC_SOURCES = \
 		adsp_perf_stub.c \
 		adsp_perf1_stub.c \
 		mod_table.c \
-		fastrpc_context.c
+		fastrpc_context.c \
+		fastrpc_platform.c
 
-if ANDROID_CC
-# Do nothing (or Android-specific sources)
-else
+if !ANDROID_CC
 LIBDSPRPC_SOURCES += fastrpc_config_parser.c
 endif
 

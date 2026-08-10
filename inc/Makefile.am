@@ -35,6 +35,7 @@ noinst_HEADERS = \
 	dspqueue_rpc.h \
 	dspqueue_shared.h \
 	dspsignal.h \
+	fastrpc_platform.h \
 	fastrpc_apps_user.h \
 	fastrpc_cap.h \
 	fastrpc_common.h \
