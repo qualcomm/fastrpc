@@ -21,12 +21,6 @@
 #define MAX_NON_PRELOAD_LIBS_LEN 2048
 #define FILE_EXT ".so"
 
-#ifndef VENDOR_DSP_LOCATION
-#define VENDOR_DSP_LOCATION "/vendor/dsp/"
-#endif
-#ifndef VENDOR_DOM_LOCATION
-#define VENDOR_DOM_LOCATION "/vendor/dsp/xdsp/"
-#endif
 
 int fopen_from_dirlist(const char *dirList, const char *delim, 
     const char *mode, const char *name, apps_std_FILE *psout);
