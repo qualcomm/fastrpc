@@ -4,7 +4,7 @@
 #include "platform_libs.h"
 
 PL_DEP(gpls)
-PL_DEP(listener_android)
+PL_DEP(listener)
 
 struct platform_lib *(*pl_list[])(void) = {PL_ENTRY(gpls),
-                                           PL_ENTRY(listener_android), 0};
+                                           PL_ENTRY(listener), 0};

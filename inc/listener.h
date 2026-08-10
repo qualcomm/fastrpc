@@ -1,8 +1,8 @@
 // Copyright (c) 2024, Qualcomm Innovation Center, Inc. All rights reserved.
 // SPDX-License-Identifier: BSD-3-Clause
 
-#ifndef LISTENER_ANDROID_H
-#define LISTENER_ANDROID_H
+#ifndef LISTENER_H
+#define LISTENER_H
 
 #include <semaphore.h>
 #include <dlfcn.h>
@@ -22,18 +22,18 @@
 /*
  * API to initialize globals and internal data structures used in listener modules
  */
-int listener_android_init(void);
+int listener_init(void);
 /*
  * API to de-initialize globals and internal data structures used in listener modules
  */
-void listener_android_deinit(void);
+void listener_deinit(void);
 /*
  * API to initialize domain specific data strcutures used in listener modules
  */
-int listener_android_domain_init(int domain, int update_requested, sem_t *r_sem);
+int listener_domain_init(int domain, int update_requested, sem_t *r_sem);
 /*
  * API to de-initialize domain specific data strcutures used in listener modules
  */
-void listener_android_domain_deinit(int domain);
+void listener_domain_deinit(int domain);
 
 #endif
