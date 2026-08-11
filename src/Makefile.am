@@ -67,11 +67,14 @@ LIBDEFAULT_LISTENER_SOURCES = \
 
 if ANDROID_CC
 USE_LOG = -llog
+libadsprpc_la_LIBADD = -ldl -lm $(USE_LOG)
+libcdsprpc_la_LIBADD = -ldl -lm $(USE_LOG)
+libsdsprpc_la_LIBADD = -ldl -lm $(USE_LOG)
 else
 # Add YAML and BSD libs to link flags for non-Android builds
-libadsprpc_la_LIBADD = -ldl -lm $(USE_LOG) @YAML_LIBS@ @BSD_LIBS@
-libcdsprpc_la_LIBADD = -ldl -lm $(USE_LOG) @YAML_LIBS@ @BSD_LIBS@
-libsdsprpc_la_LIBADD = -ldl -lm $(USE_LOG) @YAML_LIBS@ @BSD_LIBS@
+libadsprpc_la_LIBADD = -ldl -lm @YAML_LIBS@ @BSD_LIBS@
+libcdsprpc_la_LIBADD = -ldl -lm @YAML_LIBS@ @BSD_LIBS@
+libsdsprpc_la_LIBADD = -ldl -lm @YAML_LIBS@ @BSD_LIBS@
 endif
 
 ADSP_CFLAGS = $(LIBDSPRPC_CFLAGS) -DDEFAULT_DOMAIN_ID=0
