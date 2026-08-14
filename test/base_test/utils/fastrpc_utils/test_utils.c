@@ -7,6 +7,8 @@
 #include "fastrpc_test.h"
 #include "remote.h"
 
+#include <ctype.h>
+#include <dirent.h>
 #include <errno.h>
 #include <limits.h>
 #include <setjmp.h>
@@ -14,9 +16,42 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/stat.h>
+
+#ifndef PATH_MAX
+#define PATH_MAX 4096
+#endif
+
+#define REMOTEPROC_CLASS_PATH "/sys/class/remoteproc"
+
+typedef struct {
+    int domain_id;
+    const char *remoteproc_names[2];
+    const char *devnodes[2];
+} domain_probe_t;
+
+/* Keep domain aliases and device nodes aligned with fastrpc-healthcheck. */
+static const domain_probe_t domain_probes[] = {
+    { ADSP_DOMAIN_ID, { "adsp", NULL },
+      { "/dev/fastrpc-adsp", "/dev/fastrpc-adsp-secure" } },
+    { MDSP_DOMAIN_ID, { "mdsp", NULL },
+      { "/dev/fastrpc-mdsp", "/dev/fastrpc-mdsp-secure" } },
+    { SDSP_DOMAIN_ID, { "sdsp", "slpi" },
+      { "/dev/fastrpc-sdsp", "/dev/fastrpc-sdsp-secure" } },
+    { CDSP_DOMAIN_ID, { "cdsp", NULL },
+      { "/dev/fastrpc-cdsp", "/dev/fastrpc-cdsp-secure" } },
+    { CDSP1_DOMAIN_ID, { "cdsp1", NULL },
+      { "/dev/fastrpc-cdsp1", "/dev/fastrpc-cdsp1-secure" } },
+    { GDSP0_DOMAIN_ID, { "gpdsp0", "gdsp0" },
+      { "/dev/fastrpc-gdsp0", "/dev/fastrpc-gdsp0-secure" } },
+    { GDSP1_DOMAIN_ID, { "gpdsp1", "gdsp1" },
+      { "/dev/fastrpc-gdsp1", "/dev/fastrpc-gdsp1-secure" } },
+};
 
 test_config_t g_test_config = {
-    .domain_id = DEFAULT_DOMAIN_ID, /* CDSP = 3; override with -d <id> */
+    .domain_id = DEFAULT_DOMAIN_ID,
+    .domain_ids = { 0 },
+    .domain_count = 0,
     .unsigned_pd = 1,
     .silent_mode = 0,
     .logs_spec = NULL,    /* NULL = use registry defaults     */
@@ -26,22 +61,179 @@ test_config_t g_test_config = {
     .all_tag_count = 0,
 };
 
-void test_config_init(int argc, const char **argv, int *out_argc, const char ***out_argv)
+static int read_text_file(const char *path, char *buf, size_t buflen)
+{
+    FILE *file;
+    size_t length;
+
+    file = fopen(path, "r");
+    if (!file)
+        return -1;
+
+    length = fread(buf, 1, buflen - 1, file);
+    if (ferror(file)) {
+        fclose(file);
+        return -1;
+    }
+
+    fclose(file);
+    buf[length] = '\0';
+    buf[strcspn(buf, "\r\n")] = '\0';
+    return 0;
+}
+
+static int remoteproc_name_matches(const char *name, const char *key)
+{
+    const char *match;
+    size_t key_len;
+
+    match = strstr(name, key);
+    if (!match)
+        return 0;
+
+    key_len = strlen(key);
+    if (!isdigit((unsigned char)key[key_len - 1]) &&
+        isdigit((unsigned char)match[key_len]))
+        return 0;
+
+    return 1;
+}
+
+static int domain_has_devnode(const domain_probe_t *probe)
+{
+    struct stat st;
+
+    for (size_t i = 0; i < 2; i++) {
+        if (stat(probe->devnodes[i], &st) == 0 && S_ISCHR(st.st_mode))
+            return 1;
+    }
+
+    return 0;
+}
+
+static int discover_domains(int domains[TEST_CONFIG_MAX_DOMAINS])
+{
+    int running[TEST_CONFIG_MAX_DOMAINS] = { 0 };
+    DIR *dir;
+    struct dirent *entry;
+    int count = 0;
+
+    dir = opendir(REMOTEPROC_CLASS_PATH);
+    if (!dir) {
+        fprintf(stderr, "[test_config] unable to scan %s: %s\n",
+                REMOTEPROC_CLASS_PATH, strerror(errno));
+        return -1;
+    }
+
+    while ((entry = readdir(dir)) != NULL) {
+        char path[PATH_MAX];
+        char name[128];
+        char state[64];
+
+        if (strncmp(entry->d_name, "remoteproc", strlen("remoteproc")) != 0)
+            continue;
+
+        snprintf(path, sizeof(path), "%s/%s/name", REMOTEPROC_CLASS_PATH, entry->d_name);
+        if (read_text_file(path, name, sizeof(name)) != 0)
+            continue;
+
+        snprintf(path, sizeof(path), "%s/%s/state", REMOTEPROC_CLASS_PATH, entry->d_name);
+        if (read_text_file(path, state, sizeof(state)) != 0)
+            continue;
+
+        for (char *p = name; *p; p++)
+            *p = (char)tolower((unsigned char)*p);
+        for (char *p = state; *p; p++)
+            *p = (char)tolower((unsigned char)*p);
+
+        if (strstr(state, "running") == NULL)
+            continue;
+
+        for (size_t i = 0; i < TEST_CONFIG_MAX_DOMAINS; i++) {
+            for (size_t j = 0; j < 2 && domain_probes[i].remoteproc_names[j]; j++) {
+                if (remoteproc_name_matches(name, domain_probes[i].remoteproc_names[j])) {
+                    running[i] = 1;
+                    break;
+                }
+            }
+        }
+    }
+
+    closedir(dir);
+
+    for (size_t i = 0; i < TEST_CONFIG_MAX_DOMAINS; i++) {
+        if (running[i] && domain_has_devnode(&domain_probes[i]))
+            domains[count++] = domain_probes[i].domain_id;
+    }
+
+    return count;
+}
+
+static int add_explicit_domain(int domain_id)
+{
+    for (int i = 0; i < g_test_config.domain_count; i++) {
+        if (g_test_config.domain_ids[i] == domain_id)
+            return 0;
+    }
+
+    if (g_test_config.domain_count >= TEST_CONFIG_MAX_DOMAINS)
+        return -1;
+
+    g_test_config.domain_ids[g_test_config.domain_count++] = domain_id;
+    return 0;
+}
+
+static int parse_domain_id(const char *value, int *domain_id)
+{
+    char *end;
+    long parsed;
+
+    errno = 0;
+    parsed = strtol(value, &end, 10);
+    if (errno != 0 || *value == '\0' || *end != '\0')
+        return -1;
+
+    for (size_t i = 0; i < TEST_CONFIG_MAX_DOMAINS; i++) {
+        if (domain_probes[i].domain_id == parsed) {
+            *domain_id = (int)parsed;
+            return 0;
+        }
+    }
+
+    return -1;
+}
+
+int test_config_init(int argc, const char **argv, int *out_argc, const char ***out_argv)
 {
     const char **filtered = malloc((size_t)argc * sizeof(const char *));
+    int domains_explicit = 0;
+
     if (!filtered) {
-        fprintf(stderr, "[test_config] malloc failed — using original argv\n");
-        *out_argc = argc;
-        *out_argv = argv;
-        return;
+        fprintf(stderr, "[test_config] malloc failed\n");
+        return -1;
     }
 
     int fi = 0;
 
+    g_test_config.domain_count = 0;
+
     for (int i = 0; i < argc; i++) {
-        if (strcmp(argv[i], "-d") == 0 && i + 1 < argc) {
-            g_test_config.domain_id = atoi(argv[++i]);
-            printf("[test_config] domain_id = %d\n", g_test_config.domain_id);
+        if (strcmp(argv[i], "-d") == 0) {
+            int domain_id;
+
+            if (i + 1 >= argc) {
+                fprintf(stderr, "[test_config] -d requires a domain ID\n");
+                free(filtered);
+                return -1;
+            }
+
+            if (parse_domain_id(argv[++i], &domain_id) != 0 ||
+                add_explicit_domain(domain_id) != 0) {
+                fprintf(stderr, "[test_config] invalid domain ID: %s\n", argv[i]);
+                free(filtered);
+                return -1;
+            }
+            domains_explicit = 1;
         } else if (strcmp(argv[i], "-u") == 0 && i + 1 < argc) {
             g_test_config.unsigned_pd = atoi(argv[++i]);
             printf("[test_config] unsigned_pd = %d\n", g_test_config.unsigned_pd);
@@ -120,8 +312,26 @@ void test_config_init(int argc, const char **argv, int *out_argc, const char ***
         }
     }
 
+    if (g_test_config.domain_count == 0) {
+        g_test_config.domain_count = discover_domains(g_test_config.domain_ids);
+        if (g_test_config.domain_count <= 0) {
+            fprintf(stderr,
+                    "[test_config] no running DSP domains with FastRPC device nodes found\n");
+            free(filtered);
+            return -1;
+        }
+    }
+
+    printf("[test_config] %s domains:",
+           domains_explicit ? "selected" : "discovered");
+    for (int i = 0; i < g_test_config.domain_count; i++)
+        printf(" %s(%d)", test_utils_domain_name_for(g_test_config.domain_ids[i]),
+               g_test_config.domain_ids[i]);
+    putchar('\n');
+
     *out_argc = fi;
     *out_argv = filtered;
+    return 0;
 }
 
 void test_utils_domain_uri_for(int domain_id, char *buf, size_t buflen)
@@ -162,10 +372,10 @@ void test_utils_domain_uri(char *buf, size_t buflen)
     test_utils_domain_uri_for(g_test_config.domain_id, buf, buflen);
 }
 
-const char *test_utils_domain_name(void)
+const char *test_utils_domain_name_for(int domain_id)
 {
     /* To add a new DSP type: add one case here and in test_utils_domain_uri(). */
-    switch (g_test_config.domain_id) {
+    switch (domain_id) {
     case ADSP_DOMAIN_ID:
         return ADSP_DOMAIN_NAME;
     case MDSP_DOMAIN_ID:
@@ -183,6 +393,11 @@ const char *test_utils_domain_name(void)
     default:
         return CDSP_DOMAIN_NAME; /* safe fallback */
     }
+}
+
+const char *test_utils_domain_name(void)
+{
+    return test_utils_domain_name_for(g_test_config.domain_id);
 }
 
 int test_utils_setup_dsp_lib_path(void)

@@ -218,7 +218,7 @@ adb shell "DSP_LIBRARY_PATH=/data/local/tmp /data/local/tmp/test-fastrpc"
 ## Running the tests
 
 ```bash
-# Run all tests
+# Run all tests on every discovered, running FastRPC DSP domain
 ./bin/test-fastrpc
 
 # Run a specific test group
@@ -230,8 +230,11 @@ adb shell "DSP_LIBRARY_PATH=/data/local/tmp /data/local/tmp/test-fastrpc"
 # Verbose output (prints each test name as it runs)
 ./bin/test-fastrpc -v
 
-# Target a specific DSP domain (default: CDSP = 3)
+# Target a specific DSP domain
 ./bin/test-fastrpc -d 3
+
+# Target only a selected set of DSP domains (repeat -d)
+./bin/test-fastrpc -d 0 -d 3 -d 4
 
 # Disable unsigned PD (for signed skels)
 ./bin/test-fastrpc -u 0

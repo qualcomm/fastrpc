@@ -29,10 +29,17 @@ extern "C" {
  * Increasing this constant is the only change needed to support more tags. */
 #define TEST_CONFIG_MAX_TAGS 32
 
+/* FastRPC exposes seven named DSP domains. */
+#define TEST_CONFIG_MAX_DOMAINS 7
+
 /* Process-wide settings populated by main() from CLI args.
  *
- *   domain_id   : DSP domain (default DEFAULT_DOMAIN_ID / CDSP=3).
- *                 Override with -d <id>.
+ *   domain_id   : DSP domain for the current test run.
+ *
+ *   domain_ids[]: Domains selected for execution. With no -d argument this
+ *                 is populated by probing running remoteproc instances and
+ *                 their FastRPC device nodes. Repeat -d to select one or
+ *                 more domains explicitly.
  *
  *   unsigned_pd : Call remote_session_control(DSPRPC_CONTROL_UNSIGNED_MODULE)
  *                 before opening handles.  Default 1; pass -u 0 to skip for
@@ -86,6 +93,8 @@ extern "C" {
  */
 typedef struct {
     int domain_id;
+    int domain_ids[TEST_CONFIG_MAX_DOMAINS];
+    int domain_count;
     int unsigned_pd;
     int silent_mode; /**< --silent; suppress per-test output for passing tests */
     const char *logs_spec;                      /**< --logs <spec>; NULL = registry defaults  */
@@ -97,9 +106,11 @@ typedef struct {
 
 extern test_config_t g_test_config;
 
-/* Parses -d <domain_id> and -u <0|1> from argv, writes results into g_test_config,
- * and returns a filtered (argc, argv) pair with those flags removed for UnityMain(). */
-void test_config_init(int argc, const char **argv, int *out_argc, const char ***out_argv);
+/* Parses repeatable -d <domain_id> and -u <0|1> from argv, writes results into
+ * g_test_config, and returns a filtered (argc, argv) pair with those flags
+ * removed for UnityMain(). With no -d, discovers all available DSP domains.
+ * Returns 0 on success or -1 for invalid arguments/discovery failure. */
+int test_config_init(int argc, const char **argv, int *out_argc, const char ***out_argv);
 
 /* Builds a fully-qualified fastrpc_test URI for g_test_config.domain_id into buf.
  * buf must be at least sizeof(fastrpc_test_URI) + MAX_DOMAIN_URI_SIZE_SAFE bytes. */
@@ -110,6 +121,7 @@ void test_utils_domain_uri_for(int domain_id, char *buf, size_t buflen);
  * g_test_config.domain_id. Returns CDSP_DOMAIN_NAME for unknown IDs.
  * Use with FASTRPC_RESERVE_NEW_SESSION / FASTRPC_GET_URI APIs. */
 const char *test_utils_domain_name(void);
+const char *test_utils_domain_name_for(int domain_id);
 
 /* Sets DSP_LIBRARY_PATH, appending SKEL_SEARCH_PATH to any existing value.
  * Must be called before any fastrpc API. Returns 0 on success, -1 on failure. */
