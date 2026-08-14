@@ -255,7 +255,17 @@ adb shell "DSP_LIBRARY_PATH=/data/local/tmp /data/local/tmp/test-fastrpc"
 
 # Filter by tag (AND — run tests that have all of these tags)
 ./bin/test-fastrpc --all-tags UserHeap dsp_heap_stress
+
+# Suppress output for passing tests — only failures and skips are shown
+./bin/test-fastrpc --silent
 ```
+
+`--silent` buffers each test's header/body/footer output and only prints it
+if the test fails or is skipped; passing tests produce no output at all. The
+final summary is unaffected. Because the buffer is only flushed after a test
+completes, a hang inside a test won't show anything on the console until it
+finishes or is interrupted — unlike the default mode, where the header box
+prints live before the test body runs.
 
 ---
 
