@@ -12,6 +12,7 @@
 #   # Linux aarch64 (default)
 #   cmake -B builddir \
 #     -DFASTRPC_ROOT=/path/to/fastrpc \
+#     -DQAIC_EXECUTABLE=/path/to/qaic \
 #     -G Ninja
 #   cmake --build builddir
 #
@@ -19,6 +20,7 @@
 #   cmake -B builddir \
 #     -DTARGET_PLATFORM=android \
 #     -DFASTRPC_ROOT=/path/to/fastrpc \
+#     -DQAIC_EXECUTABLE=/path/to/qaic \
 #     -DANDROID_NDK_HOME=/path/to/android-ndk \
 #     -G Ninja
 #   cmake --build builddir
@@ -100,6 +102,9 @@ set(CMAKE_C_EXTENSIONS        OFF)
 set(FASTRPC_ROOT "" CACHE PATH
     "Path to the fastrpc repository root (must contain inc/ and src/.libs/)")
 
+set(QAIC_EXECUTABLE "" CACHE FILEPATH
+    "Path to the QAIC compiler used to generate the test IDL sources")
+
 set(ANDROID_NDK_HOME "" CACHE PATH
     "Path to the Android NDK root (required when TARGET_PLATFORM=android)")
 
@@ -132,6 +137,18 @@ if(NOT EXISTS "${FASTRPC_ROOT}/src/.libs/libcdsprpc.so.1.0.0")
 endif()
 
 set(FASTRPC_INC_DIR "${FASTRPC_ROOT}/inc")
+
+if(QAIC_EXECUTABLE STREQUAL "")
+    message(FATAL_ERROR
+        "QAIC_EXECUTABLE is not set.\n"
+        "Configure with -DQAIC_EXECUTABLE=/path/to/qaic")
+endif()
+
+if(NOT EXISTS "${QAIC_EXECUTABLE}")
+    message(FATAL_ERROR
+        "QAIC compiler not found at: ${QAIC_EXECUTABLE}\n"
+        "Set -DQAIC_EXECUTABLE= to a valid QAIC compiler path.")
+endif()
 
 # ============================================================================
 # Platform flags
@@ -230,6 +247,7 @@ endif()
 # common_test_iface — shared include dirs + compile flags
 # ============================================================================
 add_library(common_test_iface INTERFACE)
+add_dependencies(common_test_iface fastrpc_test_idl)
 
 target_include_directories(common_test_iface INTERFACE
     "${CMAKE_SOURCE_DIR}"

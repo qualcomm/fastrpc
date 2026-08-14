@@ -47,7 +47,7 @@ set_target_properties(test-fastrpc PROPERTIES
 find_program(HEXAGON_CLANG clang)
 
 if(HEXAGON_CLANG)
-    set(_gen_dir  "${CMAKE_SOURCE_DIR}/idl/generated")
+    set(_gen_dir  "${FASTRPC_TEST_IDL_INC_DIR}")
     set(_impl_dir "${CMAKE_SOURCE_DIR}/idl/impl")
     set(_bin_dir  "${CMAKE_BINARY_DIR}/bin")
 
@@ -66,9 +66,9 @@ if(HEXAGON_CLANG)
     add_custom_command(
         OUTPUT  "${_bin_dir}/fastrpc_test_skel.dsp.o"
         COMMAND "${HEXAGON_CLANG}" ${_dsp_flags}
-                -c "${_gen_dir}/fastrpc_test_skel.c"
+                -c "${FASTRPC_TEST_SKEL_SOURCE}"
                 -o "${_bin_dir}/fastrpc_test_skel.dsp.o"
-        DEPENDS "${_gen_dir}/fastrpc_test_skel.c"
+        DEPENDS "${FASTRPC_TEST_SKEL_SOURCE}"
         COMMENT "Compiling DSP skel: fastrpc_test_skel.c"
         VERBATIM
     )
@@ -78,7 +78,9 @@ if(HEXAGON_CLANG)
         COMMAND "${HEXAGON_CLANG}" ${_dsp_flags}
                 -c "${_impl_dir}/fastrpc_test_imp.c"
                 -o "${_bin_dir}/fastrpc_test_imp.dsp.o"
-        DEPENDS "${_impl_dir}/fastrpc_test_imp.c"
+        DEPENDS
+            "${_impl_dir}/fastrpc_test_imp.c"
+            "${FASTRPC_TEST_IDL_HEADER}"
         COMMENT "Compiling DSP imp: fastrpc_test_imp.c"
         VERBATIM
     )
@@ -102,6 +104,7 @@ if(HEXAGON_CLANG)
     add_custom_target(fastrpc_test_skel ALL
         DEPENDS "${_bin_dir}/libfastrpc_test_skel.so"
     )
+    add_dependencies(fastrpc_test_skel fastrpc_test_idl)
 
     message(STATUS
         "clang found at ${HEXAGON_CLANG} — "

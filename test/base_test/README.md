@@ -14,7 +14,7 @@ on the target device for the tests to run.
 1. [Repository layout](#repository-layout)
 2. [Prerequisites](#prerequisites)
 3. [Step 1 — Build the fastrpc library](#step-1--build-the-fastrpc-library)
-4. [Step 2 — Generate IDL stubs with QAIC](#step-2--generate-idl-stubs-with-qaic)
+4. [Step 2 — Configure QAIC generation](#step-2--configure-qaic-generation)
 5. [Step 3 — Build with CMake](#step-3--build-with-cmake)
 6. [Build artifacts](#build-artifacts)
 7. [Running the tests](#running-the-tests)
@@ -38,21 +38,14 @@ test/base_test/
 │
 ├── idl/
 │   ├── fastrpc_test.idl            # interface definition (source of truth)
-│   ├── inc/                        # IDL include files (AEEStdDef, remote)
-│   ├── generated/                  # QAIC output — do not edit by hand
-│   │   ├── fastrpc_test.h
-│   │   ├── fastrpc_test_stub.c     # CPU-side RPC stub (compiled into host binary)
-│   │   └── fastrpc_test_skel.c     # DSP-side dispatch skeleton (compiled into .so)
 │   └── impl/
 │       └── fastrpc_test_imp.c      # DSP-side method implementations
 │
 ├── utils/                          # shared test infrastructure
 │   ├── fastrpc_utils/              # DSP domain helpers, error strings, CLI parsing
 │   ├── log_capture/                # kernel / logcat log capture
-│   ├── reporting/
-│   │   ├── allure/                 # Allure XML result writer
-│   │   └── unity/                  # Unity fixture output hooks
-│   └── xml_writer/                 # low-level XML streaming library
+│   └── reporting/
+│       └── unity/                  # Unity fixture output hooks
 │
 ├── test/
 │   ├── feature/
@@ -64,9 +57,6 @@ test/base_test/
 │
 ├── bin/
 │   └── CMakeLists.txt              # links test-fastrpc + builds DSP skel
-│
-├── scripts/
-│   └── generate_report.sh          # post-run Allure report helper
 │
 └── vendor/
     └── unity/                      # ThrowTheSwitch/Unity (git submodule)
@@ -116,25 +106,18 @@ The build expects the library at:
 
 ---
 
-## Step 2 — Generate IDL stubs with QAIC
+## Step 2 — Configure QAIC generation
 
-The files under `idl/generated/` are produced by the **QAIC** compiler from
-`idl/fastrpc_test.idl`.  They are checked into the repository so a Hexagon SDK
-installation is not required for a normal build.  Regenerate them only when
-`fastrpc_test.idl` changes.
+The CMake build runs **QAIC** automatically to generate `fastrpc_test.h`, the
+CPU stub, and the DSP skel from `idl/fastrpc_test.idl`. Pass the compiler path
+when configuring. QAIC resolves shared IDL includes from `<FASTRPC_ROOT>/idl`.
 
 ```bash
-# From the idl/ directory
-qaic -st \
-     -I inc/ \
-     fastrpc_test.idl
-mv fastrpc_test.h         generated/
-mv fastrpc_test_stub.c    generated/
-mv fastrpc_test_skel.c    generated/
+-DQAIC_EXECUTABLE=/path/to/qaic
 ```
 
-> **Note:** Do not edit the files in `idl/generated/` by hand.  All interface
-> changes must be made in `fastrpc_test.idl` and regenerated with QAIC.
+Generated files are written under `<builddir>/idl/generated/` and refreshed
+when the source IDL, its included IDLs, or the QAIC executable changes.
 
 The three generated files serve distinct roles:
 
@@ -153,6 +136,7 @@ The three generated files serve distinct roles:
 ```bash
 cmake -B builddir \
       -DFASTRPC_ROOT=/path/to/fastrpc \
+      -DQAIC_EXECUTABLE=/path/to/qaic \
       -G Ninja
 
 cmake --build builddir
@@ -164,6 +148,7 @@ cmake --build builddir
 cmake -B builddir \
       -DTARGET_PLATFORM=android \
       -DFASTRPC_ROOT=/path/to/fastrpc \
+      -DQAIC_EXECUTABLE=/path/to/qaic \
       -DANDROID_NDK_HOME=/path/to/android-ndk \
       -G Ninja
 
@@ -176,6 +161,7 @@ cmake --build builddir
 |--------|---------|-------------|
 | `TARGET_PLATFORM` | `linux` | Target platform: `linux` or `android` |
 | `FASTRPC_ROOT` | auto-detected | Path to the fastrpc repository root |
+| `QAIC_EXECUTABLE` | — | Path to the QAIC compiler (required) |
 | `ANDROID_NDK_HOME` | — | Path to the Android NDK root (android only) |
 | `DSP_ARCH` | `73` | Hexagon DSP architecture version (e.g. `68`, `73`, `75`) |
 | `CMAKE_BUILD_TYPE` | `RelWithDebInfo` | `Debug`, `Release`, `RelWithDebInfo`, `MinSizeRel` |
@@ -409,15 +395,13 @@ Every new `CMakeLists.txt` must begin with:
   `TEST_SETUP` opens a fresh DSP session; `TEST_TEAR_DOWN` closes it
   unconditionally.  Tests must not share mutable state across cases.
 - **Always call `REPORT_ERROR_CODE(ret)`** immediately after any FastRPC API
-  call.  This records the return value for the Allure report.
+  call.  This records the return value for the consolidated test footer.
 - **Use `TEST_IGNORE_MESSAGE`** (not `TEST_FAIL`) when a DSP session cannot be
   opened.  Hardware absence is not a test failure.
 - **Annotate every test case** with `TEST_CASE_TAGS` so tag-based filtering
   works.  Minimum required tags: feature classification (e.g. `"feature"`),
   polarity (`"positive"` or `"negative"`), and a functional tag
   (e.g. `"dsp_heap_stress"`).
-- **Annotate every test group** with `TEST_GROUP_META` to populate Allure
-  labels (layer, epic, feature, story).
 - **No `printf` in `TEST_SETUP` / `TEST_TEAR_DOWN`** beyond the session open/
   close lines already established.  Diagnostic output belongs in the test body.
 - **Elapsed time must be reported** for any test that calls a timed DSP method.
