@@ -1,0 +1,193 @@
+#include "AEEStdDef.idl"
+#include "remote.idl"
+
+const string IDL_VERSION = "1.2.4";
+
+/**
+ * fastrpc_test - minimal DSP module used by the fastrpc-test unit tests.
+ *
+ * Provides four methods:
+ *   add    - adds two integers on the DSP and returns the result.
+ *            Used by remote_handle_open / remote_handle_close tests to verify
+ *            a real RPC round-trip after a successful open.
+ *   echo   - copies an input byte buffer to an output buffer of the same size.
+ *            Used to verify buffer passing over RPC.
+ *   matmul - multiplies two 3x3 float matrices (A * B = C) on the DSP.
+ *            Inputs:  a[9] and b[9] (row-major, 9 floats each).
+ *            Output:  c[9] (row-major result, 9 floats).
+ *            Used to verify fixed-size float buffer passing over RPC.
+ *   fft    - computes a power-of-two real-input FFT on the DSP.
+ *            Input:   samples[] (sequence of float, length must be a power of 2).
+ *            Output:  spectrum[] (sequence of float, same length; interleaved
+ *                               real/imag pairs, so spectrum has length/2 complex
+ *                               values packed as [re0,im0, re1,im1, ...]).
+ *            Used to verify variable-length float buffer passing over RPC.
+ *
+ * DSP Queue Methods (for feature tests):
+ *   dspqueue_start - starts the DSP-side dspqueue service.
+ *            Input:   dsp_queue_id (from dspqueue_export on CPU side).
+ *            Used by feature tests to establish bidirectional queue communication.
+ *   dspqueue_stop  - stops the DSP-side dspqueue service.
+ *            Output:  process_time (total DSP processing time in microseconds).
+ *            Used by feature tests to clean up and measure performance.
+ *   dspqueue_write_resp - writes a message directly into the resp_queue
+ *            (DSP->CPU direction) of an already-imported queue.
+ *            Used by unit tests to inject a response packet without a full
+ *            echo round-trip, so that dspqueue_peek/read on the CPU side
+ *            can find a packet to consume.
+ *            Input:  message bytes.
+ *            The DSP must have already imported the queue via dspqueue_start.
+ */
+interface fastrpc_test : remote_handle64 {
+    /** Add two signed 32-bit integers and return the result. */
+    long add(in long a, in long b, rout long result);
+
+    /** Copy input buffer to output buffer (must be same length). */
+    long echo(in sequence<octet> input, rout sequence<octet> output);
+
+    /**
+     * Multiply two 3x3 row-major float matrices: C = A * B.
+     * a and b must each contain exactly 9 floats; c receives 9 floats.
+     */
+    long matmul(in sequence<float> a, in sequence<float> b,
+                rout sequence<float> c);
+
+    /**
+     * Compute a real-input FFT of length N (must be a power of two).
+     * samples contains N floats; spectrum receives N floats packed as
+     * N/2 complex pairs [re0,im0, re1,im1, ...].
+     */
+    long fft(in sequence<float> samples, rout sequence<float> spectrum);
+
+    /**
+     * Start the DSP-side dspqueue service.
+     * @param dsp_queue_id Queue ID from dspqueue_export() on CPU side
+     * @return AEE_SUCCESS on success
+     */
+    long dspqueue_start(in uint64 dsp_queue_id);
+
+    /**
+     * Stop the DSP-side dspqueue service.
+     * @param process_time Total DSP processing time in microseconds
+     * @return AEE_SUCCESS on success
+     */
+    long dspqueue_stop(rout uint64 process_time);
+
+    /**
+     * Write a message directly into the resp_queue (DSP->CPU direction)
+     * of an already-imported queue.  Used by unit tests to inject a
+     * response packet so that dspqueue_peek/read on the CPU side finds
+     * a packet without needing a full echo round-trip.
+     *
+     * The queue must have been imported first via dspqueue_start().
+     *
+     * @param message  Raw bytes to write as the packet message payload.
+     * @return AEE_SUCCESS on success, AEE_EBADSTATE if queue not started.
+     */
+    long dspqueue_write_resp(in sequence<octet> message);
+
+    /* ===================================================================
+     * Profiling methods (adapted from examples/profiling/inc/profiling.idl)
+     *
+     * These methods expose the profiling example's RPC performance
+     * measurement operations through the fastrpc_test interface so that
+     * the feature/profiling test suite can exercise them without requiring
+     * the Hexagon SDK or a separate profiling skel.
+     *
+     * Method indices (in the stub/skel dispatch table):
+     *   9  profiling_noop
+     *  10  profiling_inbuf
+     *  11  profiling_routbuf
+     *  12  profiling_memcpy_time_pcycles
+     *  13  profiling_asm_iterations_time_us
+     *  14  profiling_asm_iterations_pcycles
+     *  15  profiling_asm_iterations_qtimer
+     * =================================================================== */
+
+    /** No-op call for RPC overhead measurement (method 8). */
+    long profiling_noop();
+
+    /**
+     * Input-buffer processing time measurement (method 9).
+     * @param src       Input buffer (sequence<octet>).
+     * @param mem_test  Non-zero to verify buffer contents on DSP (0 = off).
+     * @param run_time  DSP-reported processing time in microseconds.
+     */
+    long profiling_inbuf(in sequence<octet> src, in long mem_test,
+                         rout uint64 run_time);
+
+    /**
+     * Output-buffer processing time measurement (method 10).
+     * @param dst       Output buffer (sequence<octet>).
+     * @param mem_test  Non-zero to fill buffer with a pattern on DSP (0 = off).
+     * @param run_time  DSP-reported processing time in microseconds.
+     */
+    long profiling_routbuf(rout sequence<octet> dst, in long mem_test,
+                           rout uint64 run_time);
+
+    /**
+     * DSP memcpy timing (method 11).
+     * Allocates two int arrays of length `len`, copies src→dst on the DSP,
+     * and returns the elapsed wall-clock time.
+     * @param len       Number of int elements to allocate and copy.
+     * @param run_time  DSP-reported processing time in microseconds.
+     */
+    long profiling_memcpy_time_pcycles(in uint64 len,
+                                       rout uint64 run_time);
+
+    /**
+     * ASM loop timing — time_us variant (method 12).
+     * Runs profiling_loop_time(num) on the DSP and returns elapsed time.
+     * Returns AEE_EUNSUPPORTED if Hexagon assembly is not available.
+     * @param num  Iteration count.
+     */
+    long profiling_asm_iterations_time_us(in uint32 num);
+
+    /**
+     * ASM loop timing — pcycles variant (method 13).
+     * Runs profiling_loop_pcycles(num) on the DSP.
+     * Returns AEE_EUNSUPPORTED if Hexagon assembly is not available.
+     * @param num  Iteration count.
+     */
+    long profiling_asm_iterations_pcycles(in uint32 num);
+
+    /**
+     * ASM loop timing — qtimer variant (method 14).
+     * Runs profiling_loop_time(num) measured with the hardware QTimer.
+     * Returns AEE_EUNSUPPORTED if Hexagon assembly is not available.
+     * @param num  Iteration count.
+     */
+    long profiling_asm_iterations_qtimer(in uint32 num);
+
+    /* ===================================================================
+     * User-heap stress methods (feature/user_heap tests)
+     *
+     * These methods exercise the DSP-side userspace heap (malloc/free)
+     * without any HAP or QuRT APIs.  All timing uses clock_gettime().
+     *
+     * Method indices:
+     *  16  malloc_free_stress
+     * =================================================================== */
+
+    /**
+     * Repeated malloc/free stress test on the DSP heap (method 16).
+     *
+     * Performs `iterations` rounds.  In each round:
+     *   - Allocates `num_allocs` buffers whose sizes cycle through the
+     *     `sizes[]` array (wrapping with modulo).
+     *   - Writes a byte pattern into every buffer (memset).
+     *   - Frees all buffers in the same round before the next round begins.
+     *
+     * No HAP or QuRT APIs are used; timing is via clock_gettime().
+     *
+     * @param sizes       Array of allocation sizes in bytes (must be > 0).
+     * @param iterations  Number of alloc/free rounds to perform.
+     * @param num_allocs  Number of buffers allocated per round.
+     * @param elapsed_us  DSP-reported total elapsed time in microseconds.
+     * @return AEE_SUCCESS on success, AEE_ENOMEMORY if any allocation fails.
+     */
+    long malloc_free_stress(in sequence<uint32> sizes,
+                            in long iterations,
+                            in long num_allocs,
+                            rout uint64 elapsed_us);
+};
