@@ -27,7 +27,10 @@
 #define PATH_MAX 4096
 #endif
 
-#define QCOM_BASE_DIR "/usr/share/qcom"
+#ifndef CONFIG_BASE_DIR
+#define CONFIG_BASE_DIR "/usr/share/qcom/"
+#endif
+#define QCOM_BASE_DIR CONFIG_BASE_DIR
 #define MACHINE_MODEL_PATH "/sys/firmware/devicetree/base/model"
 
 #ifdef ANDROID
@@ -230,7 +233,11 @@ static char* find_dsp_library_path_from_yaml(void)
     if (read_text(MACHINE_MODEL_PATH, machine, sizeof(machine)) < 0)
         return NULL;
     machine[strcspn(machine, "\n")] = '\0';
-    DIR* dir = opendir("/usr/share/qcom/conf.d");
+
+    char conf_dir[PATH_MAX];
+    snprintf(conf_dir, sizeof(conf_dir), "%s/conf.d", QCOM_BASE_DIR);
+
+    DIR* dir = opendir(conf_dir);
     if (!dir)
         return NULL;
 
@@ -243,7 +250,7 @@ static char* find_dsp_library_path_from_yaml(void)
 
         char yaml_path[PATH_MAX];
         snprintf(yaml_path, sizeof(yaml_path),
-                 "/usr/share/qcom/conf.d/%s", de->d_name);
+                 "%s/%s", conf_dir, de->d_name);
 
         FILE* f = fopen(yaml_path, "r");
         if (!f)
@@ -887,7 +894,8 @@ static bool scan_qcom_yaml_and_check_dsp_modules(
         return false;
     }
 
-    const char* dirpath = "/usr/share/qcom/conf.d";
+    char dirpath[PATH_MAX];
+    snprintf(dirpath, sizeof(dirpath), "%s/conf.d", QCOM_BASE_DIR);
     DIR* dir = opendir(dirpath);
     if (!dir) {
         return false;
