@@ -723,20 +723,16 @@ static void build_search_for(dsp_t* d, const char* dsp_all_env, const char* yaml
     if (yaml_base_path) {
         char dsp_base[PATH_MAX];
         snprintf(dsp_base, sizeof(dsp_base), "%s/%s", QCOM_BASE_DIR, yaml_base_path);
-        if (is_dir(dsp_base)) {
-            DIR* dir = opendir(dsp_base);
-            if (dir) {
-                struct dirent* de;
-                while ((de = readdir(dir)) != NULL) {
-                    if (de->d_name[0] == '.') continue;
-                    char subdir[PATH_MAX];
-                    snprintf(subdir, sizeof(subdir), "%s/%s", dsp_base, de->d_name);
-                    if (is_dir(subdir)) {
-                        vec_push(&ordered, subdir);
-                    }
-                }
-                closedir(dir);
-            }
+
+        char dsp_lc[16];
+        snprintf(dsp_lc, sizeof(dsp_lc), "%s", d->name);
+        for (char* c = dsp_lc; *c; c++)
+            *c = (char)tolower((unsigned char)*c);
+
+        char subdir[PATH_MAX];
+        snprintf(subdir, sizeof(subdir), "%s/%s", dsp_base, dsp_lc);
+        if (is_dir(subdir)) {
+            vec_push(&ordered, subdir);
         }
     }
 
