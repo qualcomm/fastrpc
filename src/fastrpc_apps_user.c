@@ -3896,10 +3896,37 @@ bail:
   return INVALID_HANDLE;
 }
 
+/* Helper function to fetch unsigned PD support capability for a domain */
+static int fastrpc_get_unsigned_pd_support(int domain, uint32_t *unsigned_pd_support) {
+  int nErr = AEE_SUCCESS;
+  fastrpc_capability cap = {0, UNSIGNED_PD_SUPPORT, 0};
+
+  VERIFYC(unsigned_pd_support != NULL, AEE_EBADPARM);
+
+  cap.domain = domain;
+  nErr = fastrpc_get_cap(cap.domain, cap.attribute_ID, &cap.capability);
+
+  if (nErr == AEE_SUCCESS) {
+    *unsigned_pd_support = cap.capability;
+    FARF(RUNTIME_RPC_HIGH,
+         "%s: domain %d: resolved UNSIGNED_PD_SUPPORT %u",
+         __func__, domain, *unsigned_pd_support);
+  } else {
+    FARF(ALWAYS,
+         "Warning 0x%x: %s: Failed to get UNSIGNED_PD_SUPPORT for domain %d",
+         nErr, __func__, domain);
+    *unsigned_pd_support = 0;
+  }
+
+bail:
+  return nErr;
+}
+
 static int domain_init(int domain, int *dev) {
   int nErr = AEE_SUCCESS, dom = GET_DOMAIN_FROM_EFFEC_DOMAIN_ID(domain), mut_locked = 0;
   remote_handle64 panic_handle = 0;
   struct err_codes *err_codes_to_send = NULL;
+  uint32_t unsigned_pd_support = 0;
 
   pthread_mutex_lock(&hlist[domain].mut);
   mut_locked = 1;
@@ -3914,6 +3941,25 @@ static int domain_init(int domain, int *dev) {
   QList_Ctor(&hlist[domain].nql);
   QList_Ctor(&hlist[domain].rql);
   hlist[domain].is_session_reserved = true;
+
+  // Only apply unsigned PD support check for CDSP, GDSP0 and GDSP1 domains;
+  // other domains (e.g. ADSP) do not support unsigned modules, so keep their
+  // existing behavior.
+  if (dom == CDSP_DOMAIN_ID || dom == GDSP0_DOMAIN_ID || dom == GDSP1_DOMAIN_ID) {
+    VERIFY(AEE_SUCCESS == (nErr = fastrpc_get_unsigned_pd_support(domain, &unsigned_pd_support)));
+    if (unsigned_pd_support == 1) {
+      hlist[domain].unsigned_module = 1;
+      FARF(ALWAYS,
+           "%s: UNSIGNED_PD_SUPPORT is 1, allowing UNSIGNED module for domain %d",
+           __func__, domain);
+    } else {
+      hlist[domain].unsigned_module = 0;
+      FARF(ALWAYS,
+           "%s: UNSIGNED_PD_SUPPORT is 0, forcing SIGNED module for domain %d",
+           __func__, domain);
+    }
+  }
+
   VERIFY(AEE_SUCCESS == (nErr = remote_init(domain)));
   if (fastrpc_wake_lock_enable[domain]) {
     VERIFY(AEE_SUCCESS ==
