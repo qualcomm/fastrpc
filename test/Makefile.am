@@ -33,7 +33,8 @@ endif
 dsp_check_SOURCES = dsp_check.c
 
 # Base compiler flags (always)
-dsp_check_CFLAGS = -I$(top_srcdir)/inc -DUSE_SYSLOG
+dsp_check_CFLAGS = -I$(top_srcdir)/inc -DUSE_SYSLOG \
+                   -DCONFIG_BASE_DIR='"$(CONFIG_BASE_DIR)"'
 
 if ANDROID_CC
 dsp_check_CFLAGS += -DANDROID
