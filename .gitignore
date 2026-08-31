@@ -40,7 +40,7 @@ src/adsprpcd
 src/cdsprpcd
 src/sdsprpcd
 src/gdsprpcd
-test/dsp_check
+test/fastrpc-healthcheck
 test/fastrpc_test
 
 # make dist tarballs

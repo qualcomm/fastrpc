@@ -1,5 +1,5 @@
 # Define the test programs
-bin_PROGRAMS = fastrpc_test dsp_check
+bin_PROGRAMS = fastrpc_test fastrpc-healthcheck
 
 # ------------------------
 # fastrpc_test binary
@@ -26,27 +26,27 @@ fastrpc_test_CFLAGS += -DANDROID
 endif
 
 # ------------------------
-# dsp_check binary
+# fastrpc-healthcheck binary
 # ------------------------
 
 # Source file
-dsp_check_SOURCES = dsp_check.c
+fastrpc_healthcheck_SOURCES = fastrpc_healthcheck.c
 
 # Base compiler flags (always)
-dsp_check_CFLAGS = -I$(top_srcdir)/inc -DUSE_SYSLOG \
-                   -DCONFIG_BASE_DIR='"$(CONFIG_BASE_DIR)"'
+fastrpc_healthcheck_CFLAGS = -I$(top_srcdir)/inc -DUSE_SYSLOG \
+                             -DCONFIG_BASE_DIR='"$(CONFIG_BASE_DIR)"'
 
 if ANDROID_CC
-dsp_check_CFLAGS += -DANDROID
+fastrpc_healthcheck_CFLAGS += -DANDROID
 else
-dsp_check_CFLAGS += -DPARSE_YAML @YAML_CFLAGS@
+fastrpc_healthcheck_CFLAGS += -DPARSE_YAML @YAML_CFLAGS@
 endif
 
 # Linker flags
 if ANDROID_CC
-dsp_check_LDADD = -ldl $(USE_LOG)
+fastrpc_healthcheck_LDADD = -ldl $(USE_LOG)
 else
-dsp_check_LDADD = -ldl @YAML_LIBS@
+fastrpc_healthcheck_LDADD = -ldl @YAML_LIBS@
 endif
 
 
