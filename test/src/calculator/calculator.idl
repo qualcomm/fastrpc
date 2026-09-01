@@ -1,0 +1,17 @@
+//============================================================================
+// @file calculator.idl
+//
+// Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
+// SPDX-License-Identifier: BSD-3-Clause
+//============================================================================
+
+#include "AEEStdDef.idl"
+#include "remote.idl"
+
+const string IDL_VERSION = "1.2.3";
+
+interface calculator : remote_handle64 {
+   long sum(in sequence<long> vec, rout long long res);
+   long max(in sequence<long> vec, rout long res);
+};
+
