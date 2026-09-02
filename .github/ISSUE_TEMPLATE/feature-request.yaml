@@ -1,0 +1,38 @@
+name: Feature Request
+description: Suggest a new feature, extension, or significant change.
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to suggest an improvement!
+
+        Per [CONTRIBUTING.md](https://github.com/qualcomm/fastrpc/blob/development/CONTRIBUTING.md#before-you-begin),
+        new features, extensions, and other significant changes should be
+        discussed here before a pull request is opened, so we can agree on
+        the approach first.
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem does this solve?
+      description: Describe the use case or limitation you're running into.
+      placeholder: I'm trying to do X, but currently...
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+      description: Describe the feature or change you'd like to see.
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Any alternative solutions or workarounds you've considered.
+  - type: textarea
+    id: additional-context
+    attributes:
+      label: Additional context
+      description: Anything else that would help us evaluate this request.
