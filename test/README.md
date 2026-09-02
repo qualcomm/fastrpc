@@ -35,6 +35,9 @@ fastrpc_test -d 3 -U 1 -t linux -a v68
   - `1`: Run the example on MDSP
   - `2`: Run the example on SDSP
   - `3`: Run the example on CDSP
+  - `4`: Run the example on CDSP1
+  - `5`: Run the example on GDSP0
+  - `6`: Run the example on GDSP1
   - **Default Value**: `3` (CDSP) for targets having CDSP.
 
 - `-U unsigned_PD`: Run on signed or unsigned PD.
@@ -45,5 +48,8 @@ fastrpc_test -d 3 -U 1 -t linux -a v68
 - `-t target`: Specify the target platform (android or linux).
   - **Default Value**: `linux`
 
-- `-a arch_version`: Specify the architecture version (e.g., v68, v75).
+- `-a arch_version`: Specify the architecture version (v68 or v75).
   - **Default Value**: `v68`
+
+This list is kept in sync with `fastrpc_test -h` (see `print_usage()` in
+`fastrpc_test.c`); if you add a new domain or option, update both.
