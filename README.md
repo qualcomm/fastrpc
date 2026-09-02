@@ -337,6 +337,21 @@ session guarantees container-local files take precedence.
 
 For detailed instructions on testing FastRPC, please refer to the [README.md](test/README.md) in the `test` directory.
 
+### Verifying Board Setup
+
+Before running any tests, `fastrpc-healthcheck` can be used to confirm the
+board is ready for FastRPC offload:
+
+```bash
+fastrpc-healthcheck
+```
+
+It reports, per DSP, whether the DSP is online, whether signed/unsigned PD
+shells are available, and — if offload isn't possible — the specific
+missing requirement. See `man fastrpc-healthcheck` for full details, and
+[Docs/troubleshooting.md](Docs/troubleshooting.md) for common failure
+fixes.
+
 ## Logging Control and Verbosity
 
 Both VERIFY and FARF are logging mechanisms used in fastRPC. While VERIFY is a legacy module, FARF is commonly utilized on both DSP (Digital Signal Processor) and HLOS (High-Level Operating System).
@@ -432,6 +447,7 @@ When reporting bugs, please provide the following details to facilitate debuggin
 - Hexagon SDK documentation: [Hexagon SDK](https://developer.qualcomm.com/software/hexagon-dsp-sdk)
 - Linaro documentation: [Testing FastRPC](https://git.codelinaro.org/linaro/qcomlt/fastrpc/-/wikis/Testing-FastRPC)
 - Daemon architecture: [Docs/daemons.md](Docs/daemons.md) - FastRPC daemon roles and implementation
+- Troubleshooting: [Docs/troubleshooting.md](Docs/troubleshooting.md) - Common failure symptoms and fixes
 
 ## Contributions
 
