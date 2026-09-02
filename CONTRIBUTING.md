@@ -6,6 +6,7 @@ Your help is essential for keeping this project great and for making it better.
 
 - [Before you begin](#before-you-begin)
 - [Guidelines](#guidelines)
+- [Code Style](#code-style)
 - [Branching strategy](#branching-strategy)
 - [Setup](#setup)
 - [Get code](#get-code)
@@ -30,6 +31,11 @@ Please follow the guidelines below to increase the likelihood and speed of your 
 - Write a [good commit message](http://tbaggery.com/2008/04/19/a-note-about-git-commit-messages.html).
 - Every commit must be signed with the [Developer Certificate of Origin](https://developercertificate.org) (by adding the `-s` option to your `git commit` command).
 - Each PR submission will trigger a build, test, code quality check and static analysis processes. Submitters are required to fix all failures and warnings prior to acceptance.
+
+## Code Style
+In addition to matching the existing formatting of the file or folder you're editing (see `.clang-format`/`.editorconfig`), the following conventions are used consistently across this codebase and should be followed in new code:
+- **No unsafe string functions.** Do not use `strcpy`, `strcat`, `sprintf`, `vsprintf`, `gets`, or `alloca`. Use the bounds-checked equivalents already used throughout this codebase instead: `strlcpy`/`strlcat` (from libbsd) and `snprintf`.
+- **Header guards use `#ifndef`/`#define`/`#endif`**, not `#pragma once`. Match the existing headers in `inc/`.
 
 ## Branching strategy
 Contributors should develop on [their own fork](https://help.github.com/en/github/getting-started-with-github/fork-a-repo) on branches based off of the `development` branch and then pull requests should be made into the [upstream `development` branch](https://github.com/quic/fastrpc/tree/development).
