@@ -18,7 +18,7 @@ Your help is essential for keeping this project great and for making it better.
 - [Submission](#submission)
 
 ## Before you begin
-- Please read our [Code of Conduct](CODE-OF-CONDUCT.md) and [License](LICENSE) and ensure that you agree to abide by them.
+- Please read our [Code of Conduct](CODE-OF-CONDUCT.md) and [License](LICENSE.txt) and ensure that you agree to abide by them.
 - For every new feature or bug fix, always start a new issue on https://github.com/quic/fastrpc/issues.
 - To contribute a bug-fix, please follow the steps in the next sections without any further discussion.
 - To contribute new features, extensions, utility functions or other significant changes, please describe and discuss the change with us via the GitHub issue that you created above. **A pull request (PR) submitted without discussion and agreement with the project maintainers may be subject to rejection, or significant changes may be requested prior to its acceptance.**
@@ -128,7 +128,7 @@ It is recommended that you commit code to your branches often. Prior to pushing 
 https://git-scm.com/book/en/v2/Git-Tools-Rewriting-History 
 
 ## Submission
-When you're ready to submit your code, issue a pull request from the branch on your FORK into the develop branch on the upstream repository using these [instructions](https://help.github.com/en/github/collaborating-with-issues-and-pull-requests/creating-a-pull-request-from-a-fork).
+When you're ready to submit your code, issue a pull request from the branch on your FORK into the development branch on the upstream repository using these [instructions](https://help.github.com/en/github/collaborating-with-issues-and-pull-requests/creating-a-pull-request-from-a-fork).
 1. Go to your forked repo page `https://github.com/YOUR_USERNAME/fastrpc` and click "New Pull Request".
 1. Under "*compare changes*", select the base (destination) repository as `quic/fastrpc` and the branch as `base:development` to the left of the arrow.
 1. Under "*compare changes*", select the head (source) repository as `YOUR_USERNAME/fastrpc` and the branch as `base:branch_short_feature_description` to the right of the arrow.
