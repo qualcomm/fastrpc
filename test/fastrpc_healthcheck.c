@@ -31,6 +31,10 @@
 #define CONFIG_BASE_DIR "/usr/share/qcom/"
 #endif
 #define QCOM_BASE_DIR CONFIG_BASE_DIR
+
+#ifndef LIBDIR
+#define LIBDIR "/usr/lib"
+#endif
 #define MACHINE_MODEL_PATH "/sys/firmware/devicetree/base/model"
 
 #ifdef ANDROID
@@ -860,12 +864,24 @@ static void build_usr_lib_dirs(strv_t* out) {
         "/vendor/lib64"
     };
 #else
+    /*
+     * LIBDIR is the configured library directory, which is not always
+     * /usr/lib: multiarch distributions install to a triplet-qualified
+     * path such as /usr/lib/aarch64-linux-gnu. Both are checked as the
+     * FastRPC libraries may come from a differently configured build.
+     */
     const char* stds[] = {
+        LIBDIR,
         "/usr/lib"
     };
 #endif
 
-    for (size_t i=0;i<sizeof(stds)/sizeof(stds[0]); ++i) if (is_dir(stds[i])) vec_push(out, stds[i]);
+    for (size_t i=0;i<sizeof(stds)/sizeof(stds[0]); ++i) {
+        bool dup = false;
+        for (size_t j=0;j<i && !dup; ++j)
+            if (strcmp(stds[i], stds[j]) == 0) dup = true;
+        if (!dup && is_dir(stds[i])) vec_push(out, stds[i]);
+    }
 }
 
 static void usage(const char* argv0) {
