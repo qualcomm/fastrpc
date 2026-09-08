@@ -1,0 +1,161 @@
+.TH fastrpc-healthcheck 1 "August 2026" "fastrpc" "User Commands"
+
+.SH NAME
+fastrpc\-healthcheck \- report DSP availability and FastRPC offload readiness
+
+.SH SYNOPSIS
+.B fastrpc\-healthcheck
+[\fB\-l\fR \fIDSP\fB:\fIPATH\fR]...
+[\fB\-h\fR | \fB\-\-help\fR]
+
+.SH DESCRIPTION
+.B fastrpc\-healthcheck
+is a diagnostic utility that reports, for each Digital Signal Processor
+(DSP) present on the system, whether the DSP is running and whether it is
+ready to accept FastRPC offload from user space.
+
+It gathers information from the kernel, from the DSP firmware images, and
+from the FastRPC user\-space libraries, then prints a summary table. When a
+DSP is not ready for offload, the reason is reported so that the missing
+component can be identified.
+
+Only Qualcomm FastRPC\-capable DSPs are examined.
+
+.PP
+Each DSP is evaluated in two stages.
+.TP
+.B Online
+The DSP exists on the platform, its remote processor is running, and its
+firmware image is present.
+.TP
+.B FastRPC support
+An online DSP is additionally reported as supported only if the FastRPC
+shell binaries are present, the FastRPC user\-space libraries are present,
+the firmware and shell build IDs match, and the required FastRPC device
+node exists.
+
+.PP
+A DSP being online does not by itself mean that it can be used for offload.
+
+.SH OPTIONS
+.TP
+\fB\-l\fR, \fB\-\-lib\-path\fR \fIDSP\fB:\fIPATH\fR
+Prepend \fIPATH\fR to the DSP library search path used for \fIDSP\fR.
+\fIDSP\fR must be one of
+.BR ADSP , CDSP , CDSP1 , GDSP0 , GDSP1 , MDSP
+or
+.BR SDSP .
+May be given more than once, including more than once for the same DSP.
+Paths given this way are searched before all others.
+.TP
+.BR \-h ", " \-\-help
+Print a usage summary and exit.
+
+.SH OUTPUT
+The report begins with the DSP firmware path, the firmware build ID of the
+first DSP whose firmware and shell build IDs matched, the DSP dynamic
+library path in use, and whether the system DMA\-BUF heap is available.
+A value of
+.B N/A
+means that the item could not be determined.
+
+.PP
+One row follows per DSP found on the platform. DSPs with no
+.I remoteproc
+entry are omitted.
+.TP
+.B DSP
+DSP identifier.
+.TP
+.B State
+.B Online
+or
+.BR Offline .
+.TP
+.B SignedPD
+Whether signed process domain shell binaries were found.
+.TP
+.B UnsignedPD
+Whether unsigned process domain shell binaries were found. If unsigned
+process domains are unavailable, shell binaries must be signed before they
+can be run.
+.TP
+.B FastRPC Support
+.BR Yes ,
+or
+.B No
+followed by the first unmet requirement in parentheses, or
+.B \-
+if the DSP is offline.
+
+.SH DSP LIBRARY SEARCH ORDER
+DSP shell binaries are searched for in the following order. Only
+directories that exist are used.
+.IP 1. 4
+Paths given with \fB\-\-lib\-path\fR for that DSP.
+.IP 2.
+The DSP\-specific subdirectory of the platform DSP library path, derived
+from the machine\-specific configuration in
+.IR /usr/share/qcom/conf.d/ .
+.IP 3.
+Directories listed in
+.BR DSP_LIBRARY_PATH .
+.IP 4.
+The platform defaults
+.I /usr/lib/dsp
+and
+.IR /usr/lib/rfsa/adsp .
+
+.SH ENVIRONMENT
+.TP
+.B DSP_LIBRARY_PATH
+Colon\-separated list of directories to search for DSP shell binaries, for
+all DSPs.
+.TP
+.B LD_LIBRARY_PATH
+Colon\-separated list of directories searched, in addition to
+.IR /usr/lib ,
+for the FastRPC user\-space libraries.
+
+.SH EXIT STATUS
+.TP
+.B 0
+The report was produced. This does
+.I not
+indicate that any DSP is available or usable; the report itself must be
+consulted.
+.TP
+.B 2
+The command line was invalid, or an internal error occurred.
+
+.SH FILES
+.TP
+.I /sys/class/remoteproc/
+DSP presence, name and running state.
+.TP
+.I /lib/firmware/
+DSP firmware images.
+.TP
+.I /usr/share/qcom/conf.d/
+Machine\-specific configuration giving the DSP library path. The
+.I /usr/share/qcom
+prefix is set at build time by the
+.B \-\-with\-config\-base\-dir
+configure option.
+.TP
+.I /usr/lib/dsp\fR, \fI/usr/lib/rfsa/adsp
+Default DSP shell binary locations.
+.TP
+.I /dev/fastrpc\-*
+FastRPC device nodes.
+.TP
+.I /dev/dma_heap/system
+System DMA\-BUF heap, used by FastRPC for shared memory allocation.
+
+.SH NOTES
+Firmware and shell build IDs must match. A missing or mismatched build ID
+always prevents FastRPC offload, and is reported as such.
+
+.SH SEE ALSO
+.BR fastrpc (3),
+.BR dsprpcd (8)

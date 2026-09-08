@@ -1,7 +1,8 @@
 man8_MANS = dsprpcd.8
 man3_MANS = fastrpc.3
+man1_MANS = fastrpc-healthcheck.1
 
-EXTRA_DIST = dsprpcd.8 fastrpc.3
+EXTRA_DIST = dsprpcd.8 fastrpc.3 fastrpc-healthcheck.1
 
 install-data-hook:
 	cd $(DESTDIR)$(mandir)/man8 && \

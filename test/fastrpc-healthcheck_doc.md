@@ -1,20 +1,20 @@
-# DSP Check: How Readiness Is Determined
+# FastRPC Healthcheck: How Readiness Is Determined
 
-This document explains how the **dsp_check** tool determines Digital Signal Processor (DSP)
+This document explains how the **fastrpc-healthcheck** tool determines Digital Signal Processor (DSP)
 readiness and FastRPC offload capability. It is intended for **users**, not internal
 developers, and focuses on **what is checked**, **why it matters**, and **how to interpret
 the final output**.
 
-The tool supports both **Linux (LE)** and **Android** platforms.
+The tool supports both **Linux** and **Android** platforms.
 While the high‑level checks are the same across platforms, the locations used
 to discover firmware and DSP runtime components differ and are documented in
 the sections below.
 
 ---
 
-## 1. What Is dsp_check?
+## 1. What Is fastrpc-healthcheck?
 
-`dsp_check` is a diagnostic utility that evaluates whether DSPs on a system are:
+`fastrpc-healthcheck` is a diagnostic utility that evaluates whether DSPs on a system are:
 
 - Available and running
 - Ready for FastRPC offload from user space
@@ -99,7 +99,7 @@ build ID is later used to verify compatibility with DSP runtime components.
 DSP runtime components (such as FastRPC shell libraries) are
 located using a platform‑specific base path.
 
-- **Linux (LE):**
+- **Linux:**
   The path is derived from machine‑specific YAML configuration under:
 
   `/usr/share/qcom/conf.d/`
@@ -129,7 +129,7 @@ DSP runtime components are searched in the following order:
    - `DSP_LIBRARY_PATH`
    - DSP-specific environment variables
 4. Platform defaults:
-   - LE: `/usr/lib/dsp`, `/usr/lib/rfsa/adsp`
+   - Linux: `/usr/lib/dsp`, `/usr/lib/rfsa/adsp`
 5. (Android only) DSP-specific directories under `/vendor/dsp`
 
 This priority ensures that user-specified paths override system configuration.
@@ -172,7 +172,7 @@ Availability is reported separately in the summary table.
 
 ## 7. Firmware and Runtime Compatibility
 
-`dsp_check` enforces strict compatibility between firmware and DSP runtime
+`fastrpc-healthcheck` enforces strict compatibility between firmware and DSP runtime
 components.
 
 For FastRPC offload to be allowed:
@@ -196,7 +196,7 @@ on the CPU side.
 The tool checks standard user‑space library locations including:
 
 - `LD_LIBRARY_PATH`
-- **LE:** `/usr/lib`
+- **Linux:** `/usr/lib`
 - **Android:** `/vendor/lib64`
 
 
@@ -234,7 +234,7 @@ requirement is missing.
 
 ## 11. Design Philosophy
 
-The `dsp_check` tool is intentionally conservative and transparent:
+The `fastrpc-healthcheck` tool is intentionally conservative and transparent:
 
 - Online does not imply offload‑capable
 - Missing or incompatible components are reported explicitly
@@ -247,7 +247,7 @@ decisions.
 
 ## 12. Summary
 
-Use `dsp_check` to understand:
+Use `fastrpc-healthcheck` to understand:
 
 - Which DSPs are running
 - Which DSPs are ready for FastRPC offload
