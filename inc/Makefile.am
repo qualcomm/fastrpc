@@ -35,6 +35,7 @@ noinst_HEADERS = \
 	dspqueue_rpc.h \
 	dspqueue_shared.h \
 	dspsignal.h \
+	fastrpc_platform.h \
 	fastrpc_apps_user.h \
 	fastrpc_cap.h \
 	fastrpc_common.h \
@@ -52,7 +53,7 @@ noinst_HEADERS = \
 	fastrpc_procbuf.h \
 	fastrpc_process_attributes.h \
 	fastrpc_trace.h \
-	listener_android.h \
+	listener.h \
 	listener_buf.h \
 	log_config.h \
 	mod_table.h \

@@ -290,18 +290,19 @@ void fastrpc_log_init() {
   pthread_mutex_lock(&persist_buf.mut);
   /*
    * Get build type by reading the target properties,
-   * if buuid type is eng or userdebug allocate 1 MB persist buf.
+   * if build type is eng or userdebug allocate 1 MB persist buf.
    */
   if (fastrpc_get_property_string(FASTRPC_BUILD_TYPE, build_type, NULL)) {
 #if !defined(LE_ENABLE)
     if (!strncmp(build_type, "eng", PROPERTY_VALUE_MAX) ||
         !strncmp(build_type, "userdebug", PROPERTY_VALUE_MAX))
       debug_build_type = true;
-#else
+#else /* LE_ENABLE */
     if (atoi(build_type))
       debug_build_type = true;
 #endif
   }
+
   if (persist_buf.buf == NULL && debug_build_type) {
     /* Create a debug buffer to append DEBUG FARF level message. */
     persist_buf.buf = (char *)rpcmem_alloc_internal(
