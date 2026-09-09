@@ -34,7 +34,8 @@ fastrpc_healthcheck_SOURCES = fastrpc_healthcheck.c
 
 # Base compiler flags (always)
 fastrpc_healthcheck_CFLAGS = -I$(top_srcdir)/inc -DUSE_SYSLOG \
-                             -DCONFIG_BASE_DIR='"$(CONFIG_BASE_DIR)"'
+                             -DCONFIG_BASE_DIR='"$(CONFIG_BASE_DIR)"' \
+                             -DLIBDIR='"$(libdir)"'
 
 if ANDROID_CC
 fastrpc_healthcheck_CFLAGS += -DANDROID
