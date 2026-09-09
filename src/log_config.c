@@ -29,6 +29,7 @@
 #include "rpcmem.h"
 #include "verify.h"
 #include <errno.h>
+#include <inttypes.h>
 #include <limits.h>
 #include <poll.h>
 #include <pthread.h>
@@ -240,7 +241,7 @@ static int readLogConfigFromPath(int dom, const char *base, const char *file) {
        log_config_watcher[dom].fileToWatch, path, buf);
 
   // Parse farf file to get logmasks.
-  len = sscanf((const char *)buf, "0x%lx %511s", &farf_logmask, filenames);
+  len = sscanf((const char *)buf, "0x%" SCNx64 " %511s", &farf_logmask, filenames);
 
   if (farf_logmask == LLONG_MAX || farf_logmask == (uint64_t)LLONG_MIN ||
       farf_logmask == 0) {
