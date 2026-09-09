@@ -87,7 +87,9 @@ static char DSP_SEARCH_PATHS_CACHE[NUM_DOMAINS][PATH_MAX] = {{0}};
   92 // as this macro is defined in cutils for Android platforms, defined
      // explicitly for LE platform
 #elif (defined _ANDROID) || (defined ANDROID)
-/// TODO: Bharath #include "cutils/properties.h"
+// NOTE: cutils/properties.h is intentionally not included here for the
+// open-source build; it is Android AOSP-internal and unavailable
+// outside that tree. PROPERTY_VALUE_MAX is redefined locally instead.
 #define PROPERTY_VALUE_MAX 92
 #else
 #define PROPERTY_VALUE_MAX 92
@@ -3473,7 +3475,6 @@ static int fastrpc_enable_kernel_optimizations(int domain) {
   errno = 0;
 
   nErr = ioctl_optimization(dev, max_concurrency);
-  // TODO:Bharath
   if ((nErr == -1 || nErr == (DSP_AEE_EOFFSET + AEE_ERPC)) &&
       (errno == ENOTTY || errno == EINVAL || errno == EBADRQC)) {
     /*

@@ -12,7 +12,7 @@
 #include "fastrpc_procbuf.h"
 #include "apps_std_internal.h"
 #include "fastrpc_config.h"
-#include "fastrpc_internal.h" //TODO: Bharath
+#include "fastrpc_internal.h"
 #include "rpcmem_internal.h"
 #include "fastrpc_common.h"
 #include "HAP_farf_internal.h"
