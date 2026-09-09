@@ -2,6 +2,20 @@
 bin_PROGRAMS = fastrpc_test fastrpc-healthcheck
 
 # ------------------------
+# fastrpc_selftest (hardware-independent, for make check)
+# ------------------------
+
+if ANDROID_CC
+else
+check_PROGRAMS = fastrpc_selftest
+TESTS = fastrpc_selftest
+
+fastrpc_selftest_SOURCES = fastrpc_selftest.c
+fastrpc_selftest_CFLAGS = -I$(top_srcdir)/inc
+fastrpc_selftest_LDADD = $(top_builddir)/src/libcdsprpc.la -ldl
+endif
+
+# ------------------------
 # fastrpc_test binary
 # ------------------------
 
