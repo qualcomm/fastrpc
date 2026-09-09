@@ -1,0 +1,17 @@
+// Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
+// SPDX-License-Identifier: BSD-3-Clause
+#include "AEEStdDef.idl"
+
+module apps {
+   interface mem {
+      long request_map(in long heapid, in uint32 ion_flags, in uint32 rflags, in uint32 vin, in int32 len, rout uint32 vapps, rout uint32 vadsp);
+      long request_unmap(in uint32 vadsp, in int32 len);
+      long request_map64(in long heapid, in uint32 ion_flags, in uint32 rflags, in uint64 vin, in int64 len, rout uint64 vapps, rout uint64 vadsp);
+      long request_unmap64(in uint64 vadsp, in int64 len);
+      long share_map(in long fd, in long size, rout uint64 vapps, rout uint64 vadsp);
+      long share_unmap(in uint64 vadsp, in long size);
+      long dma_handle_map(in long fd, in long offset, in long size);
+      long dma_handle_unmap(in long fd, in long size);
+   };
+};
+

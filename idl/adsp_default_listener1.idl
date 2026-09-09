@@ -1,0 +1,12 @@
+// Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
+// SPDX-License-Identifier: BSD-3-Clause
+/* This IDL is needed to support domains usecases of FastRPC daemons.
+   This file is same as adsp_default_listener.idl but with domains support */
+
+#include "remote.idl"
+
+module adsp  {
+   interface default_listener1 : remote_handle64{
+      long register();
+   };
+};

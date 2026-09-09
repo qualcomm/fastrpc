@@ -1,0 +1,22 @@
+// Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
+// SPDX-License-Identifier: BSD-3-Clause
+#include "remote.idl"
+
+const long _const_adsp_current_process1_handle = 4;
+
+module adsp {
+   interface current_process1 : remote_handle64 {
+      long exit();
+      long thread_exit();
+      long set_logging_params(in unsigned short mask, in sequence<string> filesToLog);
+      long getASID(rout unsigned long asid);
+      long setQoS(in unsigned long latency);
+      long exception();
+      long set_logging_params2(in unsigned long mask, in sequence<string> filesToLog);
+      long poll_mode(in unsigned long enable, in unsigned long timeout);
+      long enable_notifications();
+      long panic_err_codes(in sequence<long> err_codes);
+      long exception_with_param(in string crash_info);
+   };
+};
+

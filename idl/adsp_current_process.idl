@@ -1,0 +1,17 @@
+// Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
+// SPDX-License-Identifier: BSD-3-Clause
+module adsp {
+
+   interface current_process {
+      long exit();
+      long thread_exit();
+      long set_logging_params(in unsigned short mask, in sequence<string> filesToLog);
+      long getASID(rout unsigned long asid);
+      long setQoS(in unsigned long latency);
+      long exception();
+      long set_logging_params2(in unsigned long mask, in sequence<string> filesToLog);
+      long poll_mode(in unsigned long enable, in unsigned long timeout);
+      long enable_notifications();
+   };
+};
+

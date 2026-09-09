@@ -1,0 +1,202 @@
+// Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
+// SPDX-License-Identifier: BSD-3-Clause
+#include "AEEStdDef.idl"
+
+module apps {
+   /**
+    * standard library functions remoted from the apps to the dsp
+    */
+   interface std {
+
+      typedef long FILE;
+      enum SEEK {
+         APPS_STD_SEEK_SET,
+         APPS_STD_SEEK_CUR,
+         APPS_STD_SEEK_END
+      };
+
+      struct DIR {
+         uint64 handle;
+      };
+
+      struct DIRENT {
+         long ino;
+         char name[255];
+      };
+
+      struct STAT {
+         uint64 tsz;
+         uint64 dev;
+         uint64 ino;
+         uint32 mode;
+         uint32 nlink;
+         uint64 rdev;
+         uint64 size;
+         int64 atime;
+         int64 atimensec;
+         int64 mtime;
+         int64 mtimensec;
+         int64 ctime;
+         int64 ctimensec;
+      };
+   
+      /**
+       * @retval, if operation fails errno is returned
+       */
+      long fopen(in string name, in string mode, rout FILE psout);
+      long freopen(in FILE sin, in string name, in string mode, rout FILE psout);
+      long fflush(in FILE sin);
+      long fclose(in FILE sin);
+
+      /**
+       * @param,  bEOF, if read or write bytes <= bufLen bytes then feof() is called
+       *          and the result is returned in bEOF, otherwise bEOF is set to 0.
+       * @retval, if read or write return 0 for non zero length buffers, ferror is checked
+       *          and a non zero value is returned in case of error with no rout parameters
+       */
+      long fread(in FILE sin, rout sequence<byte> buf, rout long bytesRead, rout long bEOF);
+      long fwrite(in FILE sin, in sequence<byte> buf, rout long bytesWritten, rout long bEOF);
+
+      /**
+       * @param, pos, this buffer is filled up to MIN(posLen, sizeof(fpos_t))
+       * @param, posLenReq, returns sizeof(fpos_t)
+       * @retval, if operation fails errno is returned
+       */
+      long fgetpos(in FILE sin, rout sequence<byte> pos, rout long posLenReq);
+
+      /**
+       * @param, if size of pos doesn't match the system size an error is returned.
+       *         fgetpos can be used to query the size of fpos_t
+       * @retval, if operation fails errno is returned
+       */
+      long fsetpos(in FILE sin, in sequence<byte> pos);
+
+      /**
+       * @retval, if operation fails errno is returned
+       */
+      long ftell(in FILE sin, rout long pos);
+      long fseek(in FILE sin, in long offset, in SEEK whence);
+      long flen(in FILE sin, rout uint64 len);
+
+      /**
+       * @retval, only fails if transport fails
+       */
+      long rewind(in FILE sin);
+      long feof(in FILE sin, rout long bEOF);
+      long ferror(in FILE sin, rout long err);
+      long clearerr(in FILE sin);
+      long print_string(in string str);
+
+      /**
+       * @param val, must contain space for NULL
+       * @param valLenReq, length required with NULL
+       * @retval, if fails errno is returned
+       */
+      long getenv(in string name, rout string val, rout long valLenReq);
+
+      /**
+       * @retval, if fails errno is returned
+       */
+      long setenv(in string name, in string val, in long override);
+      long unsetenv(in string name);
+      /**
+       * This function will try to open a file given directories in envvarname separated by
+       * delim.
+       * so given environment variable FOO_PATH=/foo;/bar
+       *    fopen_wth_env("FOO_PATH", ";", "path/to/file", "rw", &out);
+       * will try to open /foo/path/to/file, /bar/path/to/file
+       * if the variable is unset, it will open the file directly
+       *
+       * @param envvarname, name of the environment variable containing the path
+       * @param delim, delimiator string, such as ";"
+       * @param name, name of the file
+       * @param mode, mode
+       * @param psout, output handle
+       * @retval, 0 on success errno or -1 on failure
+       */
+      long fopen_with_env(in string envvarname, in string delim, in string name, in string mode, rout FILE psout);
+      long fgets(in FILE sin, rout sequence<byte> buf, rout long bEOF);
+
+      /**
+       * This method will return the paths that are searched when looking for a file.
+       *  The paths are defined by the environment variable (separated by delimiters)
+       *  that is passed to the method.
+       *
+       * @param envvarname, name of the environment variable containing the path
+       * @param delim, delimiator string, such as ";"
+       * @param name, name of the file
+       * @param paths, Search paths
+       * @param numPaths, Actual number of paths found
+       * @param maxPathLen, The max path length
+       * @retval, 0 on success errno or -1 on failure
+       *
+       */
+       long get_search_paths_with_env(in string envvarname, in string delim,
+            rout sequence<string> paths, rout uint32 numPaths, rout uint16 maxPathLen);
+
+       long fileExists(in string path, rout boolean exists);
+       long fsync(in FILE sin);
+       long fremove(in string name);
+
+       /**
+        * This function decrypts the file using the provided open file descriptor, closes the
+        * original descriptor and return a new file descriptor.
+        * @retval, if operation fails errno is returned
+        */
+       long fdopen_decrypt(in FILE sin, rout FILE psout);
+
+       long opendir(in string name, rout DIR dir);
+       long closedir(in DIR dir);
+       long readdir(in DIR dir, rout DIRENT dirent, rout long bEOF);
+       long mkdir(in string name, in long mode);
+       long rmdir(in string name);
+       long stat(in string name, rout STAT stat);
+
+       /* 
+       * This method will truncate the size of the file to offset
+       * 
+       * @param sin, file stream as input
+       * @param offset is the size of the file
+       * @retval 0 on success errno or -1 on failure
+       */
+       long ftrunc(in FILE sin, in long offset);
+       long frename(in string oldname, in string newname);
+       /**
+       * This function will try to open a file with provided mode
+       * and return fd to this file.
+       *
+       * @param name, name of the file
+       * @param mode, mode
+       * @param fd, output file fd
+       * @param len, output file fd len
+       * @retval, 0 on success errno or -1 on failure
+       */
+       long fopen_fd(in string name, in string mode, rout long fd, rout long len);
+
+       /**
+       * This function will try to close fd and the file opened by this fd 
+       *
+       * @param fd, fd to file
+       * @retval, 0 on success errno or -1 on failure
+       */
+       long fclose_fd(in long fd);
+
+       /**
+       * This function will try to open a file given directories in envvarname separated by
+       * delim.
+       * so given environment variable FOO_PATH=/foo;/bar
+       *    fopen_wth_env("FOO_PATH", ";", "path/to/file", "rw", &out);
+       * will try to open /foo/path/to/file, /bar/path/to/file
+       * if the variable is unset, it will open the file directly and return fd to that file
+       *
+       * @param envvarname, name of the environment variable containing the path
+       * @param delim, delimiator string, such as ";"
+       * @param name, name of the file
+       * @param mode, mode
+       * @param fd, output file fd
+       * @param len, output file fd len
+       * @retval, 0 on success errno or -1 on failure
+       */
+       long fopen_with_env_fd(in string envvarname, in string delim, in string name, in string mode, rout long fd, rout long len);
+   };
+};

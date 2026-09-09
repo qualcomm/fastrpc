@@ -1,0 +1,18 @@
+// Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
+// SPDX-License-Identifier: BSD-3-Clause
+#ifndef REMOTECTL1_IDL
+#define REMOTECTL1_IDL
+
+#include "remote.idl"
+#include "AEEStdDef.idl"
+
+const long _const_remotectl1_handle = 8;
+
+interface remotectl1 : remote_handle64 {
+	 long open1(in string name, rout long handle, rout sequence<char> dlerror, rout long nErr);
+	 long close1(in long handle, rout sequence<char> dlerror, rout long nErr);
+	 long grow_heap(in uint32 phyAddr, in uint32 nSize);
+	 long set_param(in long reqID, in sequence<uint32> params);
+};
+
+#endif

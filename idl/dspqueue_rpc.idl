@@ -1,0 +1,47 @@
+// Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
+// SPDX-License-Identifier: BSD-3-Clause
+
+#ifndef DSPQUEUE_RPC_IDL
+#define DSPQUEUE_RPC_IDL
+
+#include "AEEStdDef.idl"
+#include "remote.idl"
+
+/* Internal RPC interface used for Asynchronous DSP Packet Queue
+ * implementation. Used to create, destroy and manage queues, and to
+ * send and receive signals between the CPU and the DSP. The interface
+ * is implemented statically in the FastRPC shell, and used by the
+ * queue implementation linked to lib?dsprpc.so on the CPU side.
+ */
+
+interface dspqueue_rpc : remote_handle64 {
+    AEEResult init_process_state(
+        in int32 process_state_fd
+        );
+
+    AEEResult create_queue(
+        in uint32 id,
+        in int32 queue_fd,
+        in uint32 count,
+        rout uint64 queue_id
+        );
+
+    AEEResult destroy_queue(
+        in uint64 queue_id
+        );
+
+    AEEResult is_imported (
+        in uint64 queue_id,
+        rout int32 imported
+        );
+
+    AEEResult wait_signal(
+        rout int32 signal
+        );
+
+    AEEResult cancel_wait_signal();
+
+    AEEResult signal();
+};
+
+#endif //DSPQUEUE_RPC_IDL

@@ -1,0 +1,44 @@
+// Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
+// SPDX-License-Identifier: BSD-3-Clause
+#include "remote.idl"
+#include "AEEStdDef.idl"
+
+const long _const_adsp_listener1_handle = 7;
+
+module adsp {
+   interface listener1 : remote_handle64 {
+      typedef sequence<uint8> buffer;
+      typedef uint32 remote_handle;
+      typedef uint32 invoke_ctx;
+      /* these methods are deprecated
+       */
+      long next_invoke(in invoke_ctx prevCtx,
+                       in long prevResult, 
+                       in sequence<buffer> outBufs, 
+                       rout invoke_ctx ctx,
+                       rout remote_handle handle, 
+                       rout uint32 sc,
+                       rout sequence<buffer> inBuffers, 
+                       rout sequence<long> inBufLenReq,
+                       rout sequence<long> routBufLenReq);
+      long invoke_get_in_bufs(in invoke_ctx ctx,
+                              rout sequence<buffer> inBuffers);
+      long init();
+      /* 
+       * v2, simpler faster methods
+       */
+      long init2();
+      long next2(in invoke_ctx prevCtx, 
+                 in long prevResult, 
+                 in sequence<uint8> prevbufs,
+                 rout invoke_ctx ctx,
+                 rout remote_handle handle, 
+                 rout uint32 sc,
+                 rout sequence<uint8> bufs,
+                 rout long bufsLenReq);
+      long get_in_bufs2(in invoke_ctx ctx, 
+                        in long offset,
+                        rout sequence<uint8> bufs, 
+                        rout long bufsLenReq);
+   };
+};

@@ -1,0 +1,7 @@
+// Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
+// SPDX-License-Identifier: BSD-3-Clause
+#include "AEEStdDef.idl"
+interface apps_remotectl {
+	 long open(in string name, rout long handle, rout sequence<char> dlerror, rout long nErr);
+	 long close(in long handle, rout sequence<char> dlerror, rout long nErr);
+};
