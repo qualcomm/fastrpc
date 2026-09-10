@@ -30,6 +30,7 @@ void run_dspqueue_tests(void);
 
 /* ---- Feature suite declarations ----------------------------------------- */
 void run_dspqueue_feature_tests(void);
+void run_remote_heap_feature_tests(void);
 
 /* ---- Root dispatcher ---------------------------------------------------- */
 
@@ -40,6 +41,7 @@ static void run_all_tests(void)
 
     /* Feature suites */
     run_dspqueue_feature_tests();
+    run_remote_heap_feature_tests();
 }
 
 int main(int argc, const char *argv[])

@@ -22,6 +22,7 @@
  *   case 14 -> fastrpc_test_profiling_asm_iterations_pcycles
  *   case 15 -> fastrpc_test_profiling_asm_iterations_qtimer
  *   case 16 -> fastrpc_test_malloc_free_stress
+ *   case 17 -> fastrpc_test_dlopen_stress
  *
  * Handle value contract
  * ---------------------
@@ -63,6 +64,7 @@
 #include "dspqueue.h"
 #include "fastrpc_test.h"
 
+#include <dlfcn.h>
 #include <limits.h>
 #include <math.h>
 #include <stdlib.h>
@@ -695,4 +697,45 @@ int fastrpc_test_malloc_free_stress(remote_handle64 h, const uint32_t *sizes, in
     *elapsed_us = dsp_get_time_us() - t0;
     free(bufs);
     return ret;
+}
+
+/* =========================================================================
+ * Remote heap method (method 17)
+ *
+ * fastrpc_test_dlopen_stress
+ * ---------------------------
+ * Repeatedly dlopen()/dlclose() the given shared object.  Run against a
+ * handle opened inside the Audio static PD, each dlopen() exercises the
+ * DSP dynamic loader's internal heap allocations, which for that PD are
+ * backed by the apps_mem remote-heap reverse-RPC path (Docs/apps_mem.md).
+ * ========================================================================= */
+int fastrpc_test_dlopen_stress(remote_handle64 h, const char *so_path, int iterations,
+                               uint64_t *elapsed_us)
+{
+    (void)h;
+
+    int i;
+    uint64_t t0;
+
+    if (!so_path || iterations <= 0) {
+        *elapsed_us = 0;
+        return AEE_EBADPARM;
+    }
+
+    t0 = dsp_get_time_us();
+
+    for (i = 0; i < iterations; i++) {
+        void *lib = dlopen(so_path, RTLD_NOW);
+        if (!lib) {
+            *elapsed_us = dsp_get_time_us() - t0;
+            return AEE_ENOSUCHFILE;
+        }
+        if (dlclose(lib) != 0) {
+            *elapsed_us = dsp_get_time_us() - t0;
+            return AEE_EFAILED;
+        }
+    }
+
+    *elapsed_us = dsp_get_time_us() - t0;
+    return AEE_SUCCESS;
 }

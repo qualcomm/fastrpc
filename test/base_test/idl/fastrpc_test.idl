@@ -1,7 +1,7 @@
 #include "AEEStdDef.idl"
 #include "remote.idl"
 
-const string IDL_VERSION = "1.2.4";
+const string IDL_VERSION = "1.2.5";
 
 /**
  * fastrpc_test - minimal DSP module used by the fastrpc-test unit tests.
@@ -190,4 +190,32 @@ interface fastrpc_test : remote_handle64 {
                             in long iterations,
                             in long num_allocs,
                             rout uint64 elapsed_us);
+
+    /* ===================================================================
+     * Remote heap methods (feature/remote_heap tests)
+     *
+     * dlopen_stress exercises the DSP dynamic loader from inside a target
+     * PD (in particular the Audio static PD, "audiopd") by repeatedly
+     * dlopen()/dlclose()-ing a shared object.  Dynamic loading consumes
+     * loader-internal heap allocations, which for a static PD are backed
+     * by the apps_mem remote-heap reverse-RPC path documented in
+     * Docs/apps_mem.md.
+     *
+     * Method indices:
+     *  17  dlopen_stress
+     * =================================================================== */
+
+    /**
+     * Repeated dlopen/dlclose cycles on the DSP (method 17).
+     *
+     * @param so_path    Path to a shared object resolvable on the DSP
+     *                   (e.g. the deployed skel .so).
+     * @param iterations Number of dlopen/dlclose cycles to perform.
+     * @param elapsed_us DSP-reported total elapsed time in microseconds.
+     * @return AEE_SUCCESS on success, AEE_ENOSUCHFILE/AEE_EFAILED if the
+     *         library could not be opened.
+     */
+    long dlopen_stress(in string so_path,
+                       in long iterations,
+                       rout uint64 elapsed_us);
 };
