@@ -249,7 +249,12 @@ static void listener(listener_config *me) {
     }
 
     sbuf_init(&buf, 0, inBufs, inBufsLen);
-    unpack_in_bufs(&buf, args, REMOTE_SCALARS_INBUFS(sc));
+    result = unpack_in_bufs(&buf, args, REMOTE_SCALARS_INBUFS(sc));
+    if (AEE_SUCCESS != result) {
+      FARF(RUNTIME_RPC_HIGH,
+           "listener unpack_in_bufs failed, rejecting invoke: %d", result);
+      goto invoke;
+    }
     unpack_out_lens(&buf, args + REMOTE_SCALARS_INBUFS(sc),
                     REMOTE_SCALARS_OUTBUFS(sc));
 

@@ -72,13 +72,17 @@ static __inline int sbuf_needed(struct sbuf* buf) {
    return buf->bufCur - buf->bufStart;
 }
 /**
- * @retval, the space left in the buffer. A negative value indicates overflow.
- *          A positive value includes the offset.
+ * @retval, the space left in the buffer. Zero indicates an exhausted buffer or
+ *          overflow (the cursor escaped the buffer); the value is never
+ *          negative. A positive value includes the offset.
  */
 static __inline int sbuf_left(struct sbuf* buf) {
-   int result;
-   __builtin_sub_overflow(buf->bufEnd, buf->bufCur, &result);
-   return result;
+   uintptr_t diff = buf->bufEnd - buf->bufCur; /* wraps safely in unsigned */
+   if (buf->bufCur > buf->bufEnd)
+      return 0; /* cursor outside: nothing left, never negative */
+   if (diff > (uintptr_t)0x7fffffff)
+      return 0x7fffffff; /* clamp: larger than any srcLen we accept */
+   return (int)diff;
 }
 
 //! @retval the current head pointer
