@@ -40,10 +40,19 @@ static __inline void unpack_in_bufs(struct sbuf* buf, remote_arg* pra, int nBufs
       sbuf_read(buf, (uint8_t*)&len, 4);
       pra[ii].buf.nLen = len;
       if(pra[ii].buf.nLen) {
+         uintptr_t remaining;
          sbuf_align(buf, 8);
-         if((int)pra[ii].buf.nLen <= sbuf_left(buf)) {
-            pra[ii].buf.pv = sbuf_head(buf);
-         }
+         /* CVE-2020-11206 hardening: the length is DSP-supplied and must
+          * be validated in unsigned arithmetic BEFORE the cursor advances.
+          * The original code compared (int)len <= sbuf_left(buf), which a
+          * hostile length or an int-wrap in the remainder could defeat; the
+          * unsigned check below rejects the buffer untouched on mismatch. */
+         if (buf->bufCur > buf->bufEnd)
+            return;
+         remaining = (uintptr_t)(buf->bufEnd - buf->bufCur);
+         if ((uintptr_t)pra[ii].buf.nLen > remaining)
+            return; /* malformed: reject the whole buffer, do not advance */
+         pra[ii].buf.pv = sbuf_head(buf);
          sbuf_advance(buf, pra[ii].buf.nLen);
       }
    }
