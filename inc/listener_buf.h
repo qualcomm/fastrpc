@@ -7,6 +7,7 @@
 #include "sbuf.h"
 #include "remote.h"
 #include "verify.h"
+#include "AEEStdErr.h"
 
 static __inline void pack_in_bufs(struct sbuf* buf, remote_arg* pra, int nBufs) {
    int ii;
@@ -32,21 +33,32 @@ static __inline void pack_out_lens(struct sbuf* buf, remote_arg* pra, int nBufs)
    }
 }
 
-static __inline void unpack_in_bufs(struct sbuf* buf, remote_arg* pra, int nBufs) {
-   int ii;
+static __inline int unpack_in_bufs(struct sbuf* buf, remote_arg* pra, int nBufs) {
+   int ii, nErr = AEE_SUCCESS;
    uint32_t len=0;
    C_ASSERT(sizeof(len) == 4);
    for(ii = 0; ii < nBufs; ++ii) {
       sbuf_read(buf, (uint8_t*)&len, 4);
       pra[ii].buf.nLen = len;
       if(pra[ii].buf.nLen) {
+         uintptr_t remaining;
          sbuf_align(buf, 8);
-         if((int)pra[ii].buf.nLen <= sbuf_left(buf)) {
-            pra[ii].buf.pv = sbuf_head(buf);
-         }
+         /* CVE-2020-11206 hardening: the length is DSP-supplied and must
+          * be validated in unsigned arithmetic BEFORE the cursor advances.
+          * The original code compared (int)len <= sbuf_left(buf), which a
+          * hostile length or an int-wrap in the remainder could defeat; a
+          * mismatch rejects the whole invocation with AEE_EBADPARM and
+          * leaves the buffer untouched for the caller to handle. */
+         if (buf->bufCur > buf->bufEnd)
+            return AEE_EBADPARM;
+         remaining = (uintptr_t)(buf->bufEnd - buf->bufCur);
+         if ((uintptr_t)pra[ii].buf.nLen > remaining)
+            return AEE_EBADPARM;
+         pra[ii].buf.pv = sbuf_head(buf);
          sbuf_advance(buf, pra[ii].buf.nLen);
       }
    }
+   return nErr;
 }
 
 static __inline void unpack_out_lens(struct sbuf* buf, remote_arg* pra, int nBufs) {
