@@ -81,6 +81,8 @@ project(base_test
     DESCRIPTION "FastRPC base test suite (user_heap, dspqueue)"
 )
 
+include(GNUInstallDirs)
+
 # ============================================================================
 # Build type default
 # ============================================================================
@@ -190,6 +192,7 @@ set(UNITY_COMPILE_DEFS
     UNITY_INCLUDE_PRINT_FORMATTED
 )
 target_compile_definitions(unity PUBLIC ${UNITY_COMPILE_DEFS})
+set_target_properties(unity PROPERTIES POSITION_INDEPENDENT_CODE ON)
 
 add_library(unity_dep INTERFACE)
 target_link_libraries(unity_dep INTERFACE unity)

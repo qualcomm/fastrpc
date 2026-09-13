@@ -22,6 +22,7 @@
 #include "test_utils.h"
 #include "unity_fixture.h"
 
+#include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
 
@@ -44,7 +45,7 @@ static void run_all_tests(void)
     run_remote_heap_feature_tests();
 }
 
-int main(int argc, const char *argv[])
+static int run_base_tests(int argc, const char *argv[])
 {
     int filtered_argc;
     const char **filtered_argv;
@@ -73,3 +74,29 @@ int main(int argc, const char *argv[])
 
     return result;
 }
+
+#ifdef BASE_TEST_PLUGIN
+/* Legacy fastrpc_test plugin ABI; keep in sync with test/fastrpc_test.c. */
+int run_test(int domain_id, bool is_unsignedpd_enabled)
+{
+    char domain_arg[12];
+    char unsigned_pd_arg[2];
+    const char *argv[] = {
+        "base_test",
+        "-d",
+        domain_arg,
+        "-u",
+        unsigned_pd_arg,
+    };
+
+    snprintf(domain_arg, sizeof(domain_arg), "%d", domain_id);
+    snprintf(unsigned_pd_arg, sizeof(unsigned_pd_arg), "%d", is_unsignedpd_enabled ? 1 : 0);
+
+    return run_base_tests((int)(sizeof(argv) / sizeof(argv[0])), argv);
+}
+#else
+int main(int argc, const char *argv[])
+{
+    return run_base_tests(argc, argv);
+}
+#endif

@@ -51,7 +51,7 @@ add_library(fastrpc_test_stub STATIC
 add_dependencies(fastrpc_test_stub fastrpc_test_idl)
 
 set_target_properties(fastrpc_test_stub PROPERTIES
-    POSITION_INDEPENDENT_CODE OFF
+    POSITION_INDEPENDENT_CODE ON
 )
 
 target_include_directories(fastrpc_test_stub PRIVATE

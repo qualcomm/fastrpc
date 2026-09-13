@@ -3,9 +3,10 @@
 Feature test suite for the Qualcomm FastRPC library.
 
 Tests run on the **host CPU** and exercise the DSP over FastRPC.  The build
-produces two deployable artifacts: a host test binary (`test-fastrpc`) and a
-Hexagon DSP shared library (`libfastrpc_test_skel.so`).  Both must be present
-on the target device for the tests to run.
+produces a standalone host test binary (`test-fastrpc`), a legacy-runner plugin
+(`libbase_test.so`), and a Hexagon DSP shared library
+(`libfastrpc_test_skel.so`).  Use either host artifact together with the DSP
+library.
 
 ---
 
@@ -56,7 +57,7 @@ test/base_test/
 |           └── all_tests.c
 │
 ├── bin/
-│   └── CMakeLists.txt              # links test-fastrpc + builds DSP skel
+│   └── CMakeLists.txt              # builds host binary, plugin, and DSP skel
 │
 └── vendor/
     └── unity/                      # ThrowTheSwitch/Unity (git submodule)
@@ -174,14 +175,14 @@ set explicitly, which is correct when `base_test` lives at
 
 ## Build artifacts
 
-Both artifacts are placed in `<builddir>/bin/`.
+All artifacts are placed in `<builddir>/bin/`.
 
 ### `test-fastrpc` — host test binary
 
 The CPU-side test executable.  Links together:
 
 - `root_all_tests.c` — `main()`, initialises reporting, dispatches suite runners
-- `feature_user_heap_all` — static library containing all `user_heap` test sources
+- suite static libraries containing the unit and feature test sources
 - `fastrpc_test_stub` — QAIC-generated CPU→DSP RPC stub
 - `utils` — reporting, log capture, and FastRPC helper utilities
 - `unity` — ThrowTheSwitch/Unity test framework (fixture + memory extensions)
@@ -193,6 +194,27 @@ Push to the target device and run directly:
 adb push builddir/bin/test-fastrpc /data/local/tmp/
 adb shell /data/local/tmp/test-fastrpc
 ```
+
+### `libbase_test.so` — legacy `fastrpc_test` plugin
+
+This module contains the same Unity suites as `test-fastrpc` and exports the
+legacy loader entry point:
+
+```c
+int run_test(int domain_id, bool is_unsignedpd_enabled);
+```
+
+Install it with the same prefix used for the root FastRPC Autotools build so
+the legacy runner finds it in `<prefix>/lib/fastrpc_test/`:
+
+```bash
+cmake --install builddir --prefix /usr/local
+fastrpc_test -d 3 -U 1 -t linux -a v68
+```
+
+The legacy runner reports `libbase_test.so` as one module while Unity prints
+the individual base-test cases. Group, case, and tag filtering remain available
+through the standalone `test-fastrpc` binary.
 
 ### `libfastrpc_test_skel.so` — Hexagon DSP shared library
 

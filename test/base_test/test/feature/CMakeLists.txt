@@ -39,7 +39,7 @@ foreach(_suite IN LISTS _feat_suites)
     )
 
     set_target_properties("feature_${_suite}_all" PROPERTIES
-        POSITION_INDEPENDENT_CODE OFF
+        POSITION_INDEPENDENT_CODE ON
     )
 
     target_include_directories("feature_${_suite}_all" PRIVATE

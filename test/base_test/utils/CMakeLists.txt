@@ -31,7 +31,7 @@ add_library(fastrpc_test_utils STATIC
 add_dependencies(fastrpc_test_utils fastrpc_test_idl)
 
 set_target_properties(fastrpc_test_utils PROPERTIES
-    POSITION_INDEPENDENT_CODE OFF
+    POSITION_INDEPENDENT_CODE ON
 )
 
 target_include_directories(fastrpc_test_utils PRIVATE

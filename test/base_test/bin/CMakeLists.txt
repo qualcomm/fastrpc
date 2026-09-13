@@ -3,10 +3,13 @@
 #
 # bin/CMakeLists.txt
 #
-# Produces two deployable artifacts, both placed in <builddir>/bin/:
+# Produces three deployable artifacts, all placed in <builddir>/bin/:
 #
 #   test-fastrpc
 #     Linked from root_all_tests.c (owns main()) + every per-suite static lib.
+#
+#   libbase_test.so
+#     Legacy fastrpc_test plugin exporting run_test(domain_id, unsigned_pd).
 #
 #   libfastrpc_test_skel.so  (built when clang is in PATH)
 #     Hexagon DSP shared library compiled with --target=hexagon.
@@ -39,6 +42,37 @@ target_link_options(test-fastrpc PRIVATE
 
 set_target_properties(test-fastrpc PROPERTIES
     RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin"
+)
+
+# ============================================================================
+# libbase_test.so — plugin for the legacy fastrpc_test dlopen() runner
+# ============================================================================
+add_library(base_test MODULE
+    "${CMAKE_SOURCE_DIR}/root_all_tests.c"
+)
+
+target_compile_definitions(base_test PRIVATE
+    BASE_TEST_PLUGIN
+)
+
+target_include_directories(base_test PRIVATE
+    "${CMAKE_SOURCE_DIR}"
+    "${CMAKE_SOURCE_DIR}/test/feature"
+    "${FASTRPC_TEST_IDL_INC_DIR}"
+)
+
+target_link_libraries(base_test PRIVATE
+    common_test_dep
+    ${ALL_SUITE_LIBS}
+)
+
+set_target_properties(base_test PROPERTIES
+    LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin"
+    OUTPUT_NAME "base_test"
+)
+
+install(TARGETS base_test
+    LIBRARY DESTINATION "${CMAKE_INSTALL_LIBDIR}/fastrpc_test"
 )
 
 # ============================================================================
