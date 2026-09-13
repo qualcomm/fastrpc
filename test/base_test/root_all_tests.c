@@ -54,6 +54,30 @@ static int run_base_tests(int argc, const char *argv[])
     if (test_config_init(argc, argv, &filtered_argc, &filtered_argv) != 0)
         return 2;
 
+    if (g_test_config.list_mode != TEST_LIST_NONE) {
+        if (UnityGetCommandLineOptions(filtered_argc, filtered_argv) != 0) {
+            free((void *)filtered_argv);
+            return 2;
+        }
+
+        switch (g_test_config.list_mode) {
+        case TEST_LIST_TESTS:
+            result = unity_test_case_registry_print_tests();
+            break;
+        case TEST_LIST_GROUPS:
+            result = unity_test_case_registry_print_groups();
+            break;
+        case TEST_LIST_TAGS:
+            result = unity_test_case_registry_print_tags();
+            break;
+        case TEST_LIST_NONE:
+            break;
+        }
+
+        free((void *)filtered_argv);
+        return result == 0 ? 0 : 2;
+    }
+
     for (int i = 0; i < g_test_config.domain_count; i++) {
         int domain_result;
 

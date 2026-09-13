@@ -32,6 +32,13 @@ extern "C" {
 /* FastRPC exposes seven named DSP domains. */
 #define TEST_CONFIG_MAX_DOMAINS 7
 
+typedef enum {
+    TEST_LIST_NONE = 0,
+    TEST_LIST_TESTS,
+    TEST_LIST_GROUPS,
+    TEST_LIST_TAGS,
+} test_list_mode_t;
+
 /* Process-wide settings populated by main() from CLI args.
  *
  *   domain_id   : DSP domain for the current test run.
@@ -45,9 +52,8 @@ extern "C" {
  *                 before opening handles.  Default 1; pass -u 0 to skip for
  *                 signed skels.
  *
- *   silent_mode : --silent; suppress the per-test header/dot/footer block
- *                 for tests that pass. Failed and skipped tests still print
- *                 their full block. Summary totals are unaffected.
+ *   list_mode   : Metadata-only listing requested by -l or --list-*. When
+ *                 active, DSP discovery and test execution are skipped.
  *
  *   logs_spec   : Comma-separated list of log source names to enable, or one
  *                 of the special tokens below.  Populated by --logs <spec>.
@@ -97,6 +103,7 @@ typedef struct {
     int domain_count;
     int unsigned_pd;
     int silent_mode; /**< --silent; suppress per-test output for passing tests */
+    test_list_mode_t list_mode;
     const char *logs_spec;                      /**< --logs <spec>; NULL = registry defaults  */
     const char *any_tags[TEST_CONFIG_MAX_TAGS]; /**< --any-tags / --tags values (OR filter)   */
     int any_tag_count;                          /**< number of active --any-tags entries       */
@@ -106,10 +113,10 @@ typedef struct {
 
 extern test_config_t g_test_config;
 
-/* Parses repeatable -d <domain_id> and -u <0|1> from argv, writes results into
- * g_test_config, and returns a filtered (argc, argv) pair with those flags
- * removed for UnityMain(). With no -d, discovers all available DSP domains.
- * Returns 0 on success or -1 for invalid arguments/discovery failure. */
+/* Parses FastRPC-specific arguments, writes them into g_test_config, and
+ * returns a filtered (argc, argv) pair for Unity. With no -d, discovers all
+ * available DSP domains unless a metadata listing was requested. Returns 0
+ * on success or -1 for invalid arguments/discovery failure. */
 int test_config_init(int argc, const char **argv, int *out_argc, const char ***out_argv);
 
 /* Builds a fully-qualified fastrpc_test URI for g_test_config.domain_id into buf.

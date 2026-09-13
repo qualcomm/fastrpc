@@ -19,6 +19,7 @@ library.
 5. [Step 3 — Build with CMake](#step-3--build-with-cmake)
 6. [Build artifacts](#build-artifacts)
 7. [Running the tests](#running-the-tests)
+   - [Sample output](#sample-output)
 8. [Adding tests](#adding-tests)
 9. [Contributing — rules and policies](#contributing--rules-and-policies)
    - [Linux kernel coding style](#linux-kernel-coding-style)
@@ -249,6 +250,19 @@ adb shell "DSP_LIBRARY_PATH=/data/local/tmp /data/local/tmp/test-fastrpc"
 # Run a specific test case
 ./bin/test-fastrpc -g DspHeapStress -n SmallFixedSize
 
+# List test metadata without accessing a DSP or running tests
+./bin/test-fastrpc -l tests
+./bin/test-fastrpc -l groups
+./bin/test-fastrpc -l tags
+
+# Equivalent long forms
+./bin/test-fastrpc --list-tests
+./bin/test-fastrpc --list-groups
+./bin/test-fastrpc --list-tags
+
+# List matching tests without running them
+./bin/test-fastrpc --list-tests -G DspQueueCreate --all-tags negative
+
 # Verbose output (prints each test name as it runs)
 ./bin/test-fastrpc -v
 
@@ -271,12 +285,69 @@ adb shell "DSP_LIBRARY_PATH=/data/local/tmp /data/local/tmp/test-fastrpc"
 ./bin/test-fastrpc --silent
 ```
 
+Listing commands print one sorted entry per line. Existing group, test-name,
+and tag filters narrow test and group listings. Tag listings always show every
+available tag. Test setup and DSP discovery are never performed.
+
 `--silent` buffers each test's header/body/footer output and only prints it
 if the test fails or is skipped; passing tests produce no output at all. The
 final summary is unaffected. Because the buffer is only flushed after a test
 completes, a hang inside a test won't show anything on the console until it
 finishes or is interrupted — unlike the default mode, where the header box
 prints live before the test body runs.
+
+### Sample output
+
+```
+root@iq-9075-evk:/usr/local/bin# test-fastrpc -d 3
+[test_config] selected domains: cdsp(3)
+
+[test_config] running tests on cdsp domain (3)
+
+╔═════════════════════════════════════════════════════════════════════════════╗
+║                                FastRPC Tests                                ║
+╚═════════════════════════════════════════════════════════════════════════════╝
+
+Unity test run 1 of 1
+[test_utils] DSP_LIBRARY_PATH=/usr/share;/usr/local/share
+┌─────────────────────────────────────────────────────────────────────────────┐
+│  TEST  DspQueueCreate :: ValidDefaultParametersSucceeds                     │
+└─────────────────────────────────────────────────────────────────────────────┘
+.
+  Error codes : 0x00000000 (AEE_SUCCESS) ×2
+  Result      : ✔ PASS
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│  TEST  DspQueueCreate :: SmallQueueSizesSucceed                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+.
+  Error codes : 0x00000000 (AEE_SUCCESS) ×2
+  Result      : ✔ PASS
+[... additional test output ...]
+┌─────────────────────────────────────────────────────────────────────────────┐
+│  TEST  RemoteHeapSessionLifecycle :: CreateAudioStaticPDAndLoadSkel         │
+└─────────────────────────────────────────────────────────────────────────────┘
+.[remote-heap-feature] Initializing remote_heap feature on ADSP domain
+[remote-heap-feature] Stopping adsprpcd_audiopd.service to avoid audiopd attach contention
+[remote-heap-feature] Opening '":;./\createstaticpd:audiopd&_dom=adsp
+[remote-heap-feature] Opening URI: file:///libfastrpc_test_skel.so?fastrpc_test_skel_handle_invoke&_modver=1.0&_idlver=1.2.5&_dom=adsp
+[remote-heap-feature] ERROR: fastrpc_test_open failed: 0x8000042f ((unknown error))
+[remote-heap-feature] Restarting adsprpcd_audiopd.service
+/local/mnt/workspace/dhruv/fastrpc/test/base_test/test/feature/remote_heap/test_session_lifecycle.c:34:TEST(RemoteHeapSessionLifecycle, CreateAudioStaticPDAndLoadSkel):IGNORE: Audio static PD session not available - skipping
+
+  Result      : ⊘ SKIP
+-----------------------
+127 Tests 2 Failures 10 Ignored
+FAIL
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│  TEST SUITE SUMMARY                                                         │
+├─────────────────────────────────────────────────────────────────────────────┤
+│  Total: 127   Passed: 115   Failed: 2   Skipped: 10                         │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+  ✘  2 test(s) failed.
+```
 
 ---
 

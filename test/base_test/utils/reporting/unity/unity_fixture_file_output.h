@@ -214,6 +214,11 @@ const unity_test_case_tags_t *unity_test_case_tag_registry_find(const char *grou
  */
 int unity_test_case_tag_filter_passes(const char *group, const char *name);
 
+/* Print sorted metadata entries matching the active Unity and tag filters. */
+int unity_test_case_registry_print_tests(void);
+int unity_test_case_registry_print_groups(void);
+int unity_test_case_registry_print_tags(void);
+
 /**
  * @brief TEST_CASE_TAGS — annotate a single test case with descriptive tags.
  *

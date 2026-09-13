@@ -7,6 +7,7 @@
 #include "unity_fixture_internals.h" /* For UnityFixture (GroupFilter/Group/NameFilter/Name) */
 #include "unity_internals.h"
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
 
@@ -539,6 +540,134 @@ static int is_test_selected(const char *group, const char *name)
             name_ok = 1;
     }
     return name_ok;
+}
+
+static int registry_entry_compare(const void *left, const void *right)
+{
+    const unity_test_case_tags_t *const *left_entry = left;
+    const unity_test_case_tags_t *const *right_entry = right;
+    int group_result = strcmp((*left_entry)->group, (*right_entry)->group);
+
+    if (group_result != 0)
+        return group_result;
+    return strcmp((*left_entry)->name, (*right_entry)->name);
+}
+
+static int string_compare(const void *left, const void *right)
+{
+    const char *const *left_string = left;
+    const char *const *right_string = right;
+
+    return strcmp(*left_string, *right_string);
+}
+
+static unity_test_case_tags_t **get_selected_registry_entries(size_t *selected_count)
+{
+    unity_test_case_tags_t *entry;
+    unity_test_case_tags_t **entries;
+    size_t count = 0;
+    size_t index = 0;
+
+    for (entry = s_test_case_tag_registry_head; entry != NULL; entry = entry->next) {
+        if (is_test_selected(entry->group, entry->name) &&
+            unity_test_case_tag_filter_passes(entry->group, entry->name))
+            count++;
+    }
+
+    *selected_count = count;
+    if (count == 0)
+        return NULL;
+
+    entries = malloc(count * sizeof(*entries));
+    if (!entries) {
+        fprintf(stderr, "Failed to allocate test listing metadata\n");
+        return NULL;
+    }
+
+    for (entry = s_test_case_tag_registry_head; entry != NULL; entry = entry->next) {
+        if (is_test_selected(entry->group, entry->name) &&
+            unity_test_case_tag_filter_passes(entry->group, entry->name))
+            entries[index++] = entry;
+    }
+
+    qsort(entries, count, sizeof(*entries), registry_entry_compare);
+    return entries;
+}
+
+int unity_test_case_registry_print_tests(void)
+{
+    unity_test_case_tags_t **entries;
+    size_t count;
+
+    entries = get_selected_registry_entries(&count);
+    if (!entries && count != 0)
+        return -1;
+
+    for (size_t i = 0; i < count; i++)
+        printf("%s.%s\n", entries[i]->group, entries[i]->name);
+
+    free(entries);
+    return 0;
+}
+
+int unity_test_case_registry_print_groups(void)
+{
+    unity_test_case_tags_t **entries;
+    const char *previous_group = NULL;
+    size_t count;
+
+    entries = get_selected_registry_entries(&count);
+    if (!entries && count != 0)
+        return -1;
+
+    for (size_t i = 0; i < count; i++) {
+        if (!previous_group || strcmp(previous_group, entries[i]->group) != 0) {
+            printf("%s\n", entries[i]->group);
+            previous_group = entries[i]->group;
+        }
+    }
+
+    free(entries);
+    return 0;
+}
+
+int unity_test_case_registry_print_tags(void)
+{
+    unity_test_case_tags_t *entry;
+    const char **tags;
+    const char *previous_tag = NULL;
+    size_t tag_count = 0;
+    size_t index = 0;
+
+    for (entry = s_test_case_tag_registry_head; entry != NULL; entry = entry->next) {
+        for (const char *const *tag = entry->tags; tag && *tag; tag++)
+            tag_count++;
+    }
+
+    if (tag_count == 0)
+        return 0;
+
+    tags = malloc(tag_count * sizeof(*tags));
+    if (!tags) {
+        fprintf(stderr, "Failed to allocate tag listing metadata\n");
+        return -1;
+    }
+
+    for (entry = s_test_case_tag_registry_head; entry != NULL; entry = entry->next) {
+        for (const char *const *tag = entry->tags; tag && *tag; tag++)
+            tags[index++] = *tag;
+    }
+
+    qsort(tags, tag_count, sizeof(*tags), string_compare);
+    for (size_t i = 0; i < tag_count; i++) {
+        if (!previous_tag || strcmp(previous_tag, tags[i]) != 0) {
+            printf("%s\n", tags[i]);
+            previous_tag = tags[i];
+        }
+    }
+
+    free(tags);
+    return 0;
 }
 
 void UnityTestRunnerWithFileOutput(unityfunction *setup, unityfunction *test_body,

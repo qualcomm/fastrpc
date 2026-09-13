@@ -54,6 +54,7 @@ test_config_t g_test_config = {
     .domain_count = 0,
     .unsigned_pd = 1,
     .silent_mode = 0,
+    .list_mode = TEST_LIST_NONE,
     .logs_spec = NULL,    /* NULL = use registry defaults     */
     .any_tags = { NULL }, /* populated by --any-tags / --tags */
     .any_tag_count = 0,
@@ -203,10 +204,39 @@ static int parse_domain_id(const char *value, int *domain_id)
     return -1;
 }
 
+static int set_list_mode(test_list_mode_t mode)
+{
+    if (g_test_config.list_mode != TEST_LIST_NONE && g_test_config.list_mode != mode) {
+        fprintf(stderr, "[test_config] only one test listing mode may be selected\n");
+        return -1;
+    }
+
+    g_test_config.list_mode = mode;
+    return 0;
+}
+
+static int parse_list_mode(const char *value)
+{
+    if (strcmp(value, "tests") == 0)
+        return set_list_mode(TEST_LIST_TESTS);
+    if (strcmp(value, "groups") == 0)
+        return set_list_mode(TEST_LIST_GROUPS);
+    if (strcmp(value, "tags") == 0)
+        return set_list_mode(TEST_LIST_TAGS);
+
+    fprintf(stderr, "[test_config] invalid -l value '%s'; expected tests, groups, or tags\n",
+            value);
+    return -1;
+}
+
 int test_config_init(int argc, const char **argv, int *out_argc, const char ***out_argv)
 {
     const char **filtered = malloc((size_t)argc * sizeof(const char *));
+    int any_tag_via_alias[TEST_CONFIG_MAX_TAGS] = { 0 };
     int domains_explicit = 0;
+    int logs_explicit = 0;
+    int unsigned_pd_explicit = 0;
+    int silent_explicit = 0;
 
     if (!filtered) {
         fprintf(stderr, "[test_config] malloc failed\n");
@@ -216,9 +246,40 @@ int test_config_init(int argc, const char **argv, int *out_argc, const char ***o
     int fi = 0;
 
     g_test_config.domain_count = 0;
+    g_test_config.unsigned_pd = 1;
+    g_test_config.silent_mode = 0;
+    g_test_config.list_mode = TEST_LIST_NONE;
+    g_test_config.logs_spec = NULL;
+    g_test_config.any_tag_count = 0;
+    g_test_config.all_tag_count = 0;
 
     for (int i = 0; i < argc; i++) {
-        if (strcmp(argv[i], "-d") == 0) {
+        if (strcmp(argv[i], "-l") == 0) {
+            if (i + 1 >= argc) {
+                fprintf(stderr, "[test_config] -l requires tests, groups, or tags\n");
+                free(filtered);
+                return -1;
+            }
+            if (parse_list_mode(argv[++i]) != 0) {
+                free(filtered);
+                return -1;
+            }
+        } else if (strcmp(argv[i], "--list-tests") == 0) {
+            if (set_list_mode(TEST_LIST_TESTS) != 0) {
+                free(filtered);
+                return -1;
+            }
+        } else if (strcmp(argv[i], "--list-groups") == 0) {
+            if (set_list_mode(TEST_LIST_GROUPS) != 0) {
+                free(filtered);
+                return -1;
+            }
+        } else if (strcmp(argv[i], "--list-tags") == 0) {
+            if (set_list_mode(TEST_LIST_TAGS) != 0) {
+                free(filtered);
+                return -1;
+            }
+        } else if (strcmp(argv[i], "-d") == 0) {
             int domain_id;
 
             if (i + 1 >= argc) {
@@ -236,7 +297,7 @@ int test_config_init(int argc, const char **argv, int *out_argc, const char ***o
             domains_explicit = 1;
         } else if (strcmp(argv[i], "-u") == 0 && i + 1 < argc) {
             g_test_config.unsigned_pd = atoi(argv[++i]);
-            printf("[test_config] unsigned_pd = %d\n", g_test_config.unsigned_pd);
+            unsigned_pd_explicit = 1;
         } else if (strcmp(argv[i], "--silent") == 0) {
             /*
              * --silent  — suppress the per-test header/dot/footer block for
@@ -247,10 +308,10 @@ int test_config_init(int argc, const char **argv, int *out_argc, const char ***o
              * forwarded to UnityMain().
              */
             g_test_config.silent_mode = 1;
-            printf("[test_config] silent_mode = %d\n", g_test_config.silent_mode);
+            silent_explicit = 1;
         } else if (strcmp(argv[i], "--logs") == 0 && i + 1 < argc) {
             g_test_config.logs_spec = argv[++i];
-            printf("[test_config] logs_spec = %s\n", g_test_config.logs_spec);
+            logs_explicit = 1;
         } else if (strcmp(argv[i], "--any-tags") == 0 && i + 1 < argc) {
             /*
              * --any-tags <tag>  (repeatable, up to TEST_CONFIG_MAX_TAGS)
@@ -262,8 +323,6 @@ int test_config_init(int argc, const char **argv, int *out_argc, const char ***o
              */
             if (g_test_config.any_tag_count < TEST_CONFIG_MAX_TAGS) {
                 g_test_config.any_tags[g_test_config.any_tag_count++] = argv[++i];
-                printf("[test_config] any-tag filter[%d] = %s\n", g_test_config.any_tag_count - 1,
-                       g_test_config.any_tags[g_test_config.any_tag_count - 1]);
             } else {
                 fprintf(stderr,
                         "[test_config] Warning: --any-tags limit (%d) reached, "
@@ -281,8 +340,6 @@ int test_config_init(int argc, const char **argv, int *out_argc, const char ***o
              */
             if (g_test_config.all_tag_count < TEST_CONFIG_MAX_TAGS) {
                 g_test_config.all_tags[g_test_config.all_tag_count++] = argv[++i];
-                printf("[test_config] all-tag filter[%d] = %s\n", g_test_config.all_tag_count - 1,
-                       g_test_config.all_tags[g_test_config.all_tag_count - 1]);
             } else {
                 fprintf(stderr,
                         "[test_config] Warning: --all-tags limit (%d) reached, "
@@ -297,10 +354,10 @@ int test_config_init(int argc, const char **argv, int *out_argc, const char ***o
              * The value is stored in any_tags[], identical to --any-tags.
              */
             if (g_test_config.any_tag_count < TEST_CONFIG_MAX_TAGS) {
-                g_test_config.any_tags[g_test_config.any_tag_count++] = argv[++i];
-                printf("[test_config] any-tag filter[%d] = %s (via --tags)\n",
-                       g_test_config.any_tag_count - 1,
-                       g_test_config.any_tags[g_test_config.any_tag_count - 1]);
+                int tag_index = g_test_config.any_tag_count++;
+
+                g_test_config.any_tags[tag_index] = argv[++i];
+                any_tag_via_alias[tag_index] = 1;
             } else {
                 fprintf(stderr,
                         "[test_config] Warning: --tags limit (%d) reached, "
@@ -311,6 +368,25 @@ int test_config_init(int argc, const char **argv, int *out_argc, const char ***o
             filtered[fi++] = argv[i];
         }
     }
+
+    if (g_test_config.list_mode != TEST_LIST_NONE) {
+        *out_argc = fi;
+        *out_argv = filtered;
+        return 0;
+    }
+
+    if (unsigned_pd_explicit)
+        printf("[test_config] unsigned_pd = %d\n", g_test_config.unsigned_pd);
+    if (silent_explicit)
+        printf("[test_config] silent_mode = %d\n", g_test_config.silent_mode);
+    if (logs_explicit)
+        printf("[test_config] logs_spec = %s\n", g_test_config.logs_spec);
+    for (int i = 0; i < g_test_config.any_tag_count; i++) {
+        printf("[test_config] any-tag filter[%d] = %s%s\n", i, g_test_config.any_tags[i],
+               any_tag_via_alias[i] ? " (via --tags)" : "");
+    }
+    for (int i = 0; i < g_test_config.all_tag_count; i++)
+        printf("[test_config] all-tag filter[%d] = %s\n", i, g_test_config.all_tags[i]);
 
     if (g_test_config.domain_count == 0) {
         g_test_config.domain_count = discover_domains(g_test_config.domain_ids);
