@@ -264,6 +264,31 @@ sudo systemd-sysusers      # Create fastrpc group
     ./gitcompile --host=aarch64-linux-android
     ```
 
+### Code coverage
+
+Code coverage is opt-in and requires `lcov` and a gcov-compatible tool on the
+build host. Build FastRPC with instrumentation enabled:
+
+```bash
+./gitcompile --enable-code-coverage
+```
+
+Run a workload against the instrumented FastRPC libraries, then generate the
+HTML report:
+
+```bash
+make coverage
+# Open fastrpc-coverage/index.html
+```
+
+For cross-compiled builds, deploy the instrumented libraries to the target and
+run the tests there. Set `GCOV_PREFIX` to a writable target directory and set
+`GCOV_PREFIX_STRIP` to the number of build-path components before `src` so the
+collected files retain their `src/...` layout. Pull the resulting `.gcda` files
+into the corresponding locations in the build tree before running
+`make coverage`. Use `make coverage-clean` to clear counters and reports before
+a new run.
+
 ## Testing
 
 For detailed instructions on testing FastRPC, please refer to the [README.md](test/README.md) in the `test` directory.
