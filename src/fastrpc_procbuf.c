@@ -248,7 +248,9 @@ void fastrpc_process_pack_params(int dev, int domain) {
 		FARF(ERROR, "Error 0x%x: %s: Failed to pack effective domain id %d in shared buffer",
 				nErr, __func__, domain);
 	}
-	lib_names = (char *)malloc(sizeof(char) * MAX_NON_PRELOAD_LIBS_LEN);
+	/* zero-initialized so get_non_preload_lib_names()'s strlen() is always
+	 * safe, even when nothing ends up being appended via strlcat(). */
+	lib_names = (char *)calloc(1, sizeof(char) * MAX_NON_PRELOAD_LIBS_LEN);
 	if (lib_names) {
 		if (AEE_SUCCESS == get_non_preload_lib_names(&lib_names, &buffer_size, domain)) {
 			nErr = pack_proc_shared_buf_params(domain, CUSTOM_DSP_SEARCH_PATH_LIBS_ID, lib_names, buffer_size);
