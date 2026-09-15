@@ -154,7 +154,7 @@ static int pack_proc_shared_buf_params(int domain, uint32_t param_id,
 	uint32_t align_param_size = param_size;
 	/* Params pack address */
 	uint32_t *buf_write_addr = (uint32_t*)hlist[domain].proc_sharedbuf_cur_addr,
-		*buf_last_addr = buf_start_addr + PROC_SHAREDBUF_SIZE;
+		*buf_last_addr = (uint32_t*)((char*)buf_start_addr + PROC_SHAREDBUF_SIZE);
 
 	if (param_addr == NULL || param_size <= 0 || param_id < 0 ||
 		param_id >= PROC_ATTR_BUF_MAX_ID) {
