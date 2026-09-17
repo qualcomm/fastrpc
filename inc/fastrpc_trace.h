@@ -5,7 +5,9 @@
 #define FASTRPC_TRACE_H
 
 #if ((defined _ANDROID) || (defined ANDROID)) || (defined DISABLE_ATRACE) && !defined(LE_ENABLE)
-//TODO: Bharath #include "cutils/trace.h" //for systrace support
+// NOTE: cutils/trace.h is intentionally not included here for the
+// open-source build; upstream systrace support via cutils is Android
+// AOSP-internal and unavailable outside that tree.
 #endif
 #include "HAP_farf.h"
 

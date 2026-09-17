@@ -46,7 +46,9 @@
   92 // as this macro is defined in cutils for Android platforms, defined
      // explicitly for LE platform
 #elif (defined _ANDROID) || (defined ANDROID)
-// TODO: Bharath #include "cutils/properties.h"
+// NOTE: cutils/properties.h is intentionally not included here for the
+// open-source build; it is Android AOSP-internal and unavailable
+// outside that tree. PROPERTY_VALUE_MAX is redefined locally instead.
 #define PROPERTY_VALUE_MAX 92
 #else
 #define PROPERTY_VALUE_MAX 92
