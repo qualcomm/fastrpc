@@ -34,7 +34,7 @@ static __inline void pack_out_lens(struct sbuf* buf, remote_arg* pra, int nBufs)
 }
 
 static __inline int unpack_in_bufs(struct sbuf* buf, remote_arg* pra, int nBufs) {
-   int ii, nErr = AEE_SUCCESS;
+   int ii;
    uint32_t len=0;
    C_ASSERT(sizeof(len) == 4);
    for(ii = 0; ii < nBufs; ++ii) {
@@ -58,7 +58,7 @@ static __inline int unpack_in_bufs(struct sbuf* buf, remote_arg* pra, int nBufs)
          sbuf_advance(buf, pra[ii].buf.nLen);
       }
    }
-   return nErr;
+   return AEE_SUCCESS;
 }
 
 static __inline void unpack_out_lens(struct sbuf* buf, remote_arg* pra, int nBufs) {
