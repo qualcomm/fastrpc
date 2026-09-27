@@ -7,6 +7,7 @@
 #include "sbuf.h"
 #include "remote.h"
 #include "verify.h"
+#include "AEEStdErr.h"
 
 static __inline void pack_in_bufs(struct sbuf* buf, remote_arg* pra, int nBufs) {
    int ii;
@@ -32,7 +33,7 @@ static __inline void pack_out_lens(struct sbuf* buf, remote_arg* pra, int nBufs)
    }
 }
 
-static __inline void unpack_in_bufs(struct sbuf* buf, remote_arg* pra, int nBufs) {
+static __inline int unpack_in_bufs(struct sbuf* buf, remote_arg* pra, int nBufs) {
    int ii;
    uint32_t len=0;
    C_ASSERT(sizeof(len) == 4);
@@ -40,13 +41,24 @@ static __inline void unpack_in_bufs(struct sbuf* buf, remote_arg* pra, int nBufs
       sbuf_read(buf, (uint8_t*)&len, 4);
       pra[ii].buf.nLen = len;
       if(pra[ii].buf.nLen) {
+         uintptr_t remaining;
          sbuf_align(buf, 8);
-         if((int)pra[ii].buf.nLen <= sbuf_left(buf)) {
-            pra[ii].buf.pv = sbuf_head(buf);
-         }
+         /* CVE-2020-11206 hardening: the length is DSP-supplied and must
+          * be validated in unsigned arithmetic BEFORE the cursor advances.
+          * The original code compared (int)len <= sbuf_left(buf), which a
+          * hostile length or an int-wrap in the remainder could defeat; a
+          * mismatch rejects the whole invocation with AEE_EBADPARM and
+          * leaves the buffer untouched for the caller to handle. */
+         if (buf->bufCur > buf->bufEnd)
+            return AEE_EBADPARM;
+         remaining = (uintptr_t)(buf->bufEnd - buf->bufCur);
+         if ((uintptr_t)pra[ii].buf.nLen > remaining)
+            return AEE_EBADPARM;
+         pra[ii].buf.pv = sbuf_head(buf);
          sbuf_advance(buf, pra[ii].buf.nLen);
       }
    }
+   return AEE_SUCCESS;
 }
 
 static __inline void unpack_out_lens(struct sbuf* buf, remote_arg* pra, int nBufs) {
@@ -61,7 +73,11 @@ static __inline void unpack_out_lens(struct sbuf* buf, remote_arg* pra, int nBuf
 
 //map out buffers on the hlos side to the remote_arg array
 //dst is the space required for buffers we coun't map from the adsp
-static __inline void pack_out_bufs(struct sbuf* buf, remote_arg* pra, int nBufs) {
+//validate=0 is the sizing pass on a null sbuf: the cursor intentionally
+//walks past the end to measure the required size, so lengths are not
+//bounds-checked there. validate=1 packs into real memory and rejects a
+//length that does not fit, same contract as unpack_in_bufs.
+static __inline int pack_out_bufs(struct sbuf* buf, remote_arg* pra, int nBufs, int validate) {
    int ii;
    uint32_t len;
    C_ASSERT(sizeof(len) == 4);
@@ -69,13 +85,24 @@ static __inline void pack_out_bufs(struct sbuf* buf, remote_arg* pra, int nBufs)
       len = (uint32_t)pra[ii].buf.nLen;
       sbuf_write(buf, (uint8_t*)&len, 4);
       if(pra[ii].buf.nLen) {
+         uintptr_t remaining;
          sbuf_align(buf, 8);
-         if((int)pra[ii].buf.nLen <= sbuf_left(buf)) {
-            pra[ii].buf.pv = sbuf_head(buf);
+         if(validate) {
+            /* The length is peer-supplied; validate it in unsigned
+             * arithmetic BEFORE the cursor advances. A mismatch leaves the
+             * buffer untouched and fails the invocation (CVE-2020-11206
+             * class — same unchecked sbuf_advance as the input path). */
+            if (buf->bufCur > buf->bufEnd)
+               return AEE_EBADPARM;
+            remaining = (uintptr_t)(buf->bufEnd - buf->bufCur);
+            if ((uintptr_t)pra[ii].buf.nLen > remaining)
+               return AEE_EBADPARM;
          }
+         pra[ii].buf.pv = sbuf_head(buf);
          sbuf_advance(buf, pra[ii].buf.nLen);
       }
    }
+   return AEE_SUCCESS;
 }
 
 //on the aDSP copy the data from buffers we had to copy to the local remote_arg structure
