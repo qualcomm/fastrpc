@@ -260,7 +260,7 @@ static void listener(listener_config *me) {
 
     sbuf_init(&buf, 0, 0, 0);
     pack_out_bufs(&buf, args + REMOTE_SCALARS_INBUFS(sc),
-                  REMOTE_SCALARS_OUTBUFS(sc));
+                  REMOTE_SCALARS_OUTBUFS(sc), 0);
     outBufsLen = sbuf_needed(&buf);
 
     if (__builtin_smul_overflow(outBufsLen, 2, &bufs_len)) {
@@ -297,8 +297,13 @@ static void listener(listener_config *me) {
       outBufsCapacity = size;
     }
     sbuf_init(&buf, 0, outBufs, outBufsLen);
-    pack_out_bufs(&buf, args + REMOTE_SCALARS_INBUFS(sc),
-                  REMOTE_SCALARS_OUTBUFS(sc));
+    result = pack_out_bufs(&buf, args + REMOTE_SCALARS_INBUFS(sc),
+                           REMOTE_SCALARS_OUTBUFS(sc), 1);
+    if (AEE_SUCCESS != result) {
+      FARF(RUNTIME_RPC_HIGH,
+           "listener pack_out_bufs failed, rejecting invoke: %d", result);
+      goto invoke;
+    }
     result = mod_table_invoke(handle, sc, args);
     if (result && is_process_exiting(domain))
       result = AEE_EBADSTATE; // override result as process is exiting
