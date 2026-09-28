@@ -9,6 +9,6 @@ Type=exec
 ExecStart=@sbindir@/adsprpcd audiopd
 Restart=on-failure
 RestartSec=5
-# AEE_ENOMEMORY
-RestartPreventExitStatus=2
+# AEE_ENOMEMORY AEE_EITEMBUSY
+RestartPreventExitStatus=2 32
 RestartForceExitStatus=SIGTERM

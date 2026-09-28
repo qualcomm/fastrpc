@@ -198,6 +198,10 @@ int main(int argc, char *argv[]) {
             VERIFY_EPRINTF("out of memory, daemon exiting without restart...");
             break;
         }
+        if (nErr == AEE_EITEMBUSY) {
+            VERIFY_EPRINTF("device or resource busy, daemon exiting without restart...");
+            break;
+        }
 
         VERIFY_EPRINTF("%s daemon will restart after 100ms...", dsp_name);
         usleep(100000);
