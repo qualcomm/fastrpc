@@ -5,6 +5,7 @@
 #define FASTRPC_COMMON_H
 
 #include <stdbool.h>
+#include <stdint.h>
 #include <stdlib.h>
 #include <errno.h>
 #include <unistd.h>
@@ -23,11 +24,13 @@
 #define NUM_DOMAINS 8
 #endif /*NUM_DOMAINS*/
 
-/* Number of sessions allowed per process */
-#ifndef NUM_SESSIONS
-#define NUM_SESSIONS 4
-#define DOMAIN_ID_MASK 7
-#endif /*NUM_SESSIONS*/
+/* DOMAIN_ID_MASK is a property of NUM_DOMAINS (used to recover the actual
+ * domain ID from an effective domain ID), not of the session count -- keep
+ * it derived rather than a separate hardcoded literal that can drift.
+ */
+_Static_assert((NUM_DOMAINS & (NUM_DOMAINS - 1)) == 0,
+               "NUM_DOMAINS must be a power of two");
+#define DOMAIN_ID_MASK (NUM_DOMAINS - 1)
 
 /* Default domain id, in case of non domains*/
 #ifndef DEFAULT_DOMAIN_ID
@@ -40,10 +43,18 @@
 #define INVALID_KEY    (pthread_key_t)(-1)
 #define INVALID_DEVICE (-1)
 
-// Number of domains extended to include sessions
-// Domain ID extended (0 - 3): Domain id (0 - 3), session id 0
-// Domain ID extended (4 - 7): Domain id (0 - 3), session id 1
-#define NUM_DOMAINS_EXTEND (NUM_DOMAINS * NUM_SESSIONS)
+// Legacy fixed effective domain ids, created at process init:
+// Domain ID extended (0 - 7): Domain id (0 - 7), session id 0
+// Domain ID extended (8 - 15): Domain id (0 - 7), session id 1
+// Existing clients hardcode these ids. Any other session is assigned the next
+// free id from NUM_DOMAINS_EXTEND upwards when it is reserved.
+#define NUM_DOMAINS_EXTEND (NUM_DOMAINS * 2)
+
+// Safety valve to bound a runaway session-reservation loop. This is not a
+// design capacity limit: actual session availability is decided by the
+// kernel refusing to open further sessions, exactly as before this change.
+#define MAX_SESSIONS_LIMIT 1000
+#define MAX_DOMAINS_EXTEND (NUM_DOMAINS * MAX_SESSIONS_LIMIT)
 
 // Domain name types
 #define DOMAIN_NAME_IN_URI 1 // Domain name with standard module URI

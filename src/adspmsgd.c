@@ -26,11 +26,48 @@
 
 extern char *fastrpc_config_get_runtime_farf_file(void);
 
-msgd androidmsgd_handle[NUM_DOMAINS_EXTEND];
+/* Sparse, hash-table-backed replacement for the old flat
+ * "msgd androidmsgd_handle[NUM_DOMAINS_EXTEND]" array -- keyed by
+ * effective domain id, using the same fastrpc_hash_table.h idiom used
+ * in src/fastrpc_apps_user.c and elsewhere. Nodes are calloc'd lazily,
+ * on first use, instead of being densely pre-allocated up to a fixed
+ * compile-time ceiling. */
+DECLARE_HASH_TABLE(androidmsgd, msgd)
+static pthread_once_t androidmsgd_table_once = PTHREAD_ONCE_INIT;
+
+static void androidmsgd_table_init_once(void) {
+  HASH_TABLE_INIT(msgd);
+}
+
+/* Lookup-only accessor: returns NULL if this domain's msgd handle has
+ * never been created (i.e. adspmsgd_init() was never called for it) --
+ * used by paths like adspmsgd_stop() that should treat "no handle yet"
+ * the same as "not running", without growing the table just to check. */
+static msgd *lookup_msgd_handle(int domain) {
+  msgd *me = NULL;
+
+  pthread_once(&androidmsgd_table_once, androidmsgd_table_init_once);
+  GET_HASH_NODE(msgd, domain, me);
+  return me;
+}
+
+/* Fetch-or-create accessor for a domain's msgd handle. */
+static msgd *get_msgd_handle(int domain) {
+  int nErr = AEE_SUCCESS;
+  msgd *me = NULL;
+
+  pthread_once(&androidmsgd_table_once, androidmsgd_table_init_once);
+  GET_HASH_NODE(msgd, domain, me);
+  if (!me) {
+    ALLOC_AND_ADD_NEW_NODE_TO_TABLE(msgd, domain, me);
+  }
+bail:
+  return me;
+}
 
 void readMessage(int domain) {
   int index = 0;
-  msgd *msgd_handle = &androidmsgd_handle[domain];
+  msgd *msgd_handle = get_msgd_handle(domain);
   unsigned long long lreadIndex = msgd_handle->readIndex;
   memset(msgd_handle->message, 0, BUFFER_SIZE);
   if (msgd_handle->readIndex >= msgd_handle->bufferSize) {
@@ -74,7 +111,8 @@ static void *adspmsgd_reader(void *arg) {
   FARF(RUNTIME_RPC_HIGH, "%s thread starting for domain %d\n", __func__,
        domain);
   VERIFY(AEE_SUCCESS == (nErr = get_domain_from_handle(handle, &domain)));
-  msgd_handle = &androidmsgd_handle[domain];
+  msgd_handle = get_msgd_handle(domain);
+  VERIFYC(NULL != msgd_handle, AEE_ENOMEMORY);
   msgd_handle->threadStop = 0;
   while (!(msgd_handle->threadStop)) {
     if (*(msgd_handle->currentIndex) == msgd_handle->readIndex) {
@@ -105,11 +143,13 @@ int adspmsgd_init(remote_handle64 handle, int filter) {
   uint64_t vapps = 0;
   errno = 0;
   char *filename = NULL;
-  msgd *msgd_handle = &androidmsgd_handle[DEFAULT_DOMAIN_ID];
+  msgd *msgd_handle = get_msgd_handle(DEFAULT_DOMAIN_ID);
+  VERIFYC(NULL != msgd_handle, AEE_ENOMEMORY);
   VERIFY(AEE_SUCCESS == (nErr = get_domain_from_handle(handle, &domain)));
-  msgd_handle = &androidmsgd_handle[domain];
+  msgd_handle = get_msgd_handle(domain);
+  VERIFYC(NULL != msgd_handle, AEE_ENOMEMORY);
   if (msgd_handle->thread_running) {
-    androidmsgd_handle[domain].threadStop = 1;
+    msgd_handle->threadStop = 1;
     adspmsgd_adsp1_deinit(handle);
     adspmsgd_stop(domain);
   }
@@ -145,7 +185,7 @@ bail:
     VERIFY_EPRINTF(
         "Error 0x%x: %s failed for handle 0x%lx filter %d with errno %s\n",
         nErr, __func__, handle, filter, strerror(errno));
-    if (msgd_handle->message) {
+    if (msgd_handle && msgd_handle->message) {
       free(msgd_handle->message);
       msgd_handle->message = NULL;
     }
@@ -156,21 +196,23 @@ bail:
 
 // function to stop logger thread
 void adspmsgd_stop(int dom) {
-  if (!androidmsgd_handle[dom].thread_running)
+  msgd *msgd_handle = lookup_msgd_handle(dom);
+
+  if (!msgd_handle || !msgd_handle->thread_running)
     return;
-  if (androidmsgd_handle[dom].threadStop == 0) {
-    androidmsgd_handle[dom].threadStop = 1;
-    while (androidmsgd_handle[dom].threadStop != -1)
+  if (msgd_handle->threadStop == 0) {
+    msgd_handle->threadStop = 1;
+    while (msgd_handle->threadStop != -1)
       ;
-    pthread_join(androidmsgd_handle[dom].msgreader_thread, NULL);
-    androidmsgd_handle[dom].msgreader_thread = 0;
-    androidmsgd_handle[dom].thread_running = false;
-    if (androidmsgd_handle[dom].message) {
-      free(androidmsgd_handle[dom].message);
-      androidmsgd_handle[dom].message = NULL;
+    pthread_join(msgd_handle->msgreader_thread, NULL);
+    msgd_handle->msgreader_thread = 0;
+    msgd_handle->thread_running = false;
+    if (msgd_handle->message) {
+      free(msgd_handle->message);
+      msgd_handle->message = NULL;
     }
-    if (androidmsgd_handle[dom].log_file_fd) {
-      fclose(androidmsgd_handle[dom].log_file_fd);
+    if (msgd_handle->log_file_fd) {
+      fclose(msgd_handle->log_file_fd);
     }
   }
 }
