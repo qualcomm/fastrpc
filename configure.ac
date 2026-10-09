@@ -173,6 +173,9 @@ AC_SUBST([STRICTER_LDFLAGS])
 
 AC_CONFIG_FILES([
 Makefile
+adsprpc.pc
+cdsprpc.pc
+sdsprpc.pc
 inc/Makefile
 src/Makefile
 test/Makefile
