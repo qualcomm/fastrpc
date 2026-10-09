@@ -10,3 +10,5 @@ ExecStart=@sbindir@/adsprpcd
 Restart=on-failure
 RestartSec=5
 RestartForceExitStatus=SIGTERM
+# AEE_EITEMBUSY
+RestartPreventExitStatus=32
