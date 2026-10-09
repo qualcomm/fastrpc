@@ -22,17 +22,29 @@
 #define PROC_SHAREDBUF_SIZE (4*1024)
 #define WORD_SIZE 4
 
-extern struct handle_list *hlist;
+/*
+ * hlist is now a hash table owned by fastrpc_apps_user.c with no
+ * external linkage -- go through the public, lookup-only accessor
+ * instead of the old "extern struct handle_list *hlist" + array-index
+ * idiom. Every domain this file touches has already had its session
+ * opened (dev already valid) by the time these functions run, so the
+ * node is guaranteed to already be constructed; a lookup-only
+ * accessor is used rather than fetch-or-create since nothing here
+ * should be the first thing to bring a domain's bookkeeping into
+ * existence.
+ */
 
 int proc_sharedbuf_init(int dev, int domain) {
 	int proc_sharedbuf_size = PROC_SHAREDBUF_SIZE, sharedbuf_kernel_support = 1;
 	int nErr = AEE_SUCCESS, ioErr = 0;
 	void *proc_sharedbuf = NULL;
 	struct fastrpc_proc_sharedbuf_info sharedbuf_info;
+	struct handle_list *hl = fastrpc_get_hlist_node(domain);
 
 	errno = 0;
+	VERIFYC(NULL != hl, AEE_EBADPARM);
 	VERIFYC(NULL != (proc_sharedbuf = rpcmem_alloc_internal(0, RPCMEM_HEAP_DEFAULT, (size_t)proc_sharedbuf_size)), AEE_ENORPCMEMORY);
-	hlist[domain].proc_sharedbuf = proc_sharedbuf;
+	hl->proc_sharedbuf = proc_sharedbuf;
 	VERIFYC(-1 != (sharedbuf_info.buf_fd = rpcmem_to_fd_internal(proc_sharedbuf)), AEE_ERPC);
 	sharedbuf_info.buf_size = proc_sharedbuf_size;
 
@@ -50,7 +62,7 @@ bail:
 	if (proc_sharedbuf && (nErr || !sharedbuf_kernel_support)) {
 		rpcmem_free_internal(proc_sharedbuf);
 		proc_sharedbuf = NULL;
-		hlist[domain].proc_sharedbuf = NULL;
+		hl->proc_sharedbuf = NULL;
 	}
 	if (nErr != AEE_SUCCESS) {
 		FARF(ERROR, "Error 0x%x: %s failed for domain %d, errno %s, ioErr %d\n",
@@ -150,11 +162,19 @@ bail:
 static int pack_proc_shared_buf_params(int domain, uint32_t param_id,
 		void *param_addr, uint32_t param_size)
 {
-	uint32_t *buf_start_addr = (uint32_t*)hlist[domain].proc_sharedbuf;
+	struct handle_list *hl = fastrpc_get_hlist_node(domain);
+	uint32_t *buf_start_addr;
 	uint32_t align_param_size = param_size;
+	uint32_t *buf_write_addr, *buf_last_addr;
+
+	if (hl == NULL) {
+		FARF(ERROR, "Error: %s: no hlist node for domain %d", __func__, domain);
+		return AEE_EBADPARM;
+	}
+	buf_start_addr = (uint32_t*)hl->proc_sharedbuf;
 	/* Params pack address */
-	uint32_t *buf_write_addr = (uint32_t*)hlist[domain].proc_sharedbuf_cur_addr,
-		*buf_last_addr = buf_start_addr + PROC_SHAREDBUF_SIZE;
+	buf_write_addr = (uint32_t*)hl->proc_sharedbuf_cur_addr;
+	buf_last_addr = buf_start_addr + PROC_SHAREDBUF_SIZE;
 
 	if (param_addr == NULL || param_size <= 0 || param_id < 0 ||
 		param_id >= PROC_ATTR_BUF_MAX_ID) {
@@ -189,7 +209,7 @@ static int pack_proc_shared_buf_params(int domain, uint32_t param_id,
 
 	memcpy(buf_write_addr, param_addr, STD_MIN(buf_last_addr - buf_write_addr, param_size));
 	buf_write_addr = (uint32_t*)((char*)buf_write_addr + align_param_size);
-	hlist[domain].proc_sharedbuf_cur_addr = buf_write_addr;
+	hl->proc_sharedbuf_cur_addr = buf_write_addr;
 
 	/* Increase the number of ids in start address */
 	(*buf_start_addr)++;
@@ -208,11 +228,12 @@ void fastrpc_process_pack_params(int dev, int domain) {
 	size_t buffer_size = 0;
 	char *lib_names = NULL;
 	pid_t pid = getpid();
+	struct handle_list *hl = fastrpc_get_hlist_node(domain);
 
 	if (AEE_SUCCESS != proc_sharedbuf_init(dev, domain)) {
 		return;
 	}
-	if (!hlist[domain].proc_sharedbuf) {
+	if (!hl || !hl->proc_sharedbuf) {
 		return;
 	}
 	nErr = pack_proc_shared_buf_params(domain, HLOS_PID_ID,
@@ -222,13 +243,13 @@ void fastrpc_process_pack_params(int dev, int domain) {
 				nErr, __func__);
 	}
 	nErr = pack_proc_shared_buf_params(domain, THREAD_PARAM_ID,
-			&hlist[domain].th_params, sizeof(hlist[domain].th_params));
+			&hl->th_params, sizeof(hl->th_params));
 	if (nErr) {
 		FARF(ERROR, "Error 0x%x: %s: Failed to pack thread parameters in shared buffer",
 				nErr, __func__);
 	}
 	nErr = pack_proc_shared_buf_params(domain, PROC_ATTR_ID,
-			&hlist[domain].procattrs, sizeof(hlist[domain].procattrs));
+			&hl->procattrs, sizeof(hl->procattrs));
 	if (nErr) {
 		FARF(ERROR, "Error 0x%x: %s: Failed to pack process config parameters in shared buffer",
 				nErr, __func__);

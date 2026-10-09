@@ -17,6 +17,7 @@
 #include "AEEStdErr.h"
 #include "fastrpc_common.h"
 #include "fastrpc_ioctl.h"
+#include "fastrpc_hash_table.h"
 
 // Aligns the memory
 #define ALIGN_B(p, a)	      (((p) + ((a) - 1)) & ~((a) - 1))
@@ -70,28 +71,48 @@ static __inline uint32_t Q6_R_cl0_R(uint32_t num) {
 
 #define FASTRPC_INFO_SMMU   (1 << 0)
 
-#define GET_SESSION_ID_FROM_DOMAIN_ID(domain_id) ((int)(domain_id / NUM_DOMAINS))
+/*
+ * Effective domain ids are handles returned to applications.
+ * Ids 0..NUM_DOMAINS_EXTEND-1 are the legacy fixed ids for session ids 0 and 1
+ * (domain + NUM_DOMAINS * session). Any other session gets the next free id
+ * (NUM_DOMAINS_EXTEND and up) when it is reserved, so its domain and session
+ * must be read from its table entry rather than computed.
+ */
+int fastrpc_effec_domain_to_domain(int effec_domain_id);
+int fastrpc_effec_domain_to_session(int effec_domain_id);
+bool fastrpc_is_valid_effec_domain(int effec_domain_id);
+/* Effective id of an existing (domain, session), or -1 if none exists. */
+int fastrpc_get_effec_domain(int domain, int session);
+/* Smallest existing effective id greater than prev, or -1 if none. */
+int fastrpc_next_effec_domain(int prev);
 
-/* From actual domain ID (0-3) and session ID, get effective domain ID */
-#define GET_EFFECTIVE_DOMAIN_ID(domain, session) (domain + (NUM_DOMAINS * session))
+#define GET_SESSION_ID_FROM_DOMAIN_ID(domain_id) fastrpc_effec_domain_to_session(domain_id)
+
+/* From actual domain ID and session ID, get effective domain ID (-1 if none) */
+#define GET_EFFECTIVE_DOMAIN_ID(domain, session) fastrpc_get_effec_domain(domain, session)
 
 /* From effective domain ID, get actual domain ID */
-#define GET_DOMAIN_FROM_EFFEC_DOMAIN_ID(effec_dom_id) (effec_dom_id & DOMAIN_ID_MASK)
+#define GET_DOMAIN_FROM_EFFEC_DOMAIN_ID(effec_dom_id) fastrpc_effec_domain_to_domain(effec_dom_id)
 
 /* Check if given domain ID is in valid range */
 #define IS_VALID_DOMAIN_ID(domain) ((domain >= 0) && (domain < NUM_DOMAINS))
 
-/* Check if given effective domain ID is in valid range */
-#define IS_VALID_EFFECTIVE_DOMAIN_ID(domain) ((domain >= 0) && (domain < NUM_DOMAINS_EXTEND))
+/* Check if given effective domain ID has an entry */
+#define IS_VALID_EFFECTIVE_DOMAIN_ID(domain) fastrpc_is_valid_effec_domain(domain)
 
-/* Check if given effective domain ID is in extended range */
-#define IS_EXTENDED_DOMAIN_ID(domain) ((domain >= NUM_DOMAINS) && (domain < NUM_DOMAINS_EXTEND))
+/* Check if given effective domain ID is for a session other than session 0 */
+#define IS_EXTENDED_DOMAIN_ID(domain) (fastrpc_effec_domain_to_session(domain) > 0)
 
 /* Loop thru list of all domain ids */
 #define FOR_EACH_DOMAIN_ID(i) for(i = 0; i < NUM_DOMAINS; i++)
 
-/* Loop thru list of all effective domain ids */
-#define FOR_EACH_EFFECTIVE_DOMAIN_ID(i) for(i = 0; i < NUM_DOMAINS_EXTEND; i++)
+/*
+ * Loop thru every effective domain id that has an entry, in increasing
+ * order. No table lock is held while the body runs, and break/goto are safe.
+ */
+#define FOR_EACH_EFFECTIVE_DOMAIN_ID(i) \
+	for ((i) = fastrpc_next_effec_domain(-1); (i) >= 0; \
+	     (i) = fastrpc_next_effec_domain(i))
 
 /**
  * @brief  PD initialization types used to create different kinds of PD
@@ -322,7 +343,39 @@ struct handle_list {
 	void *proc_sharedbuf;
 	/* current process shared buffer address to pack process params */
 	uint32_t *proc_sharedbuf_cur_addr;
+	/* Per-domain wake-lock-enable flag; folded in here (instead of its
+	 * own "fastrpc_wake_lock_enable[NUM_DOMAINS_EXTEND]" array) since it
+	 * was already indexed identically to the rest of this struct. */
+	uint32_t wake_lock_enable;
+	/* Actual DSP domain (0..NUM_DOMAINS-1) and session number of this
+	 * entry. Effective ids above the legacy range are assigned, not
+	 * computed, so these can't be recovered from the key. */
+	int dsp_domain;
+	int session_id;
+	/* Adds "int domain;" (hash key) + "UT_hash_handle hh;" so this struct
+	 * can be stored as a node of the hlist hash-table (see
+	 * fastrpc_hash_table.h and its usage in fastrpc_apps_user.c). Nodes
+	 * are calloc'd sparsely, keyed by effective domain id, instead of
+	 * being a dense fixed-size array indexed by that id.
+	 */
+	ADD_DOMAIN_HASH();
 };
+
+/**
+  * @brief Public, lookup-only accessor for the per-domain "hlist" node
+  * defined/owned by fastrpc_apps_user.c (that table itself, and its
+  * fetch-or-create counterpart, are file-static). Other translation
+  * units that need a domain's struct handle_list -- e.g.
+  * fastrpc_procbuf.c, which only touches domains whose session is
+  * already open and therefore already has a constructed node -- must
+  * go through this instead of the old "extern struct handle_list
+  * *hlist" + array-index idiom, which no longer applies now that hlist
+  * is a hash table with no external linkage.
+  * @domain: effective domain id.
+  * returns the node if the table is ready and the domain has been
+  * touched (session opened/reserved) before, NULL otherwise.
+  **/
+struct handle_list *fastrpc_get_hlist_node(int domain);
 
 /**
   * @brief API to get the DSP_SEARCH_PATH stored locally as static.

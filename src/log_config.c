@@ -34,6 +34,7 @@
 #include <poll.h>
 #include <pthread.h>
 #include <signal.h>
+#include <stddef.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -78,9 +79,41 @@ struct log_config_watcher_params {
   char *pidFileToWatch;
   bool adspmsgdEnabled;
   bool file_watcher_init_flag;
+  /* Adds "int domain;" (hash key) + "UT_hash_handle hh;" so this
+   * struct can be stored as a node of the log_config_watcher hash
+   * table below, replacing the old
+   * "log_config_watcher[NUM_DOMAINS_EXTEND]" flat array. */
+  ADD_DOMAIN_HASH();
 };
 
-static struct log_config_watcher_params log_config_watcher[NUM_DOMAINS_EXTEND];
+/* Sparse, hash-table-backed replacement for the old flat
+ * "log_config_watcher[NUM_DOMAINS_EXTEND]" array -- keyed by effective
+ * domain id, using the same fastrpc_hash_table.h idiom used elsewhere
+ * (fastrpc_apps_user.c, adspmsgd.c, dspsignal.c). Nodes are calloc'd
+ * lazily, on first use, instead of being densely pre-allocated up to a
+ * fixed compile-time ceiling. */
+DECLARE_HASH_TABLE(log_config, struct log_config_watcher_params)
+static pthread_once_t log_config_table_once = PTHREAD_ONCE_INIT;
+
+static void log_config_table_init_once(void) {
+  HASH_TABLE_INIT(struct log_config_watcher_params);
+}
+
+/* Fetch-or-create accessor for a domain's file-watcher bookkeeping. */
+static struct log_config_watcher_params *log_config_watcher_get(int domain) {
+  int nErr = AEE_SUCCESS;
+  struct log_config_watcher_params *me = NULL;
+
+  pthread_once(&log_config_table_once, log_config_table_init_once);
+  GET_HASH_NODE(struct log_config_watcher_params, domain, me);
+  if (!me) {
+    ALLOC_AND_ADD_NEW_NODE_TO_TABLE(struct log_config_watcher_params, domain,
+                                    me);
+  }
+bail:
+  return me;
+}
+
 extern const char *__progname;
 void set_runtime_logmask(uint32_t);
 
@@ -97,7 +130,9 @@ static int parseLogConfig(int dom, unsigned int mask, char *filenames) {
   int maxPathLen = 0;
   int i = 0;
   remote_handle64 handle;
+  struct log_config_watcher_params *lcw = log_config_watcher_get(dom);
 
+  VERIFYC(NULL != lcw, AEE_ENOMEMORY);
   VERIFYC(filenames != NULL, AEE_ERPC);
 
   VERIFYC(NULL !=
@@ -114,7 +149,7 @@ static int parseLogConfig(int dom, unsigned int mask, char *filenames) {
   }
 
   VERIFY_IPRINTF("%s: #files: %d max_len: %d\n",
-                 log_config_watcher[dom].fileToWatch, filesToLogLen,
+                 lcw->fileToWatch, filesToLogLen,
                  maxPathLen);
 
   // Allocate memory
@@ -135,7 +170,7 @@ static int parseLogConfig(int dom, unsigned int mask, char *filenames) {
                 filesToLog[i].dataLen >= (int)strlen(path),
             AEE_ERPC);
     strlcpy(filesToLog[i].data, path, filesToLog[i].dataLen);
-    VERIFY_IPRINTF("%s: %s\n", log_config_watcher[dom].fileToWatch,
+    VERIFY_IPRINTF("%s: %s\n", lcw->fileToWatch,
                    filesToLog[i].data);
     path = strtok_r(NULL, delim, &saveptr);
     i++;
@@ -194,18 +229,20 @@ static int readLogConfigFromPath(int dom, const char *base, const char *file) {
   int buf_addr = 0;
   remote_handle64 handle;
   uint64_t farf_logmask = 0;
+  struct log_config_watcher_params *lcw = log_config_watcher_get(dom);
 
+  VERIFYC(NULL != lcw, AEE_ENOMEMORY);
   len = snprintf(0, 0, "%s/%s", base, file) + 1;
   VERIFYC(NULL != (path = malloc(sizeof(char) * len)), AEE_ENOMEMORY);
   snprintf(path, (int)len, "%s/%s", base, file);
   VERIFY(AEE_SUCCESS == (nErr = apps_std_fileExists(path, &fileExists)));
   if (fileExists == false) {
     FARF(RUNTIME_RPC_HIGH, "%s: Couldn't find file: %s\n",
-         log_config_watcher[dom].fileToWatch, path);
+         lcw->fileToWatch, path);
     nErr = AEE_ENOSUCHFILE;
     goto bail;
   }
-  if (log_config_watcher[dom].adspmsgdEnabled == false) {
+  if (lcw->adspmsgdEnabled == false) {
     handle = get_adspmsgd_adsp1_handle(dom);
     if (handle != INVALID_HANDLE) {
       if ((nErr = adspmsgd_init(handle, ADSPMSGD_FILTER)) ==
@@ -219,10 +256,10 @@ static int readLogConfigFromPath(int dom, const char *base, const char *file) {
     if (nErr != AEE_SUCCESS) {
       VERIFY_EPRINTF("adspmsgd not supported. nErr=%x\n", nErr);
     } else {
-      log_config_watcher[dom].adspmsgdEnabled = true;
+      lcw->adspmsgdEnabled = true;
     }
     VERIFY_EPRINTF("Found %s. adspmsgd enabled \n",
-                   log_config_watcher[dom].fileToWatch);
+                   lcw->fileToWatch);
   }
 
   VERIFY(AEE_SUCCESS == (nErr = apps_std_fopen(path, "r", &fp)));
@@ -238,7 +275,7 @@ static int readLogConfigFromPath(int dom, const char *base, const char *file) {
   VERIFYC((int)len == readlen, AEE_ERPC);
 
   FARF(RUNTIME_RPC_HIGH, "%s: Config file %s contents: %s\n",
-       log_config_watcher[dom].fileToWatch, path, buf);
+       lcw->fileToWatch, path, buf);
 
   // Parse farf file to get logmasks.
   len = sscanf((const char *)buf, "0x%" SCNx64 " %511s", &farf_logmask, filenames);
@@ -261,7 +298,7 @@ static int readLogConfigFromPath(int dom, const char *base, const char *file) {
   switch (len) {
   case 1:
     FARF(RUNTIME_RPC_HIGH, "%s: Setting log mask:0x%x",
-         log_config_watcher[dom].fileToWatch, mask);
+         lcw->fileToWatch, mask);
     handle = get_adsp_current_process1_handle(dom);
     if (handle != INVALID_HANDLE) {
       if (AEE_SUCCESS != (nErr = adsp_current_process1_set_logging_params2(
@@ -280,11 +317,11 @@ static int readLogConfigFromPath(int dom, const char *base, const char *file) {
   case 2:
     VERIFY(AEE_SUCCESS == (nErr = parseLogConfig(dom, mask, filenames)));
     FARF(RUNTIME_RPC_HIGH, "%s: Setting log mask:0x%x, filename:%s",
-         log_config_watcher[dom].fileToWatch, mask, filenames);
+         lcw->fileToWatch, mask, filenames);
     break;
   default:
     VERIFY_EPRINTF("Error : %s: No valid data found in config file %s",
-                   log_config_watcher[dom].fileToWatch, path);
+                   lcw->fileToWatch, path);
     nErr = AEE_EUNSUPPORTED;
     goto bail;
   }
@@ -319,26 +356,30 @@ bail:
 // Read log config given the watch descriptor
 static int readLogConfigFromEvent(int dom, struct inotify_event *event) {
   int i = 0;
+  struct log_config_watcher_params *lcw = log_config_watcher_get(dom);
+
+  if (!lcw)
+    return AEE_ENOMEMORY;
 
   // Ensure we are looking at the right file
-  for (i = 0; i < (int)log_config_watcher[dom].numPaths; ++i) {
-    if (log_config_watcher[dom].wd[i] == event->wd) {
-      if (strcmp(log_config_watcher[dom].fileToWatch, event->name) == 0) {
-        return readLogConfigFromPath(dom, log_config_watcher[dom].paths[i].data,
-                                     log_config_watcher[dom].fileToWatch);
-      } else if (strcmp(log_config_watcher[dom].asidFileToWatch,
+  for (i = 0; i < (int)lcw->numPaths; ++i) {
+    if (lcw->wd[i] == event->wd) {
+      if (strcmp(lcw->fileToWatch, event->name) == 0) {
+        return readLogConfigFromPath(dom, lcw->paths[i].data,
+                                     lcw->fileToWatch);
+      } else if (strcmp(lcw->asidFileToWatch,
                             event->name) == 0) {
-        return readLogConfigFromPath(dom, log_config_watcher[dom].paths[i].data,
-                                     log_config_watcher[dom].asidFileToWatch);
-      } else if (strcmp(log_config_watcher[dom].pidFileToWatch,
+        return readLogConfigFromPath(dom, lcw->paths[i].data,
+                                     lcw->asidFileToWatch);
+      } else if (strcmp(lcw->pidFileToWatch,
                             event->name) == 0) {
-        return readLogConfigFromPath(dom, log_config_watcher[dom].paths[i].data,
-                                     log_config_watcher[dom].pidFileToWatch);
+        return readLogConfigFromPath(dom, lcw->paths[i].data,
+                                     lcw->pidFileToWatch);
       }
     }
   }
   VERIFY_IPRINTF("%s: Watch descriptor %d not valid for current process",
-                 log_config_watcher[dom].fileToWatch, event->wd);
+                 lcw->fileToWatch, event->wd);
   return AEE_SUCCESS;
 }
 
@@ -346,18 +387,22 @@ static int readLogConfigFromEvent(int dom, struct inotify_event *event) {
 static int resetLogConfigFromEvent(int dom, struct inotify_event *event) {
   int i = 0;
   remote_handle64 handle;
+  struct log_config_watcher_params *lcw = log_config_watcher_get(dom);
+
+  if (!lcw)
+    return AEE_ENOMEMORY;
 
   // Ensure we are looking at the right file
-  for (i = 0; i < (int)log_config_watcher[dom].numPaths; ++i) {
-    if (log_config_watcher[dom].wd[i] == event->wd) {
-      if ((strcmp(log_config_watcher[dom].fileToWatch, event->name) == 0) ||
-          (strcmp(log_config_watcher[dom].asidFileToWatch, event->name) ==
+  for (i = 0; i < (int)lcw->numPaths; ++i) {
+    if (lcw->wd[i] == event->wd) {
+      if ((strcmp(lcw->fileToWatch, event->name) == 0) ||
+          (strcmp(lcw->asidFileToWatch, event->name) ==
            0) ||
-          (strcmp(log_config_watcher[dom].pidFileToWatch, event->name) ==
+          (strcmp(lcw->pidFileToWatch, event->name) ==
            0)) {
-        if (log_config_watcher[dom].adspmsgdEnabled == true) {
+        if (lcw->adspmsgdEnabled == true) {
           adspmsgd_stop(dom);
-          log_config_watcher[dom].adspmsgdEnabled = false;
+          lcw->adspmsgdEnabled = false;
           handle = get_adspmsgd_adsp1_handle(dom);
           if (handle != INVALID_HANDLE) {
             adspmsgd_adsp1_deinit(handle);
@@ -375,7 +420,7 @@ static int resetLogConfigFromEvent(int dom, struct inotify_event *event) {
     }
   }
   VERIFY_IPRINTF("%s: Watch descriptor %d not valid for current process",
-                 log_config_watcher[dom].fileToWatch, event->wd);
+                 lcw->fileToWatch, event->wd);
   return AEE_SUCCESS;
 }
 
@@ -386,8 +431,8 @@ static void *file_watcher_thread(void *arg) {
   int nErr = AEE_SUCCESS;
   int i = 0;
   char buffer[EVENT_BUF_LEN];
-  struct pollfd pfd[] = {{log_config_watcher[dom].fd, POLLIN, 0},
-                         {log_config_watcher[dom].event_fd, POLLIN, 0}};
+  struct log_config_watcher_params *lcw = log_config_watcher_get(dom);
+  struct pollfd pfd[2];
   const char *fileExtension = ".farf";
   int len = 0;
   remote_handle64 handle;
@@ -395,16 +440,20 @@ static void *file_watcher_thread(void *arg) {
   char *data_paths = NULL;
   const char *dsp_search_path = NULL;
 
+  if (!lcw)
+    return NULL;
+  pfd[0] = (struct pollfd){lcw->fd, POLLIN, 0};
+  pfd[1] = (struct pollfd){lcw->event_fd, POLLIN, 0};
   FARF(ALWAYS, "%s starting for domain %d\n", __func__, dom);
   dsp_search_path = get_dsp_search_path();
   // Check for the presence of the <process_name>.farf file at bootup
-  for (i = 0; i < (int)log_config_watcher[dom].numPaths; ++i) {
-    if (0 == readLogConfigFromPath(dom, log_config_watcher[dom].paths[i].data,
-                                   log_config_watcher[dom].fileToWatch)) {
+  for (i = 0; i < (int)lcw->numPaths; ++i) {
+    if (0 == readLogConfigFromPath(dom, lcw->paths[i].data,
+                                   lcw->fileToWatch)) {
       file_found = 1;
       VERIFY_IPRINTF("%s: Log config File %s found.\n",
-                     log_config_watcher[dom].fileToWatch,
-                     log_config_watcher[dom].paths[i].data);
+                     lcw->fileToWatch,
+                     lcw->paths[i].data);
       break;
     }
   }
@@ -420,78 +469,78 @@ static void *file_watcher_thread(void *arg) {
       if (ret != 0)
         strlcpy(data_paths, dsp_search_path, ENV_PATH_LEN);
       VERIFY_WPRINTF("%s: Couldn't find file %s, errno (%s) at %s\n", __func__,
-                     log_config_watcher[dom].fileToWatch, strerror(errno),
+                     lcw->fileToWatch, strerror(errno),
                      data_paths);
     } else {
       VERIFY_WPRINTF(
           "%s: Calloc failed for %d bytes. Couldn't find file %s, errno (%s)\n",
-          __func__, ENV_PATH_LEN, log_config_watcher[dom].fileToWatch,
+          __func__, ENV_PATH_LEN, lcw->fileToWatch,
           strerror(errno));
     }
   }
 
-  while (log_config_watcher[dom].stopThread == 0) {
+  while (lcw->stopThread == 0) {
     // Block forever
     ret = poll(pfd, 2, -1);
     if (ret < 0) {
       VERIFY_EPRINTF("Error : %s: Error polling for file change. Runtime FARF "
                      "will not work for this process. errno=%x !",
-                     log_config_watcher[dom].fileToWatch, errno);
+                     lcw->fileToWatch, errno);
       break;
     } else if (pfd[1].revents & POLLIN) { // Check for exit
       VERIFY_WPRINTF("Warning: %s received exit for domain %d, file %s\n",
-                     __func__, dom, log_config_watcher[dom].fileToWatch);
+                     __func__, dom, lcw->fileToWatch);
       break;
     } else {
-      length = read(log_config_watcher[dom].fd, buffer, EVENT_BUF_LEN);
+      length = read(lcw->fd, buffer, EVENT_BUF_LEN);
       i = 0;
       while (i < length) {
         struct inotify_event *event = (struct inotify_event *)&buffer[i];
         if (event->len) {
           // Get the asiD for the current process
           // Do it once only
-          if (log_config_watcher[dom].asidToWatch == -1) {
+          if (lcw->asidToWatch == -1) {
             handle = get_adsp_current_process1_handle(dom);
             if (handle != INVALID_HANDLE) {
               VERIFY(
                   AEE_SUCCESS ==
                   (nErr = adsp_current_process1_getASID(
                        handle,
-                       (unsigned int *)&log_config_watcher[dom].asidToWatch)));
+                       (unsigned int *)&lcw->asidToWatch)));
             } else {
               VERIFY(
                   AEE_SUCCESS ==
                   (nErr = adsp_current_process_getASID(
-                       (unsigned int *)&log_config_watcher[dom].asidToWatch)));
+                       (unsigned int *)&lcw->asidToWatch)));
             }
             len = strlen(fileExtension) + strlen(__TOSTR__(INT_MAX));
-            VERIFYC(NULL != (log_config_watcher[dom].asidFileToWatch =
+            VERIFYC(NULL != (lcw->asidFileToWatch =
                                  malloc(sizeof(char) * len)),
                     AEE_ENOMEMORY);
-            snprintf(log_config_watcher[dom].asidFileToWatch, len, "%d%s",
-                     log_config_watcher[dom].asidToWatch, fileExtension);
+            snprintf(lcw->asidFileToWatch, len, "%d%s",
+                     lcw->asidToWatch, fileExtension);
             VERIFY_IPRINTF("%s: Watching ASID file %s\n",
-                           log_config_watcher[dom].fileToWatch,
-                           log_config_watcher[dom].asidFileToWatch);
+                           lcw->fileToWatch,
+                           lcw->asidFileToWatch);
           }
 
-          VERIFY_IPRINTF("%s: %s %d.\n", log_config_watcher[dom].fileToWatch,
+          VERIFY_IPRINTF("%s: %s %d.\n", lcw->fileToWatch,
                          event->name, event->mask);
           if ((event->mask & IN_CREATE) || (event->mask & IN_MODIFY)) {
             VERIFY_IPRINTF("%s: File %s created.\n",
-                           log_config_watcher[dom].fileToWatch, event->name);
+                           lcw->fileToWatch, event->name);
             if (0 != readLogConfigFromEvent(dom, event)) {
               VERIFY_EPRINTF("Error : %s: Error reading config file %s",
-                             log_config_watcher[dom].fileToWatch,
-                             log_config_watcher[dom].paths[i].data);
+                             lcw->fileToWatch,
+                             lcw->paths[i].data);
             }
           } else if (event->mask & IN_DELETE) {
             VERIFY_IPRINTF("%s: File %s deleted.\n",
-                           log_config_watcher[dom].fileToWatch, event->name);
+                           lcw->fileToWatch, event->name);
             if (0 != resetLogConfigFromEvent(dom, event)) {
               VERIFY_EPRINTF(
                   "Error : %s: Error resetting FARF runtime log config",
-                  log_config_watcher[dom].fileToWatch);
+                  lcw->fileToWatch);
             }
           }
         }
@@ -509,7 +558,7 @@ bail:
   if (nErr != AEE_SUCCESS) {
     VERIFY_EPRINTF("Error 0x%x: %s exited. Runtime FARF will not work for this "
                    "process. filename %s (errno %s)\n",
-                   nErr, __func__, log_config_watcher[dom].fileToWatch,
+                   nErr, __func__, lcw->fileToWatch,
                    strerror(errno));
   } else {
     FARF(ALWAYS, "%s exiting for domain %d\n", __func__, dom);
@@ -522,19 +571,23 @@ void deinitFileWatcher(int dom) {
   uint64_t stop = 10;
   remote_handle64 handle;
   ssize_t sz = 0;
+  struct log_config_watcher_params *lcw = log_config_watcher_get(dom);
 
-  if (log_config_watcher[dom].file_watcher_init_flag) {
-    log_config_watcher[dom].stopThread = 1;
-    if (0 <= log_config_watcher[dom].event_fd) {
+  if (!lcw)
+    return;
+
+  if (lcw->file_watcher_init_flag) {
+    lcw->stopThread = 1;
+    if (0 <= lcw->event_fd) {
       for (i = 0; i < RETRY_WRITE; i++) {
         VERIFY_IPRINTF(
             "Writing to file_watcher_thread event_fd %d for domain %d\n",
-            log_config_watcher[dom].event_fd, dom);
-        sz = write(log_config_watcher[dom].event_fd, &stop, sizeof(uint64_t));
+            lcw->event_fd, dom);
+        sz = write(lcw->event_fd, &stop, sizeof(uint64_t));
         if ((sz < (ssize_t)sizeof(uint64_t)) || (sz == -1 && errno == EAGAIN)) {
           VERIFY_WPRINTF("Warning: Written %zd bytes on event_fd %d for domain "
                          "%d (errno = %s): Retrying ...\n",
-                         sz, log_config_watcher[dom].event_fd, dom,
+                         sz, lcw->event_fd, dom,
                          strerror(errno));
           continue;
         } else {
@@ -542,61 +595,61 @@ void deinitFileWatcher(int dom) {
         }
       }
     }
-    if (sz != sizeof(uint64_t) && 0 <= log_config_watcher[dom].event_fd) {
+    if (sz != sizeof(uint64_t) && 0 <= lcw->event_fd) {
       VERIFY_EPRINTF("Error: Written %zd bytes on event_fd %d for domain %d: "
                      "Cannot set exit flag to watcher thread (errno = %s)\n",
-                     sz, log_config_watcher[dom].event_fd, dom,
+                     sz, lcw->event_fd, dom,
                      strerror(errno));
       // When deinitFileWatcher fail to write dupfd, file watcher thread hangs
       // on poll. Abort in this case.
       raise(SIGABRT);
     }
   }
-  if (log_config_watcher[dom].thread) {
-    pthread_join(log_config_watcher[dom].thread, NULL);
-    log_config_watcher[dom].thread = 0;
+  if (lcw->thread) {
+    pthread_join(lcw->thread, NULL);
+    lcw->thread = 0;
   }
-  if (log_config_watcher[dom].fileToWatch) {
-    free(log_config_watcher[dom].fileToWatch);
-    log_config_watcher[dom].fileToWatch = 0;
+  if (lcw->fileToWatch) {
+    free(lcw->fileToWatch);
+    lcw->fileToWatch = 0;
   }
-  if (log_config_watcher[dom].asidFileToWatch) {
-    free(log_config_watcher[dom].asidFileToWatch);
-    log_config_watcher[dom].asidFileToWatch = 0;
+  if (lcw->asidFileToWatch) {
+    free(lcw->asidFileToWatch);
+    lcw->asidFileToWatch = 0;
   }
-  if (log_config_watcher[dom].pidFileToWatch) {
-    free(log_config_watcher[dom].pidFileToWatch);
-    log_config_watcher[dom].pidFileToWatch = 0;
+  if (lcw->pidFileToWatch) {
+    free(lcw->pidFileToWatch);
+    lcw->pidFileToWatch = 0;
   }
-  if (log_config_watcher[dom].wd) {
-    for (i = 0; i < (int)log_config_watcher[dom].numPaths; ++i) {
+  if (lcw->wd) {
+    for (i = 0; i < (int)lcw->numPaths; ++i) {
       // On success, inotify_add_watch() returns a nonnegative integer watch
       // descriptor
-      if (log_config_watcher[dom].wd[i] >= 0) {
-        inotify_rm_watch(log_config_watcher[dom].fd,
-                         log_config_watcher[dom].wd[i]);
+      if (lcw->wd[i] >= 0) {
+        inotify_rm_watch(lcw->fd,
+                         lcw->wd[i]);
       }
     }
-    free(log_config_watcher[dom].wd);
-    log_config_watcher[dom].wd = NULL;
+    free(lcw->wd);
+    lcw->wd = NULL;
   }
-  if (log_config_watcher[dom].paths) {
-    for (i = 0; i < (int)log_config_watcher[dom].numPaths; ++i) {
-      if (log_config_watcher[dom].paths[i].data) {
-        free(log_config_watcher[dom].paths[i].data);
-        log_config_watcher[dom].paths[i].data = NULL;
+  if (lcw->paths) {
+    for (i = 0; i < (int)lcw->numPaths; ++i) {
+      if (lcw->paths[i].data) {
+        free(lcw->paths[i].data);
+        lcw->paths[i].data = NULL;
       }
     }
-    free(log_config_watcher[dom].paths);
-    log_config_watcher[dom].paths = NULL;
+    free(lcw->paths);
+    lcw->paths = NULL;
   }
-  if (log_config_watcher[dom].fd != 0) {
-    close(log_config_watcher[dom].fd);
+  if (lcw->fd != 0) {
+    close(lcw->fd);
     VERIFY_IPRINTF("Closed file watcher fd %d for domain %d\n",
-                   log_config_watcher[dom].fd, dom);
-    log_config_watcher[dom].fd = 0;
+                   lcw->fd, dom);
+    lcw->fd = 0;
   }
-  if (log_config_watcher[dom].adspmsgdEnabled == true) {
+  if (lcw->adspmsgdEnabled == true) {
     adspmsgd_stop(dom);
     handle = get_adspmsgd_adsp1_handle(dom);
     if (handle != INVALID_HANDLE) {
@@ -604,17 +657,17 @@ void deinitFileWatcher(int dom) {
     } else {
       adspmsgd_adsp_deinit();
     }
-    log_config_watcher[dom].adspmsgdEnabled = false;
+    lcw->adspmsgdEnabled = false;
   }
-  if (log_config_watcher[dom].file_watcher_init_flag &&
-      (log_config_watcher[dom].event_fd != -1)) {
-    close(log_config_watcher[dom].event_fd);
+  if (lcw->file_watcher_init_flag &&
+      (lcw->event_fd != -1)) {
+    close(lcw->event_fd);
     VERIFY_IPRINTF("Closed file watcher eventfd %d for domain %d\n",
-                   log_config_watcher[dom].event_fd, dom);
-    log_config_watcher[dom].event_fd = -1;
+                   lcw->event_fd, dom);
+    lcw->event_fd = -1;
   }
-  log_config_watcher[dom].file_watcher_init_flag = false;
-  log_config_watcher[dom].numPaths = 0;
+  lcw->file_watcher_init_flag = false;
+  lcw->numPaths = 0;
 }
 
 int initFileWatcher(int dom) {
@@ -624,33 +677,40 @@ int initFileWatcher(int dom) {
   uint16_t maxPathLen = 0;
   int i = 0;
   char *name = NULL;
+  struct log_config_watcher_params *lcw = log_config_watcher_get(dom);
 
-  memset(&log_config_watcher[dom], 0, sizeof(struct log_config_watcher_params));
-  log_config_watcher[dom].asidToWatch = 0;
-  log_config_watcher[dom].event_fd = -1;
+  VERIFYC(NULL != lcw, AEE_ENOMEMORY);
+  /* Reset only this watcher's own fields, not the hash-table
+   * bookkeeping (the "domain" key + UT_hash_handle) ADD_DOMAIN_HASH()
+   * appends at the end of this struct -- zeroing those while the node
+   * is already linked into the hash table would corrupt uthash's
+   * internal bucket chains. */
+  memset(lcw, 0, offsetof(struct log_config_watcher_params, domain));
+  lcw->asidToWatch = 0;
+  lcw->event_fd = -1;
 
   VERIFYC(NULL != (name = std_basename(__progname)), AEE_EBADPARM);
 
   len = strlen(name) + strlen(fileExtension) + 1;
-  VERIFYC(NULL != (log_config_watcher[dom].fileToWatch =
+  VERIFYC(NULL != (lcw->fileToWatch =
                        malloc(sizeof(char) * len)),
           AEE_ENOMEMORY);
-  snprintf(log_config_watcher[dom].fileToWatch, len, "%s%s", name,
+  snprintf(lcw->fileToWatch, len, "%s%s", name,
            fileExtension);
 
   len = strlen(fileExtension) + strlen(__TOSTR__(INT_MAX));
-  VERIFYC(NULL != (log_config_watcher[dom].pidFileToWatch =
+  VERIFYC(NULL != (lcw->pidFileToWatch =
                        malloc(sizeof(char) * len)),
           AEE_ENOMEMORY);
-  snprintf(log_config_watcher[dom].pidFileToWatch, len, "%d%s", getpid(),
+  snprintf(lcw->pidFileToWatch, len, "%d%s", getpid(),
            fileExtension);
 
   VERIFY_IPRINTF("%s: Watching PID file: %s\n",
-                 log_config_watcher[dom].fileToWatch,
-                 log_config_watcher[dom].pidFileToWatch);
+                 lcw->fileToWatch,
+                 lcw->pidFileToWatch);
 
-  log_config_watcher[dom].fd = inotify_init();
-  if (log_config_watcher[dom].fd < 0) {
+  lcw->fd = inotify_init();
+  if (lcw->fd < 0) {
     nErr = AEE_ERPC;
     VERIFY_EPRINTF("Error 0x%x: inotify_init failed, invalid fd errno = %s\n",
                    nErr, strerror(errno));
@@ -658,74 +718,74 @@ int initFileWatcher(int dom) {
   }
 
   // Duplicate the fd, so we can use it to quit polling
-  log_config_watcher[dom].event_fd = eventfd(0, 0);
-  if (log_config_watcher[dom].event_fd < 0) {
+  lcw->event_fd = eventfd(0, 0);
+  if (lcw->event_fd < 0) {
     nErr = AEE_ERPC;
     VERIFY_EPRINTF("Error 0x%x: eventfd in dup failed, invalid fd errno %s\n",
                    nErr, strerror(errno));
     goto bail;
   }
-  log_config_watcher[dom].file_watcher_init_flag = true;
+  lcw->file_watcher_init_flag = true;
   VERIFY_IPRINTF("Opened file watcher fd %d eventfd %d for domain %d\n",
-                 log_config_watcher[dom].fd, log_config_watcher[dom].event_fd,
+                 lcw->fd, lcw->event_fd,
                  dom);
 
   // Get the required size
   apps_std_get_search_paths_with_env(ADSP_LIBRARY_PATH, ";", NULL, 0,
-                                     &log_config_watcher[dom].numPaths,
+                                     &lcw->numPaths,
                                      &maxPathLen);
 
   maxPathLen += +1;
 
   // Allocate memory
-  VERIFYC(NULL != (log_config_watcher[dom].paths = malloc(
-                       sizeof(_cstring1_t) * log_config_watcher[dom].numPaths)),
+  VERIFYC(NULL != (lcw->paths = malloc(
+                       sizeof(_cstring1_t) * lcw->numPaths)),
           AEE_ENOMEMORY);
-  VERIFYC(NULL != (log_config_watcher[dom].wd =
-                       malloc(sizeof(int) * log_config_watcher[dom].numPaths)),
+  VERIFYC(NULL != (lcw->wd =
+                       malloc(sizeof(int) * lcw->numPaths)),
           AEE_ENOMEMORY);
 
-  for (i = 0; i < (int)log_config_watcher[dom].numPaths; ++i) {
-    VERIFYC(NULL != (log_config_watcher[dom].paths[i].data =
+  for (i = 0; i < (int)lcw->numPaths; ++i) {
+    VERIFYC(NULL != (lcw->paths[i].data =
                          malloc(sizeof(char) * maxPathLen)),
             AEE_ENOMEMORY);
-    log_config_watcher[dom].paths[i].dataLen = maxPathLen;
+    lcw->paths[i].dataLen = maxPathLen;
   }
 
   // Get the paths
   VERIFY(AEE_SUCCESS ==
          (nErr = apps_std_get_search_paths_with_env(
-              ADSP_LIBRARY_PATH, ";", log_config_watcher[dom].paths,
-              log_config_watcher[dom].numPaths, &len, &maxPathLen)));
+              ADSP_LIBRARY_PATH, ";", lcw->paths,
+              lcw->numPaths, &len, &maxPathLen)));
 
   maxPathLen += 1;
 
   VERIFY_IPRINTF("%s: Watching folders:\n",
-                 log_config_watcher[dom].fileToWatch);
-  for (i = 0; i < (int)log_config_watcher[dom].numPaths; ++i) {
+                 lcw->fileToWatch);
+  for (i = 0; i < (int)lcw->numPaths; ++i) {
     // Watch for creation, deletion and modification of files in path
     VERIFY_IPRINTF("log file watcher: %s: %s\n",
-                   log_config_watcher[dom].fileToWatch,
-                   log_config_watcher[dom].paths[i].data);
-    if ((log_config_watcher[dom].wd[i] = inotify_add_watch(
-             log_config_watcher[dom].fd, log_config_watcher[dom].paths[i].data,
+                   lcw->fileToWatch,
+                   lcw->paths[i].data);
+    if ((lcw->wd[i] = inotify_add_watch(
+             lcw->fd, lcw->paths[i].data,
              IN_CREATE | IN_DELETE)) < 0) {
       VERIFY_EPRINTF(
           "Error : Unable to add watcher for folder %s : errno is %s\n",
-          log_config_watcher[dom].paths[i].data, strerror(ERRNO));
+          lcw->paths[i].data, strerror(ERRNO));
     }
   }
 
   // Create a thread to watch for file changes
-  log_config_watcher[dom].asidToWatch = -1;
-  log_config_watcher[dom].stopThread = 0;
-  pthread_create(&log_config_watcher[dom].thread, NULL, file_watcher_thread,
+  lcw->asidToWatch = -1;
+  lcw->stopThread = 0;
+  pthread_create(&lcw->thread, NULL, file_watcher_thread,
                  (void *)(uintptr_t)dom);
 bail:
   if (nErr != AEE_SUCCESS) {
     VERIFY_EPRINTF("Error 0x%x: Failed to register with inotify file %s. "
                    "Runtime FARF will not work for the process %s! errno %d",
-                   nErr, log_config_watcher[dom].fileToWatch, name, errno);
+                   nErr, lcw->fileToWatch, name, errno);
     deinitFileWatcher(dom);
   }
 

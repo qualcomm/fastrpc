@@ -110,15 +110,60 @@ static inline void free_skel_uri(remote_rpc_get_uri_t *dspqueue_skel) {
 #define UNUSED_QUEUE ((struct dspqueue *)NULL)
 #define INVALID_QUEUE ((struct dspqueue *)-1)
 
+/*
+ * Per-domain bookkeeping for the process-wide queue table below. This
+ * used to be two separate flat arrays, "struct dspqueue_domain_queues
+ * *domain_queues[NUM_DOMAINS_EXTEND]" and "int
+ * notif_registered[NUM_DOMAINS_EXTEND]", both indexed by the same
+ * effective domain id. They're merged into one hash-table node here
+ * (keyed by that same effective domain id) rather than declaring two
+ * separate hash tables, since a single DECLARE_HASH_TABLE() already
+ * covers both fields per domain.
+ *
+ * "dq" mirrors the old domain_queues[] entry: NULL until
+ * init_domain_queues_locked() finishes constructing the domain's
+ * queue state, reset back to NULL (but the node itself kept, not
+ * freed) by destroy_domain_queues_locked() once the last queue on
+ * that domain closes -- exactly like the old array slot, which was
+ * always there but only sometimes pointed at a live
+ * dspqueue_domain_queues.
+ *
+ * "notif_registered" mirrors the old notif_registered[] entry: sticky
+ * across dq's lifetime so a process-exit-notification registration
+ * that already succeeded for this domain is never repeated, even if a
+ * later init_domain_queues_locked() call for the same domain runs
+ * after the queues were destroyed and recreated.
+ */
+struct dspqueue_domain_entry {
+  struct dspqueue_domain_queues *dq;
+  int notif_registered;
+  ADD_DOMAIN_HASH();
+};
+
+DECLARE_HASH_TABLE(dspqueue_domains, struct dspqueue_domain_entry)
+
+/*
+ * Lookup-only accessor for the "dq" field, for the many call sites
+ * that only ever read an already-published domain_queues[domain] --
+ * i.e. every site except init_domain_queues_locked() (which brings
+ * the per-domain entry into existence) and
+ * destroy_domain_queues_locked() (which clears "dq" back to NULL
+ * without removing the entry).
+ */
+static struct dspqueue_domain_queues *dspqueue_domain_queues_lookup(int domain) {
+  struct dspqueue_domain_entry *de = NULL;
+  GET_HASH_NODE(struct dspqueue_domain_entry, domain, de);
+  return de ? de->dq : NULL;
+}
+
 struct dspqueue_process_queues {
   pthread_mutex_t mutex; // Hold this to manipulate domain_queues or
                          // domain_queues[i]->num_queues; In other words, must
                          // hold this mutex to decide when to create/destroy a
                          // new struct dspqueue_domain_queues.
-  struct dspqueue_domain_queues *domain_queues[NUM_DOMAINS_EXTEND];
   uint32_t count;
-  int notif_registered[NUM_DOMAINS_EXTEND];
 };
+
 
 static struct dspqueue_process_queues proc_queues;
 static struct dspqueue_process_queues *queues = &proc_queues;
@@ -171,6 +216,7 @@ static void init_process_queues_once(void) {
     FARF(ERROR, "Mutex init failed");
     return;
   }
+  HASH_TABLE_INIT(struct dspqueue_domain_entry);
   queues->count = 1; // Start non-zero to help spot certain errors
 }
 
@@ -183,20 +229,28 @@ static AEEResult init_domain_queues_locked(int domain) {
   AEEResult nErr = AEE_SUCCESS;
   pthread_attr_t tattr;
   int sendmutex = 0, sendcond = 0, sendthread = 0, recvthread = 0,
-      dom = domain & DOMAIN_ID_MASK;
+      dom = GET_DOMAIN_FROM_EFFEC_DOMAIN_ID(domain);
   struct dspqueue_domain_queues *dq = NULL;
+  struct dspqueue_domain_entry *de = NULL;
   remote_rpc_get_uri_t dspqueue_skel = {0};
   int state_mapped = 0;
   uint32_t cap = 0;
 
   errno = 0;
   assert(IS_VALID_EFFECTIVE_DOMAIN_ID(domain));
-  if (queues->domain_queues[domain] != NULL) {
+  /* Fetch-or-create this domain's entry so "notif_registered" (below)
+   * has somewhere to live even before "dq" itself is ready; the
+   * "already fully initialized" check is still keyed off "dq" alone,
+   * exactly like the old "domain_queues[domain] != NULL" check. */
+  ALLOC_AND_ADD_NEW_NODE_TO_TABLE(struct dspqueue_domain_entry, domain, de);
+  VERIFYC(NULL != de, AEE_ENOMEMORY);
+  if (de->dq != NULL) {
     return AEE_SUCCESS;
   }
 
   VERIFYC((dq = calloc(1, sizeof(*dq))) != NULL, AEE_ENOMEMORY);
   dq->domain = domain;
+
 
   /* Get URI of session */
   dspqueue_skel.domain_name_len = (dom == CDSP1_DOMAIN_ID) ?
@@ -258,7 +312,7 @@ static AEEResult init_domain_queues_locked(int domain) {
     goto bail;
   }
 
-  if (!queues->notif_registered[domain]) {
+  if (!de->notif_registered) {
     // Register for process exit notifications. Only do this once for the
     // lifetime of the process to avoid multiple registrations and leaks.
     remote_rpc_notif_register_t reg = {.context = queues,
@@ -271,7 +325,7 @@ static AEEResult init_domain_queues_locked(int domain) {
            nErr, __func__);
       nErr = 0;
     } else if (!nErr) {
-      queues->notif_registered[domain] = 1;
+      de->notif_registered = 1;
     } else {
       goto bail;
     }
@@ -327,7 +381,7 @@ static AEEResult init_domain_queues_locked(int domain) {
   }
 
   free_skel_uri(&dspqueue_skel);
-  queues->domain_queues[domain] = dq;
+  de->dq = dq;
   return AEE_SUCCESS;
 
 bail:
@@ -376,13 +430,15 @@ static AEEResult destroy_domain_queues_locked(int domain) {
 
   AEEResult nErr = AEE_SUCCESS;
   struct dspqueue_domain_queues *dq = NULL;
+  struct dspqueue_domain_entry *de = NULL;
   void *ret;
 
   errno = 0;
   FARF(HIGH, "destroy_domain_queues_locked");
   assert(IS_VALID_EFFECTIVE_DOMAIN_ID(domain));
-  assert(queues->domain_queues[domain] != NULL);
-  dq = queues->domain_queues[domain];
+  GET_HASH_NODE(struct dspqueue_domain_entry, domain, de);
+  assert(de != NULL && de->dq != NULL);
+  dq = de->dq;
   assert(dq->num_queues == 0);
 
   if (!dq->have_dspsignal) {
@@ -428,7 +484,7 @@ static AEEResult destroy_domain_queues_locked(int domain) {
   rpcmem_free(dq->state);
   free(dq);
 
-  queues->domain_queues[domain] = NULL;
+  de->dq = NULL;
 
 bail:
   if (nErr != AEE_SUCCESS) {
@@ -480,7 +536,7 @@ AEEResult dspqueue_create(int domain, uint32_t flags, uint32_t req_queue_size,
     pthread_mutex_unlock(&queues->mutex);
     return nErr;
   }
-  dq = queues->domain_queues[domain];
+  dq = dspqueue_domain_queues_lookup(domain);
   if (!dq) {
     FARF(ERROR, "No queues in process for domain %d", domain);
     pthread_mutex_unlock(&queues->mutex);
@@ -818,7 +874,7 @@ AEEResult dspqueue_close(dspqueue_t queue) {
 
   VERIFYC(IS_VALID_EFFECTIVE_DOMAIN_ID(q->domain), AEE_EINVALIDDOMAIN);
   pthread_mutex_lock(&queues->mutex);
-  dq = queues->domain_queues[q->domain];
+  dq = dspqueue_domain_queues_lookup(q->domain);
   if (dq == NULL) {
     FARF(ERROR, "No domain queues");
     pthread_mutex_unlock(&queues->mutex);
@@ -1217,7 +1273,7 @@ static uint32_t timespec_diff_us(struct timespec *a, struct timespec *b) {
 // Send a signal
 static AEEResult send_signal(struct dspqueue *q, uint32_t signal_no) {
 
-  struct dspqueue_domain_queues *dq = queues->domain_queues[q->domain];
+  struct dspqueue_domain_queues *dq = dspqueue_domain_queues_lookup(q->domain);
   int nErr = AEE_SUCCESS;
 
   if (q->have_driver_signaling) {
@@ -1407,7 +1463,7 @@ AEEResult dspqueue_write_noblock(dspqueue_t queue, uint32_t flags,
                         + pq->read_state_offset);
   write_state = (struct dspqueue_packet_queue_state*) (((uintptr_t)q->header)
                         + pq->write_state_offset);
-  dq = queues->domain_queues[q->domain];
+  dq = dspqueue_domain_queues_lookup(q->domain);
   qsize = pq->queue_length;
 
   // Check properties
@@ -2004,7 +2060,7 @@ if (q->mdq.is_mdq) {
                 message_length, message, 0, true, false);
     }
 
-  dq = queues->domain_queues[q->domain];
+  dq = dspqueue_domain_queues_lookup(q->domain);
   pq = &q->header->resp_queue;
   qp = (volatile const uint8_t *) (((uintptr_t)q->header) + pq->queue_offset);
   read_state = (struct dspqueue_packet_queue_state *) (((uintptr_t)q->header)
@@ -2730,12 +2786,16 @@ static int dspqueue_notif_callback(void *context, int domain, int session,
   }
   FARF(ALWAYS, "%s for domain %d, session %d, status %u", __func__, domain,
        session, status);
-  assert(IS_VALID_EFFECTIVE_DOMAIN_ID(effec_domain_id));
+  if (!IS_VALID_EFFECTIVE_DOMAIN_ID(effec_domain_id))
+    return 0;
 
   // Send different error codes for SSR and remote-process exit
   nErr = (status == FASTRPC_DSP_SSR) ? AEE_ECONNRESET : AEE_ENOSUCH;
-  if (queues->domain_queues[effec_domain_id] != NULL) {
-    error_callback(queues->domain_queues[effec_domain_id], nErr);
+  {
+    struct dspqueue_domain_queues *edq = dspqueue_domain_queues_lookup(effec_domain_id);
+    if (edq != NULL) {
+      error_callback(edq, nErr);
+    }
   }
   return 0;
 }
