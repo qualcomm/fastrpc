@@ -6,6 +6,7 @@ fastrpc_include_HEADERS += $(top_srcdir)/inc/remote.h
 fastrpc_include_HEADERS += $(top_srcdir)/inc/rpcmem.h
 fastrpc_include_HEADERS += $(top_srcdir)/inc/HAP_farf.h
 fastrpc_include_HEADERS += $(top_srcdir)/inc/HAP_debug.h
+fastrpc_include_HEADERS += $(top_srcdir)/inc/dspqueue.h
 
 noinst_HEADERS = \
 	AEEBufBound.h \
@@ -31,7 +32,6 @@ noinst_HEADERS = \
 	apps_remotectl.h \
 	apps_std.h \
 	apps_std_internal.h \
-	dspqueue.h \
 	dspqueue_rpc.h \
 	dspqueue_shared.h \
 	dspsignal.h \
