@@ -8,7 +8,21 @@
 #include "fastrpc_internal.h"
 #include "fastrpc_notif.h"
 #include "remote.h"
+#include "rpcmem.h"
+#include <errno.h>
+#include <stdint.h>
+#include <stdlib.h>
+#include <string.h>
 #include <sys/ioctl.h>
+
+/*
+ * Buffer arguments without a dma-buf fd (fd == -1) are staged in 128-byte
+ * aligned slices of one rpcmem buffer allocated per invoke, whose fd is passed
+ * in place of -1. Slices may share a page: the kernel derives each argument's
+ * physical range from its own ptr/length.
+ */
+#define SCRATCH_ALIGN 128
+#define SCRATCH_ALIGN_UP(x) (((x) + (SCRATCH_ALIGN - 1)) & ~((uint64_t)SCRATCH_ALIGN - 1))
 
 int ioctl_init(int dev, uint32_t flags, int attr, unsigned char *shell, int shelllen,
                int shellfd, char *mem, int memlen, int memfd, int tessiglen) {
@@ -51,16 +65,78 @@ int ioctl_invoke(int dev, int req, remote_handle handle, uint32_t sc, void *pra,
                  int *fds, unsigned int *attrs, unsigned int *crc,
                  uint64_t *perf_kernel, uint64_t *perf_dsp) {
   int ioErr = AEE_SUCCESS;
+  int saved_errno = 0;
   struct fastrpc_ioctl_invoke invoke = {0};
+  struct fastrpc_invoke_args *args = (struct fastrpc_invoke_args *)pra;
+  struct fastrpc_invoke_args *kargs = NULL;
+  int num_inbufs = REMOTE_SCALARS_INBUFS(sc);
+  int num_bufs = num_inbufs + REMOTE_SCALARS_OUTBUFS(sc);
+  int total = num_bufs + REMOTE_SCALARS_INHANDLES(sc) +
+              REMOTE_SCALARS_OUTHANDLES(sc);
+  uint8_t *scratch = NULL;
+  int scratch_fd = -1;
+  size_t scratch_size = 0;
+  size_t off = 0;
+  int i;
+
+  if (!(req >= INVOKE && req <= INVOKE_FD))
+    return AEE_EUNSUPPORTED;
+
+  for (i = 0; args && i < num_bufs; i++) {
+    if (args[i].fd < 0 && args[i].length > 0)
+      scratch_size += SCRATCH_ALIGN_UP(args[i].length);
+  }
+
+  if (scratch_size) {
+    scratch = (uint8_t *)rpcmem_alloc2(RPCMEM_HEAP_ID_SYSTEM,
+                                       RPCMEM_DEFAULT_FLAGS, scratch_size);
+    if (!scratch)
+      return AEE_ENOMEMORY;
+    scratch_fd = rpcmem_to_fd(scratch);
+
+    /* Patch a copy so the caller's argument array is left untouched */
+    kargs = (struct fastrpc_invoke_args *)malloc(total * sizeof(*kargs));
+    if (!kargs) {
+      ioErr = AEE_ENOMEMORY;
+      goto bail;
+    }
+    memcpy(kargs, args, total * sizeof(*kargs));
+
+    for (i = 0; i < num_bufs; i++) {
+      if (args[i].fd >= 0 || !args[i].length)
+        continue;
+
+      if (i < num_inbufs && args[i].ptr)
+        memcpy(scratch + off, (void *)(uintptr_t)args[i].ptr,
+               (size_t)args[i].length);
+
+      kargs[i].ptr = (uint64_t)(uintptr_t)(scratch + off);
+      kargs[i].fd = scratch_fd;
+      off += SCRATCH_ALIGN_UP(args[i].length);
+    }
+  }
 
   invoke.handle = handle;
   invoke.sc = sc;
-  invoke.args = (uint64_t)(uintptr_t)pra;
-  if (req >= INVOKE && req <= INVOKE_FD)
-    ioErr = ioctl(dev, FASTRPC_IOCTL_INVOKE, (unsigned long)&invoke);
-  else
-    return AEE_EUNSUPPORTED;
+  invoke.args = (uint64_t)(uintptr_t)(kargs ? kargs : pra);
+  ioErr = ioctl(dev, FASTRPC_IOCTL_INVOKE, (unsigned long)&invoke);
+  saved_errno = errno;
 
+  if (ioErr == 0 && kargs) {
+    for (i = num_inbufs; i < num_bufs; i++) {
+      if (args[i].fd < 0 && args[i].length > 0 && args[i].ptr)
+        memcpy((void *)(uintptr_t)args[i].ptr, (void *)(uintptr_t)kargs[i].ptr,
+               (size_t)args[i].length);
+    }
+  }
+
+bail:
+  free(kargs);
+  if (scratch)
+    rpcmem_free(scratch);
+
+  /* Callers map a failure via errno, so don't let cleanup clobber it */
+  errno = saved_errno;
   return ioErr;
 }
 
