@@ -288,17 +288,13 @@ struct fastrpc_ioctl_control {
 /**
  * struct drm_qda_query - Device information query structure
  * @query_type: Type of query (input)
- * @pad: Padding for 64-bit alignment (must be zero)
  * @dsp_name: Null-terminated name of the DSP (returned when query_type is QDA_QUERY_DSP_NAME)
- * @capabilities: Future DSP capabilities/attributes
- * @reserved: Reserved for future extensions
  *
- * This structure is used with DRM_IOCTL_QDA_QUERY to query device attributes,
- * capabilities, and metadata based on @query_type.
+ * This structure is used with DRM_IOCTL_QDA_QUERY to query device attributes
+ * based on @query_type.
  */
 struct drm_qda_query {
 	__u32 query_type;
-	__u32 pad;
 	__u8 dsp_name[16];
 };
 
@@ -364,6 +360,15 @@ struct fastrpc_ioctl_mdctx_manage {
 		struct fastrpc_ioctl_mdctx_setup setup;
 		struct fastrpc_ioctl_mdctx_remove remove;
 	};
+};
+
+/* Set option IOCTL request ID to enable poll mode */
+#define FASTRPC_POLL_MODE	1
+
+struct fastrpc_ioctl_set_option {
+	__u32 req;		/* request id */
+	__u32 value;	/* value */
+	__s32 reserved[6];
 };
 
 #ifdef __cplusplus
