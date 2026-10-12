@@ -47,6 +47,10 @@ extern "C" {
 	#define DEFAULT_DEVICE "/dev/accel/accel0"
 #endif
 
+/*
+ * The invoke path fills these with a CPU pointer in .offset and an fd in
+ * .handle; ioctl_invoke() translates each entry to a GEM handle + offset.
+ */
 #define INITIALIZE_REMOTE_ARGS(total)	int *pfds = NULL; \
 					unsigned *pattrs = NULL; \
 					args = (struct qda_invoke_args*) calloc(sizeof(struct qda_invoke_args), total);	\
@@ -58,16 +62,16 @@ extern "C" {
 						free(args);	\
 					}
 
-#define set_args(i, pra, len, filedesc, attrs)	args[i].ptr = (uint64_t)pra; \
+#define set_args(i, pra, len, filedesc, attrs)	args[i].offset = (uint64_t)pra; \
 						args[i].length = len;	\
 						args[i].handle = (uint32_t)(filedesc);	\
 						args[i].attr = attrs;
 
-#define set_args_ptr(i, pra)		args[i].ptr = (uint64_t)pra
+#define set_args_ptr(i, pra)		args[i].offset = (uint64_t)pra
 #define set_args_len(i, len)		args[i].length = len
 #define set_args_attr(i, attrs)		args[i].attr = attrs
 #define set_args_fd(i, filedesc)	args[i].handle = (uint32_t)(filedesc)
-#define get_args_ptr(i)			args[i].ptr
+#define get_args_ptr(i)			args[i].offset
 #define get_args_len(i)			args[i].length
 #define get_args_attr(i)		args[i].attr
 #define get_args_fd(i)			args[i].handle
@@ -90,11 +94,11 @@ extern "C" {
 #define DRM_QDA_QUERY	0x00
 #define DRM_QDA_GEM_CREATE		0x01
 #define DRM_QDA_GEM_MMAP_OFFSET	0x02
-#define DRM_QDA_INIT_ATTACH		0x03
-#define DRM_QDA_INIT_CREATE		0x04
-#define DRM_QDA_MAP			0x05
-#define DRM_QDA_MUNMAP			0x06
-#define DRM_QDA_INVOKE			0x07
+#define DRM_QDA_INIT_ATTACH		0x07
+#define DRM_QDA_INIT_CREATE		0x03
+#define DRM_QDA_MAP			0x04
+#define DRM_QDA_MUNMAP			0x05
+#define DRM_QDA_INVOKE			0x06
 
 /* IOMMU domain types for memory allocation */
 #define QDA_IOMMU_DOMAIN_32BIT_IPA	1
@@ -145,9 +149,10 @@ struct drm_qda_gem_mmap_offset {
 
 /**
  * struct qda_invoke_args - Individual argument descriptor for invoke (kernel UAPI)
- * @ptr: Pointer to argument data or value
+ * @offset: Byte offset of the argument data within the GEM object named by
+ *          @handle (the driver bounds-checks @offset + @length against it)
  * @length: Length of the argument data
- * @handle: GEM handle for buffer arguments; 0 for scalar/inline arguments
+ * @handle: GEM handle of the buffer backing this argument
  * @attr: Argument attributes
  *
  * This is the structure sent directly to the QDA kernel driver.  The driver
@@ -155,7 +160,7 @@ struct drm_qda_gem_mmap_offset {
  * handle via DRM_IOCTL_PRIME_FD_TO_HANDLE before filling this field.
  */
 struct qda_invoke_args {
-	__u64 ptr;
+	__u64 offset;
 	__u64 length;
 	__u32 handle;
 	__u32 attr;

@@ -7,6 +7,7 @@
 #include "fastrpc_notif.h"
 #include "remote.h"
 #include "fastrpc_ioctl_drm.h"
+#include "fastrpc_mem.h"
 #include "rpcmem_internal.h"
 #include <sys/ioctl.h>
 #include <fcntl.h>
@@ -20,9 +21,8 @@
  * scratch_gem_alloc()). This intentionally matches FASTRPC_ALIGN
  * (128 bytes), identical to the upstream fastrpc path (fastrpc_ioctl.c),
  * which packs multiple small buffer arguments tightly within a single
- * physical page. The kernel's GEM-handle buffer path (process_fd_buffer(),
- * via calculate_vma_offset()/calculate_page_aligned_size()) computes physical
- * page descriptors purely from each argument's own pointer + length, so
+ * physical page. The kernel computes each argument's physical page
+ * descriptor purely from its own GEM offset + length, so
  * slices are free to share a physical page with other slices; there is no
  * requirement for each slice to start on its own page. Using 128-byte
  * alignment instead of a full page per slice avoids wasting up to
@@ -298,13 +298,14 @@ int ioctl_invoke(int dev, int req, remote_handle handle, uint32_t sc, void *pra,
     }
 
     /*
-     * Second pass: populate qda_args.  For args with a valid caller fd,
-     * import that fd to its own GEM handle.  For args without fd, redirect
-     * ptr to the corresponding scratch slice, set the shared scratch GEM
-     * handle, and copy IN data if needed.
+     * Second pass: populate qda_args with GEM handle + byte offset.  For
+     * args with a valid caller fd, import that fd to its own GEM handle and
+     * derive the offset from the buffer's registered base address.  For args
+     * without fd, use the corresponding scratch slice's offset in the shared
+     * scratch GEM, and copy IN data if needed.
      */
     for (i = 0; i < num_bufs; i++) {
-      qda_args[i].ptr    = fastrpc_args[i].ptr;
+      qda_args[i].offset = 0;
       qda_args[i].length = fastrpc_args[i].length;
       qda_args[i].attr   = fastrpc_args[i].attr;
       qda_args[i].handle = 0;
@@ -313,7 +314,7 @@ int ioctl_invoke(int dev, int req, remote_handle handle, uint32_t sc, void *pra,
         void *slice = (uint8_t *)scratch_buf + scratch_off;
 
         qda_args[i].handle = scratch_gem_handle;
-        qda_args[i].ptr    = (uint64_t)(uintptr_t)slice;
+        qda_args[i].offset = scratch_off;
 
         /* IN buffer: copy caller data into the scratch slice before the ioctl */
         if (i < num_inbufs && fastrpc_args[i].ptr) {
@@ -324,6 +325,21 @@ int ioctl_invoke(int dev, int req, remote_handle handle, uint32_t sc, void *pra,
         scratch_used[i] = 1;
         scratch_off += QDA_SCRATCH_ALIGN_UP(fastrpc_args[i].length);
       } else if (fastrpc_args[i].fd > 0) {
+        void *base = NULL;
+        int nova = 0, battr = 0, bfd = -1;
+
+        if (fdlist_fd_from_buf((void *)(uintptr_t)fastrpc_args[i].ptr,
+                               (int)fastrpc_args[i].length, &nova, &base,
+                               &battr, &bfd) != 0 ||
+            bfd != fastrpc_args[i].fd || !base) {
+          FARF(ERROR, "%s: buffer %p (fd %d) is not a registered buffer",
+               __func__, (void *)(uintptr_t)fastrpc_args[i].ptr,
+               fastrpc_args[i].fd);
+          ioErr = AEE_EBADPARM;
+          goto bail;
+        }
+        qda_args[i].offset = fastrpc_args[i].ptr - (uint64_t)(uintptr_t)base;
+
         if (import_fd_to_gem_handle(dev, fastrpc_args[i].fd, &qda_args[i].handle) != 0) {
           FARF(ERROR, "%s: Failed to import fd %d to GEM handle", __func__,
                fastrpc_args[i].fd);
@@ -361,7 +377,7 @@ int ioctl_invoke(int dev, int req, remote_handle handle, uint32_t sc, void *pra,
     for (i = num_inbufs; i < num_bufs; i++) {
       if (scratch_used[i] && fastrpc_args[i].ptr && fastrpc_args[i].length > 0) {
         memcpy((void *)(uintptr_t)fastrpc_args[i].ptr,
-               (void *)(uintptr_t)qda_args[i].ptr,
+               (uint8_t *)scratch_buf + qda_args[i].offset,
                (size_t)fastrpc_args[i].length);
       }
     }
