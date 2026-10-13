@@ -405,17 +405,25 @@ int ioctl_init(int dev, uint32_t flags, int attr, unsigned char *shell, int shel
                int shellfd, char *mem, int memlen, int memfd, int tessiglen) {
   int ioErr = 0;
   struct qda_init_create init = {0};
+  struct drm_qda_remote_attach attach = {0};
   uint32_t filehandle = 0;
 
   switch (flags) {
   case FASTRPC_INIT_ATTACH:
-    ioErr = ioctl(dev, DRM_IOCTL_QDA_INIT_ATTACH, NULL);
+    attach.pd_type = QDA_ATTACH_ROOT_PD;
+    ioErr = ioctl(dev, DRM_IOCTL_QDA_REMOTE_ATTACH, &attach);
     break;
   case FASTRPC_INIT_ATTACH_SENSORS:
-    /* Sensors not supported in QDA, fallback to regular attach */
-    ioErr = ioctl(dev, DRM_IOCTL_QDA_INIT_ATTACH, NULL);
+    attach.pd_type = QDA_ATTACH_SENSORS_PD;
+    ioErr = ioctl(dev, DRM_IOCTL_QDA_REMOTE_ATTACH, &attach);
     break;
   case FASTRPC_INIT_CREATE_STATIC:
+    /* memlen is unused: the kernel takes the Audio PD heap from the DT */
+    attach.pd_type = QDA_ATTACH_AUDIO_PD;
+    attach.name = (uint64_t)(uintptr_t)shell;
+    attach.namelen = shelllen;
+    ioErr = ioctl(dev, DRM_IOCTL_QDA_REMOTE_ATTACH, &attach);
+    break;
   case FASTRPC_INIT_CREATE:
     /* Import ELF file DMA-BUF fd to GEM handle; driver only accepts handles */
     if (shellfd > 0) {

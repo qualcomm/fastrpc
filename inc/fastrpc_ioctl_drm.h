@@ -94,11 +94,11 @@ extern "C" {
 #define DRM_QDA_QUERY	0x00
 #define DRM_QDA_GEM_CREATE		0x01
 #define DRM_QDA_GEM_MMAP_OFFSET	0x02
-#define DRM_QDA_INIT_ATTACH		0x07
 #define DRM_QDA_INIT_CREATE		0x03
 #define DRM_QDA_MAP			0x04
 #define DRM_QDA_MUNMAP			0x05
 #define DRM_QDA_INVOKE			0x06
+#define DRM_QDA_REMOTE_ATTACH		0x07
 
 /* IOMMU domain types for memory allocation */
 #define QDA_IOMMU_DOMAIN_32BIT_IPA	1
@@ -321,11 +321,32 @@ struct drm_qda_query {
 	};
 };
 
+/* Protection domain types for drm_qda_remote_attach */
+#define QDA_ATTACH_ROOT_PD	1
+#define QDA_ATTACH_AUDIO_PD	2
+#define QDA_ATTACH_SENSORS_PD	3
+
+/**
+ * struct drm_qda_remote_attach - Attach to a DSP-resident protection domain
+ * @pd_type: Protection domain to attach to (QDA_ATTACH_*_PD)
+ * @namelen: Length of @name in bytes, including any NUL terminator (only
+ *           for QDA_ATTACH_AUDIO_PD; must be 0 otherwise)
+ * @name: Pointer to the name of the static PD to attach to (only for
+ *        QDA_ATTACH_AUDIO_PD; must be 0 otherwise)
+ *
+ * Used with DRM_IOCTL_QDA_REMOTE_ATTACH. Requires CAP_SYS_ADMIN.
+ */
+struct drm_qda_remote_attach {
+	__u32 pd_type;
+	__u32 namelen;
+	__u64 name;
+};
+
 /* DRM IOCTLs for QDA */
 #define DRM_IOCTL_QDA_QUERY	DRM_IOWR(DRM_COMMAND_BASE + DRM_QDA_QUERY, struct drm_qda_query)
 #define DRM_IOCTL_QDA_GEM_CREATE	DRM_IOWR(DRM_COMMAND_BASE + DRM_QDA_GEM_CREATE, struct drm_qda_gem_create)
 #define DRM_IOCTL_QDA_GEM_MMAP_OFFSET	DRM_IOWR(DRM_COMMAND_BASE + DRM_QDA_GEM_MMAP_OFFSET, struct drm_qda_gem_mmap_offset)
-#define DRM_IOCTL_QDA_INIT_ATTACH	DRM_IO(DRM_COMMAND_BASE + DRM_QDA_INIT_ATTACH)
+#define DRM_IOCTL_QDA_REMOTE_ATTACH	DRM_IOW(DRM_COMMAND_BASE + DRM_QDA_REMOTE_ATTACH, struct drm_qda_remote_attach)
 #define DRM_IOCTL_QDA_INIT_CREATE	DRM_IOWR(DRM_COMMAND_BASE + DRM_QDA_INIT_CREATE, struct qda_init_create)
 #define DRM_IOCTL_QDA_MAP		DRM_IOWR(DRM_COMMAND_BASE + DRM_QDA_MAP, struct qda_mem_map)
 #define DRM_IOCTL_QDA_MUNMAP		DRM_IOWR(DRM_COMMAND_BASE + DRM_QDA_MUNMAP, struct qda_mem_unmap)
