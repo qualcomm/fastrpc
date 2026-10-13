@@ -288,19 +288,37 @@ struct fastrpc_ioctl_control {
 };
 
 /* Query type definitions for drm_qda_query */
-#define QDA_QUERY_DSP_NAME	1
+#define QDA_QUERY_DSP_NAME		1
+#define QDA_QUERY_DSP_CAPABILITIES	2
+
+/**
+ * struct drm_qda_capability_query - DSP capability query parameters
+ * @attribute_id: DSP attribute to query (input)
+ * @capability: Value of the queried attribute (output)
+ */
+struct drm_qda_capability_query {
+	__u32 attribute_id;
+	__u32 capability;
+};
 
 /**
  * struct drm_qda_query - Device information query structure
  * @query_type: Type of query (input)
- * @dsp_name: Null-terminated name of the DSP (returned when query_type is QDA_QUERY_DSP_NAME)
+ * @dsp_name: Null-terminated name of the DSP (returned when query_type is
+ *            QDA_QUERY_DSP_NAME)
+ * @cap: DSP capability query parameters (used when query_type is
+ *       QDA_QUERY_DSP_CAPABILITIES)
  *
  * This structure is used with DRM_IOCTL_QDA_QUERY to query device attributes
- * based on @query_type.
+ * based on @query_type. @dsp_name and @cap are mutually exclusive, since
+ * only one query is made per call.
  */
 struct drm_qda_query {
 	__u32 query_type;
-	__u8 dsp_name[16];
+	union {
+		__u8 dsp_name[16];
+		struct drm_qda_capability_query cap;
+	};
 };
 
 /* DRM IOCTLs for QDA */

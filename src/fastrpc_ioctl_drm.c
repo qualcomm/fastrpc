@@ -574,11 +574,30 @@ int ioctl_getinfo(int dev, uint32_t *info) {
 
 int ioctl_getdspinfo(int dev, int domain, uint32_t attr, uint32_t *capability) {
   int ioErr = AEE_SUCCESS;
+  struct drm_qda_query info = {0};
+
+  *capability = 0;
 
   if (attr == USERSPACE_ALLOCATION_SUPPORT) {
     *capability = 1;
+    return ioErr;
   }
-  
+
+  /* Synthetic kernel/userspace-only attributes have no DSP-side query */
+  if (attr >= PERF_V2_DRIVER_SUPPORT && attr < FASTRPC_MAX_ATTRIBUTES) {
+    return ioErr;
+  }
+
+  info.query_type = QDA_QUERY_DSP_CAPABILITIES;
+  info.cap.attribute_id = attr;
+
+  ioErr = ioctl(dev, DRM_IOCTL_QDA_QUERY, &info);
+  if (ioErr != 0) {
+    FARF(ERROR, "%s: FAILED DRM_IOCTL_QDA_QUERY (DSP_CAPABILITIES, attr=%u), ioErr=%d", __func__, attr, ioErr);
+    return ioErr;
+  }
+
+  *capability = info.cap.capability;
   return ioErr;
 }
 
