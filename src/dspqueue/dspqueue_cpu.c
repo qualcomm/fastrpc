@@ -372,9 +372,14 @@ bail:
 }
 
 // Must hold queues->mutex.
+// Best-effort teardown: every step below must run exactly once even if an
+// earlier step fails, otherwise queues->domain_queues[domain] would be left
+// non-NULL and init_domain_queues_locked() would hand the stale dq (with
+// already-joined thread handles) back out to a later dspqueue_create(),
+// leading to a double pthread_join() on the same thread.
 static AEEResult destroy_domain_queues_locked(int domain) {
 
-  AEEResult nErr = AEE_SUCCESS;
+  AEEResult nErr = AEE_SUCCESS, err = AEE_SUCCESS;
   struct dspqueue_domain_queues *dq = NULL;
   void *ret;
 
@@ -389,24 +394,26 @@ static AEEResult destroy_domain_queues_locked(int domain) {
     if (dq->dsp_error) {
       // Ignore errors if the DSP process died
       dspqueue_rpc_cancel_wait_signal(dq->dsp_handle);
-    } else {
-      VERIFY((nErr = dspqueue_rpc_cancel_wait_signal(dq->dsp_handle)) == 0);
+    } else if ((err = dspqueue_rpc_cancel_wait_signal(dq->dsp_handle)) != 0) {
+      nErr = nErr == AEE_SUCCESS ? err : nErr;
     }
     FARF(MEDIUM, "Join receive signal thread");
-    VERIFY((nErr = pthread_join(dq->receive_signal_thread, &ret)) == 0);
-    FARF(MEDIUM, " - Join receive signal thread done");
-    if (!dq->dsp_error) {
-      VERIFY(((uintptr_t)ret) == 0);
+    if ((err = pthread_join(dq->receive_signal_thread, &ret)) != 0) {
+      nErr = nErr == AEE_SUCCESS ? err : nErr;
+    } else if (!dq->dsp_error && ((uintptr_t)ret != 0)) {
+      nErr = nErr == AEE_SUCCESS ? -1 : nErr;
     }
+    FARF(MEDIUM, " - Join receive signal thread done");
 
     pthread_mutex_lock(&dq->send_signal_mutex);
     dq->send_signal_mask |= SIGNAL_BIT_CANCEL;
     pthread_cond_signal(&dq->send_signal_cond);
     pthread_mutex_unlock(&dq->send_signal_mutex);
     FARF(MEDIUM, "Join send signal thread");
-    VERIFY((nErr = pthread_join(dq->send_signal_thread, &ret)) == 0);
-    if (!dq->dsp_error) {
-      VERIFY(((uintptr_t)ret) == 0);
+    if ((err = pthread_join(dq->send_signal_thread, &ret)) != 0) {
+      nErr = nErr == AEE_SUCCESS ? err : nErr;
+    } else if (!dq->dsp_error && ((uintptr_t)ret != 0)) {
+      nErr = nErr == AEE_SUCCESS ? -1 : nErr;
     }
     FARF(MEDIUM, " - Join send signal thread done");
 
@@ -419,10 +426,13 @@ static AEEResult destroy_domain_queues_locked(int domain) {
     fastrpc_munmap(dq->domain, dq->state_fd, dq->state,
                    sizeof(struct dspqueue_process_queue_state));
   } else {
-    VERIFY((nErr = dspqueue_rpc_close(dq->dsp_handle)) == 0);
-    VERIFY((nErr = fastrpc_munmap(
-                dq->domain, dq->state_fd, dq->state,
-                sizeof(struct dspqueue_process_queue_state))) == 0);
+    if ((err = dspqueue_rpc_close(dq->dsp_handle)) != 0) {
+      nErr = nErr == AEE_SUCCESS ? err : nErr;
+    }
+    if ((err = fastrpc_munmap(dq->domain, dq->state_fd, dq->state,
+                              sizeof(struct dspqueue_process_queue_state))) != 0) {
+      nErr = nErr == AEE_SUCCESS ? err : nErr;
+    }
   }
 
   rpcmem_free(dq->state);
@@ -430,7 +440,6 @@ static AEEResult destroy_domain_queues_locked(int domain) {
 
   queues->domain_queues[domain] = NULL;
 
-bail:
   if (nErr != AEE_SUCCESS) {
     FARF(ERROR, "Error 0x%x: %s failed (domain %d) errno %s", nErr, __func__,
          domain, strerror(errno));
