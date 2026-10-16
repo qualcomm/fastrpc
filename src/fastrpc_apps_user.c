@@ -1965,10 +1965,16 @@ int remote_handle64_close(remote_handle64 handle) {
   FARF(ALWAYS, "%s: closed module %s with handle 0x%" PRIx64 " remote handle 0x%" PRIx64
 		", num of open handles: %u",
          __func__, hi->name, handle, remote, hlist[domain].domainsCount - 1);
-  fastrpc_update_module_list(DOMAIN_LIST_DEQUEUE, domain, handle, NULL, NULL);
-  FASTRPC_PUT_REF(domain);
 bail:
   if (nErr != AEE_EINVHANDLE && IS_VALID_EFFECTIVE_DOMAIN_ID(domain)) {
+    /*
+     * Always dequeue the local handle and drop the domain ref here, even if
+     * remote_handle_close_domain() above failed (e.g. AEE_ENOSUCH from a dead
+     * PD). Otherwise domainsCount gets stuck too high and start_deinit can
+     * never become true on later closes.
+     */
+    fastrpc_update_module_list(DOMAIN_LIST_DEQUEUE, domain, handle, NULL, NULL);
+    FASTRPC_PUT_REF(domain);
     if (start_deinit) {
         hlist[domain].disable_exit_logs = 1;
         domain_deinit(domain);
