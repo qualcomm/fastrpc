@@ -3899,6 +3899,57 @@ bail:
   return INVALID_HANDLE;
 }
 
+static int fastrpc_get_unsigned_pd_support(int domain, bool *unsigned_pd_support) {
+  int nErr = AEE_SUCCESS;
+  fastrpc_capability cap = {0, UNSIGNED_PD_SUPPORT, 0};
+
+  cap.domain = domain;
+  nErr = fastrpc_get_cap(cap.domain, cap.attribute_ID, &cap.capability);
+
+  if (nErr == AEE_SUCCESS) {
+    *unsigned_pd_support = (cap.capability == 1);
+    FARF(RUNTIME_RPC_HIGH,
+         "%s: domain %d: resolved UNSIGNED_PD_SUPPORT %u",
+         __func__, domain, *unsigned_pd_support);
+  } else {
+    FARF(ALWAYS,
+         "Warning 0x%x: %s: Failed to get UNSIGNED_PD_SUPPORT for domain %d",
+         nErr, __func__, domain);
+    *unsigned_pd_support = false;
+  }
+
+bail:
+  return nErr;
+
+}
+
+#define FASTRPC_MIN_ARCH_VER_FOR_UNSIGNED_PD 0x81
+
+static int fastrpc_get_arch_version(int domain, uint32_t *arch_version) {
+  int nErr = AEE_SUCCESS;
+  fastrpc_capability cap = {0, ARCH_VER, 0};
+
+  VERIFYC(arch_version != NULL, AEE_EBADPARM);
+
+  cap.domain = domain;
+  nErr = fastrpc_get_cap(cap.domain, cap.attribute_ID, &cap.capability);
+
+  if (nErr == AEE_SUCCESS && cap.capability != 0) {
+    *arch_version = cap.capability & 0xFF;
+    FARF(RUNTIME_RPC_HIGH,
+         "%s: domain %d: resolved ARCH version 0x%x",
+         __func__, domain, *arch_version);
+  } else {
+    FARF(ALWAYS,
+         "Warning 0x%x: %s: Failed to get ARCH_VER for domain %d",
+         nErr, __func__, domain);
+    *arch_version = 0;
+  }
+
+bail:
+  return nErr;
+}
+
 static int domain_init(int domain, int *dev) {
   int nErr = AEE_SUCCESS, dom = GET_DOMAIN_FROM_EFFEC_DOMAIN_ID(domain), mut_locked = 0;
   remote_handle64 panic_handle = 0;
@@ -3917,6 +3968,7 @@ static int domain_init(int domain, int *dev) {
   QList_Ctor(&hlist[domain].nql);
   QList_Ctor(&hlist[domain].rql);
   hlist[domain].is_session_reserved = true;
+
   VERIFY(AEE_SUCCESS == (nErr = remote_init(domain)));
   if (fastrpc_wake_lock_enable[domain]) {
     VERIFY(AEE_SUCCESS ==
@@ -4007,6 +4059,38 @@ bail:
          "Error 0x%x: Unable to get dev as hlist is NULL for domain %d\n", nErr,
          __func__, domain);
     return nErr;
+  }
+}
+
+/* Set default unsigned PD attribute for the given domain if it supports it,
+ * based on queried unsigned PD support and arch version capability. */
+static void fastrpc_set_default_unsigned_pd(struct handle_list *list,
+                                            int domain) {
+  int nErr = AEE_SUCCESS;
+  uint32_t arch_version = 0;
+  bool unsigned_pd_support = false;
+
+  if (AEE_SUCCESS !=
+      (nErr = fastrpc_get_unsigned_pd_support(domain, &unsigned_pd_support))) {
+    FARF(ALWAYS,
+         "%s: fastrpc_get_unsigned_pd_support returned 0x%x for domain %d",
+         __func__, nErr, domain);
+    return;
+  }
+  if (unsigned_pd_support) {
+    fastrpc_get_arch_version(domain, &arch_version);
+  }
+  FARF(ALWAYS,
+       "%s: domain %d: unsigned_pd_support %d, arch_version 0x%x (min 0x%x)",
+       __func__, domain, unsigned_pd_support, arch_version,
+       FASTRPC_MIN_ARCH_VER_FOR_UNSIGNED_PD);
+  if (unsigned_pd_support &&
+      arch_version >= FASTRPC_MIN_ARCH_VER_FOR_UNSIGNED_PD) {
+    list->unsigned_module = 1;
+    FARF(ALWAYS,
+         "%s: domain %d supports unsigned PD and arch version 0x%x >= 0x%x, "
+         "allowing UNSIGNED module",
+         __func__, domain, arch_version, FASTRPC_MIN_ARCH_VER_FOR_UNSIGNED_PD);
   }
 }
 
@@ -4134,6 +4218,7 @@ static int fastrpc_apps_user_init(void) {
     pthread_mutex_init(&hlist[i].mut, &attr);
     pthread_mutex_init(&hlist[i].lmut, 0);
     pthread_mutex_init(&hlist[i].init, 0);
+    fastrpc_set_default_unsigned_pd(&hlist[i], i);
   }
   listener_android_init();
   GenCrc32Tab(POLY32, crc_table);
