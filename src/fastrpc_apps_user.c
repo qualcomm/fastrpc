@@ -1956,11 +1956,13 @@ int remote_handle64_close(remote_handle64 handle) {
     start_deinit = true;
   /*
    * If session termination is not initiated and the remote handle is valid,
-   * then close the remote handle on DSP.
+   * then close the remote handle on DSP. A failure here (e.g. AEE_ENOSUCH
+   * from a dead PD) must not stop the local handle-count decrement below,
+   * otherwise domainsCount gets stuck too high and start_deinit can never
+   * become true on later closes.
    */
   if (!start_deinit && remote) {
-    VERIFY(AEE_SUCCESS ==
-           (nErr = remote_handle_close_domain(domain, (remote_handle)remote)));
+    nErr = remote_handle_close_domain(domain, (remote_handle)remote);
   }
   FARF(ALWAYS, "%s: closed module %s with handle 0x%" PRIx64 " remote handle 0x%" PRIx64
 		", num of open handles: %u",
