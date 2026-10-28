@@ -3,6 +3,11 @@ Description=audiopd aDSP RPC daemon
 After=dev-fastrpc\x2dadsp.device dev-fastrpc\x2dadsp\x2dsecure.device
 ConditionPathExists=|/dev/fastrpc-adsp
 ConditionPathExists=|/dev/fastrpc-adsp-secure
+# Starting audiopd reboots QRB2210 devices (RB1 and Arduino Uno Q) because
+# the fastrpc memory region is not protected in the device tree, see
+# https://github.com/qualcomm-linux/qcom-deb-images/issues/572
+# TODO: drop this once the device tree fix has reached released kernels
+ConditionFirmware=!device-tree-compatible(qcom,qrb2210)
 
 [Service]
 Type=exec
