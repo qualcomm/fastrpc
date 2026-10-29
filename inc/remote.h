@@ -530,7 +530,8 @@ typedef struct remote_rpc_reserve_new_session {
     uint32_t session_id;                   /** @param[out]: Session ID of the reserved session.
                                              * An application can have multiple sessions(PDs) created on DSP.
                                              * session_id 0 is the default session. Clients can reserve session starting from 1.
-                                             * Currently only 2 sessions are supported session_id 0 and session_id 1.
+                                             * The number of sessions is limited by what the FastRPC driver can
+                                             * provide, not by this library.
                                              */
 } remote_rpc_reserve_new_session_t;
 

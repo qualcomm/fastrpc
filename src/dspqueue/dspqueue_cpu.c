@@ -183,7 +183,7 @@ static AEEResult init_domain_queues_locked(int domain) {
   AEEResult nErr = AEE_SUCCESS;
   pthread_attr_t tattr;
   int sendmutex = 0, sendcond = 0, sendthread = 0, recvthread = 0,
-      dom = domain & DOMAIN_ID_MASK;
+      dom = GET_DOMAIN_FROM_EFFEC_DOMAIN_ID(domain);
   struct dspqueue_domain_queues *dq = NULL;
   remote_rpc_get_uri_t dspqueue_skel = {0};
   int state_mapped = 0;
