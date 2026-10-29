@@ -7,6 +7,7 @@
 #include <stdio.h>
 #include <stdbool.h>
 #include <pthread.h>
+#include "fastrpc_hash_table.h"
 
 typedef void* (*reader_thread)();
 
@@ -20,6 +21,9 @@ typedef struct {
   char* message; //scratch buffer used to print messages
   pthread_t msgreader_thread;
   FILE *log_file_fd; // file descriptor to save runtime farf logs
+  /* Adds "int domain;" (hash key) + "UT_hash_handle hh;" so this struct can
+   * be a node of the per-domain hash table in src/adspmsgd.c. */
+  ADD_DOMAIN_HASH();
 } msgd;
 
 /**
