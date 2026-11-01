@@ -51,7 +51,7 @@
  * because the WC buffer has drained by then).
  *
  * A Data Synchronization Barrier forces all prior memory writes to complete
- * (drain the WC buffer to memory) before the DRM_IOCTL_QDA_INVOKE ioctl makes
+ * (drain the WC buffer to memory) before the DRM_IOCTL_QDA_REMOTE_INVOKE ioctl makes
  * the buffer visible to the DSP.
  */
 static inline void fastrpc_scratch_wc_drain(void) {
@@ -114,7 +114,7 @@ static int close_gem_handle(int dev, uint32_t handle)
  * scratch_gem_alloc() - Allocate and mmap a scratch GEM on the invoke device fd
  *
  * The scratch buffer MUST be created on the very same DRM file (@dev) that
- * issues DRM_IOCTL_QDA_INVOKE.
+ * issues DRM_IOCTL_QDA_REMOTE_INVOKE.
  *
  * The QDA driver assigns an IOMMU device per drm_file (keyed by the opening
  * task's pid, see qda_open()/qda_memory_manager_assign_device()), and
@@ -242,9 +242,9 @@ int ioctl_invoke(int dev, int req, remote_handle handle, uint32_t sc, void *pra,
                  int *fds, unsigned int *attrs, unsigned int *crc,
                  uint64_t *perf_kernel, uint64_t *perf_dsp) {
   int ioErr = AEE_SUCCESS;
-  struct qda_invoke invoke = {0};
+  struct drm_qda_invoke_args invoke = {0};
   struct fastrpc_invoke_args *fastrpc_args = (struct fastrpc_invoke_args *)pra;
-  struct qda_invoke_args *qda_args = NULL;
+  struct drm_qda_fastrpc_invoke_args *qda_args = NULL;
   uint8_t *scratch_used = NULL;
   void *scratch_buf = NULL;
   uint32_t scratch_gem_handle = 0;
@@ -259,7 +259,7 @@ int ioctl_invoke(int dev, int req, remote_handle handle, uint32_t sc, void *pra,
   num_bufs = num_inbufs + ((sc >> 8) & 0xff);
 
   if (num_bufs > 0 && fastrpc_args) {
-    qda_args = (struct qda_invoke_args *)calloc(num_bufs, sizeof(struct qda_invoke_args));
+    qda_args = (struct drm_qda_fastrpc_invoke_args *)calloc(num_bufs, sizeof(struct drm_qda_fastrpc_invoke_args));
     if (!qda_args)
       return AEE_ENOMEMORY;
 
@@ -356,19 +356,19 @@ int ioctl_invoke(int dev, int req, remote_handle handle, uint32_t sc, void *pra,
 
   /*
    * Ensure all IN-data written into the write-combine scratch mapping above
-   * has drained to memory before the DSP reads it via DRM_IOCTL_QDA_INVOKE.
+   * has drained to memory before the DSP reads it via DRM_IOCTL_QDA_REMOTE_INVOKE.
    * Only required when a scratch buffer was actually used for this call.
    */
   if (scratch_buf)
     fastrpc_scratch_wc_drain();
 
   if (req >= INVOKE && req <= INVOKE_FD)
-    ioErr = ioctl(dev, DRM_IOCTL_QDA_INVOKE, &invoke);
+    ioErr = ioctl(dev, DRM_IOCTL_QDA_REMOTE_INVOKE, &invoke);
   else
     ioErr = AEE_EUNSUPPORTED;
 
   if (ioErr != 0) {
-    FARF(ERROR, "%s: DRM_IOCTL_QDA_INVOKE failed ioErr=%d errno=%d",
+    FARF(ERROR, "%s: DRM_IOCTL_QDA_REMOTE_INVOKE failed ioErr=%d errno=%d",
          __func__, ioErr, errno);
   }
 
@@ -404,41 +404,54 @@ bail:
 int ioctl_init(int dev, uint32_t flags, int attr, unsigned char *shell, int shelllen,
                int shellfd, char *mem, int memlen, int memfd, int tessiglen) {
   int ioErr = 0;
-  struct qda_init_create init = {0};
+  struct drm_qda_init_create init = {0};
   struct drm_qda_remote_attach attach = {0};
   uint32_t filehandle = 0;
+  void *elf_virt = NULL;
+  size_t elf_len = 0;
 
   switch (flags) {
   case FASTRPC_INIT_ATTACH:
     attach.pd_type = QDA_ATTACH_ROOT_PD;
-    ioErr = ioctl(dev, DRM_IOCTL_QDA_REMOTE_ATTACH, &attach);
+    ioErr = ioctl(dev, DRM_IOCTL_QDA_REMOTE_SESSION_ATTACH, &attach);
     break;
   case FASTRPC_INIT_ATTACH_SENSORS:
     attach.pd_type = QDA_ATTACH_SENSORS_PD;
-    ioErr = ioctl(dev, DRM_IOCTL_QDA_REMOTE_ATTACH, &attach);
+    ioErr = ioctl(dev, DRM_IOCTL_QDA_REMOTE_SESSION_ATTACH, &attach);
     break;
   case FASTRPC_INIT_CREATE_STATIC:
     /* memlen is unused: the kernel takes the Audio PD heap from the DT */
     attach.pd_type = QDA_ATTACH_AUDIO_PD;
     attach.name = (uint64_t)(uintptr_t)shell;
     attach.namelen = shelllen;
-    ioErr = ioctl(dev, DRM_IOCTL_QDA_REMOTE_ATTACH, &attach);
+    ioErr = ioctl(dev, DRM_IOCTL_QDA_REMOTE_SESSION_ATTACH, &attach);
     break;
   case FASTRPC_INIT_CREATE:
-    /* Import ELF file DMA-BUF fd to GEM handle; driver only accepts handles */
-    if (shellfd > 0) {
-      if (import_fd_to_gem_handle(dev, shellfd, &filehandle) != 0) {
-        FARF(ERROR, "ERROR: %s Failed to import shellfd %d to GEM handle",
-             __func__, shellfd);
-        return AEE_EFAILED;
-      }
+    /*
+     * The ELF must live in a buffer of this session: a buffer from rpcmem
+     * belongs to another fd (and IOMMU context bank) and is refused by the
+     * driver.  Stage the image in a scratch GEM allocated on @dev.
+     */
+    if (!shell || shelllen <= 0 ||
+        scratch_gem_alloc(dev, (size_t)shelllen, &filehandle, &elf_virt) != 0) {
+      FARF(ERROR, "ERROR: %s Failed to stage ELF (len %d) in a GEM buffer",
+           __func__, shelllen);
+      return AEE_EFAILED;
     }
-    init.file = (uint64_t)shell;
+    elf_len = (size_t)shelllen;
+    memcpy(elf_virt, shell, elf_len);
+    fastrpc_scratch_wc_drain();
     init.filelen = shelllen;
     init.filehandle = filehandle;
     init.attrs = attr;
     init.siglen = tessiglen;
-    ioErr = ioctl(dev, DRM_IOCTL_QDA_INIT_CREATE, &init);
+    ioErr = ioctl(dev, DRM_IOCTL_QDA_REMOTE_SESSION_CREATE, &init);
+    {
+      int saved_errno = errno;
+
+      scratch_gem_free(dev, filehandle, elf_virt, elf_len);
+      errno = saved_errno;
+    }
     break;
   default:
     FARF(ERROR, "ERROR: %s Invalid init flags passed %d", __func__, flags);
@@ -462,7 +475,7 @@ int ioctl_invoke2_notif(int dev, int *domain, int *session, int *status) {
 int ioctl_mmap(int dev, int req, uint32_t flags, int attr, int fd, int offset,
                size_t len, uintptr_t vaddrin, uint64_t *vaddrout) {
   int ioErr = AEE_SUCCESS;
-  struct qda_mem_map qda_map = {0};
+  struct drm_qda_mem_map qda_map = {0};
   uint32_t gem_handle = 0;
 
   /* Import DMA-BUF fd to GEM handle; driver only accepts GEM handles */
@@ -476,7 +489,7 @@ int ioctl_mmap(int dev, int req, uint32_t flags, int attr, int fd, int offset,
   switch (req) {
   case MEM_MAP: {
     /* Handle-based mapping with attributes */
-    qda_map.request = QDA_MAP_REQUEST_ATTR;
+    qda_map.request = QDA_REQUEST_MEM_MAP;
     qda_map.flags = flags;
     qda_map.handle = gem_handle;
     qda_map.dsp_handle = fd;
@@ -485,9 +498,9 @@ int ioctl_mmap(int dev, int req, uint32_t flags, int attr, int fd, int offset,
     qda_map.vaddrin = (uint64_t)vaddrin;
     qda_map.size = len;
 
-    ioErr = ioctl(dev, DRM_IOCTL_QDA_MAP, &qda_map);
+    ioErr = ioctl(dev, DRM_IOCTL_QDA_REMOTE_MMAP, &qda_map);
     if (ioErr != 0) {
-      FARF(ERROR, "%s: FAILED DRM_IOCTL_QDA_MAP (MEM_MAP), ioErr=%d", __func__, ioErr);
+      FARF(ERROR, "%s: FAILED DRM_IOCTL_QDA_REMOTE_MMAP (MEM_MAP), ioErr=%d", __func__, ioErr);
     } else {
       FARF(ALWAYS, "%s: MEM_MAP successful, vaddrout=0x%llx", __func__, qda_map.vaddrout);
     }
@@ -496,7 +509,7 @@ int ioctl_mmap(int dev, int req, uint32_t flags, int attr, int fd, int offset,
   case MMAP:
   case MMAP_64: {
     /* Legacy mapping operation */
-    qda_map.request = QDA_MAP_REQUEST_LEGACY;
+    qda_map.request = QDA_REQUEST_MMAP;
     qda_map.flags = flags;
     qda_map.handle = gem_handle;
     qda_map.dsp_handle = fd;
@@ -504,9 +517,9 @@ int ioctl_mmap(int dev, int req, uint32_t flags, int attr, int fd, int offset,
     qda_map.size = len;
     /* attrs and offset remain 0 for legacy */
 
-    ioErr = ioctl(dev, DRM_IOCTL_QDA_MAP, &qda_map);
+    ioErr = ioctl(dev, DRM_IOCTL_QDA_REMOTE_MMAP, &qda_map);
     if (ioErr != 0) {
-      FARF(ERROR, "%s: FAILED DRM_IOCTL_QDA_MAP (MMAP_64), ioErr=%d", __func__, ioErr);
+      FARF(ERROR, "%s: FAILED DRM_IOCTL_QDA_REMOTE_MMAP (MMAP_64), ioErr=%d", __func__, ioErr);
     } else {
       FARF(ALWAYS, "%s: MMAP_64 successful, vaddrout=0x%llx", __func__, qda_map.vaddrout);
     }
@@ -524,7 +537,7 @@ int ioctl_mmap(int dev, int req, uint32_t flags, int attr, int fd, int offset,
 int ioctl_munmap(int dev, int req, int attr, void *buf, int fd, int len,
                  uint64_t vaddr) {
   int ioErr = AEE_SUCCESS;
-  struct qda_mem_unmap qda_unmap = {0};
+  struct drm_qda_mem_unmap qda_unmap = {0};
   uint32_t gem_handle = 0;
 
   /* Import DMA-BUF fd to GEM handle; driver only accepts GEM handles */
@@ -539,15 +552,14 @@ int ioctl_munmap(int dev, int req, int attr, void *buf, int fd, int len,
   case MEM_UNMAP:
   case MUNMAP_FD: {
     /* Handle-based unmapping with attributes */
-    qda_unmap.request = QDA_MUNMAP_REQUEST_ATTR;
-    qda_unmap.handle = gem_handle;
+    qda_unmap.request = QDA_REQUEST_MEM_UNMAP;
     qda_unmap.dsp_handle = fd;
     qda_unmap.vaddr = vaddr;
     qda_unmap.size = len;
 
-    ioErr = ioctl(dev, DRM_IOCTL_QDA_MUNMAP, &qda_unmap);
+    ioErr = ioctl(dev, DRM_IOCTL_QDA_REMOTE_MUNMAP, &qda_unmap);
     if (ioErr != 0) {
-      FARF(ERROR, "%s: FAILED DRM_IOCTL_QDA_MUNMAP (MEM_UNMAP), ioErr=%d", __func__, ioErr);
+      FARF(ERROR, "%s: FAILED DRM_IOCTL_QDA_REMOTE_MUNMAP (MEM_UNMAP), ioErr=%d", __func__, ioErr);
     } else {
       FARF(ALWAYS, "%s: MEM_UNMAP successful", __func__);
     }
@@ -555,13 +567,13 @@ int ioctl_munmap(int dev, int req, int attr, void *buf, int fd, int len,
   case MUNMAP:
   case MUNMAP_64: {
     /* Legacy unmapping operation */
-    qda_unmap.request = QDA_MUNMAP_REQUEST_LEGACY;
+    qda_unmap.request = QDA_REQUEST_MUNMAP;
     qda_unmap.vaddrout = vaddr;
     qda_unmap.size = len;
 
-    ioErr = ioctl(dev, DRM_IOCTL_QDA_MUNMAP, &qda_unmap);
+    ioErr = ioctl(dev, DRM_IOCTL_QDA_REMOTE_MUNMAP, &qda_unmap);
     if (ioErr != 0) {
-      FARF(ERROR, "%s: FAILED DRM_IOCTL_QDA_MUNMAP (MUNMAP_64), ioErr=%d", __func__, ioErr);
+      FARF(ERROR, "%s: FAILED DRM_IOCTL_QDA_REMOTE_MUNMAP (MUNMAP_64), ioErr=%d", __func__, ioErr);
     } else {
       FARF(ALWAYS, "%s: MUNMAP_64 successful", __func__);
     }
@@ -617,8 +629,18 @@ int ioctl_setmode(int dev, int mode) {
 }
 
 int ioctl_control(int dev, int req, void *c) {
-  return AEE_EUNSUPPORTED;
+  struct fastrpc_ioctl_set_option *opt = (struct fastrpc_ioctl_set_option *)c;
+  struct drm_qda_set_option option = {0};
+
+  if (req != FASTRPC_POLL_MODE || !opt)
+    return AEE_EUNSUPPORTED;
+
+  option.request_id = QDA_SET_OPTION_POLL_MODE;
+  option.value = (opt->value) ? QDA_POLL_MODE_ENABLE : QDA_POLL_MODE_DISABLE;
+
+  return ioctl(dev, DRM_IOCTL_QDA_SET_OPTION, &option);
 }
+
 
 int ioctl_getperf(int dev, int key, void *data, int *datalen) {
   return AEE_EUNSUPPORTED;

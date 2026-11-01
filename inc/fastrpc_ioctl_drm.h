@@ -53,7 +53,7 @@ extern "C" {
  */
 #define INITIALIZE_REMOTE_ARGS(total)	int *pfds = NULL; \
 					unsigned *pattrs = NULL; \
-					args = (struct qda_invoke_args*) calloc(sizeof(struct qda_invoke_args), total);	\
+					args = (struct drm_qda_fastrpc_invoke_args*) calloc(sizeof(struct drm_qda_fastrpc_invoke_args), total);	\
 					if(args==NULL) { 	\
 						goto bail;	\
 					}
@@ -90,15 +90,16 @@ extern "C" {
 #define FASTRPC_MAX_DSP_ATTRIBUTES_FALLBACK  1
 #endif
 
-/* DRM command numbers for QDA IOCTLs */
-#define DRM_QDA_QUERY	0x00
+/* DRM command numbers for QDA IOCTLs (mirrors kernel uapi qda_accel.h) */
+#define DRM_QDA_QUERY			0x00
 #define DRM_QDA_GEM_CREATE		0x01
-#define DRM_QDA_GEM_MMAP_OFFSET	0x02
-#define DRM_QDA_INIT_CREATE		0x03
-#define DRM_QDA_MAP			0x04
-#define DRM_QDA_MUNMAP			0x05
-#define DRM_QDA_INVOKE			0x06
-#define DRM_QDA_REMOTE_ATTACH		0x07
+#define DRM_QDA_GEM_MMAP_OFFSET		0x02
+#define DRM_QDA_REMOTE_INVOKE		0x03
+#define DRM_QDA_REMOTE_SESSION_CREATE	0x04
+#define DRM_QDA_REMOTE_MMAP		0x05
+#define DRM_QDA_REMOTE_MUNMAP		0x06
+#define DRM_QDA_REMOTE_SESSION_ATTACH	0x07
+#define DRM_QDA_SET_OPTION		0x08
 
 /* IOMMU domain types for memory allocation */
 #define QDA_IOMMU_DOMAIN_32BIT_IPA	1
@@ -111,13 +112,13 @@ extern "C" {
 #define QDA_PROC_MODE_DEBUG		(1 << 0)
 #define QDA_PROC_MODE_PRIVILEGED	(1 << 6)
 
-/* Map request types */
-#define QDA_MAP_REQUEST_LEGACY		1  /* Legacy MMAP operation */
-#define QDA_MAP_REQUEST_ATTR		2  /* FD-based MEM_MAP operation with attributes */
+/* Request types for drm_qda_mem_map.request */
+#define QDA_REQUEST_MMAP	1	/* Map a whole buffer */
+#define QDA_REQUEST_MEM_MAP	2	/* Map a region of a buffer, with attributes */
 
-/* Unmap request types */
-#define QDA_MUNMAP_REQUEST_LEGACY	1  /* Legacy MUNMAP operation */
-#define QDA_MUNMAP_REQUEST_ATTR	2  /* FD-based MEM_UNMAP operation */
+/* Request types for drm_qda_mem_unmap.request */
+#define QDA_REQUEST_MUNMAP	1
+#define QDA_REQUEST_MEM_UNMAP	2
 
 struct fastrpc_invoke_args {
 	__u64 ptr; /* pointer to invoke address*/
@@ -148,18 +149,16 @@ struct drm_qda_gem_mmap_offset {
 };
 
 /**
- * struct qda_invoke_args - Individual argument descriptor for invoke (kernel UAPI)
- * @offset: Byte offset of the argument data within the GEM object named by
- *          @handle (the driver bounds-checks @offset + @length against it)
- * @length: Length of the argument data
- * @handle: GEM handle of the buffer backing this argument
- * @attr: Argument attributes
+ * struct drm_qda_fastrpc_invoke_args - FastRPC invocation argument descriptor
+ * @offset: Byte offset within the buffer at which the argument starts
+ * @length: Length of the argument data in bytes
+ * @handle: GEM handle of the buffer holding the argument
+ * @attr: Argument attributes and flags
  *
- * This is the structure sent directly to the QDA kernel driver.  The driver
- * only accepts GEM handles; userspace must import any DMA-BUF fd to a GEM
- * handle via DRM_IOCTL_PRIME_FD_TO_HANDLE before filling this field.
+ * The driver never accepts DMA-BUF fds directly; userspace imports any fd to
+ * a GEM handle before filling @handle.
  */
-struct qda_invoke_args {
+struct drm_qda_fastrpc_invoke_args {
 	__u64 offset;
 	__u64 length;
 	__u32 handle;
@@ -167,81 +166,47 @@ struct qda_invoke_args {
 };
 
 /* Compatibility typedef for existing code */
-typedef struct qda_invoke_args fastrpc_invoke_args;
+typedef struct drm_qda_fastrpc_invoke_args fastrpc_invoke_args;
 
-/**
- * struct qda_invoke - Invoke a function on the accelerator
- * @handle: Handle to the function/method to invoke
- * @sc: Scalars parameter describing argument layout
- * @args: Pointer to array of qda_invoke_args structures
- *
- * This structure is used with DRM_IOCTL_QDA_INVOKE to execute
- * functions on the AI accelerator.
- */
-struct qda_invoke {
+/* struct drm_qda_invoke_args - Dynamic FastRPC invocation parameters */
+struct drm_qda_invoke_args {
 	__u32 handle;
 	__u32 sc;
 	__u64 args;
 };
 
-/**
- * struct qda_mem_map - Map memory for accelerator access
- * @request: Request type (QDA_MAP_REQUEST_LEGACY or QDA_MAP_REQUEST_ATTR)
- * @flags: Mapping flags
- * @handle: GEM handle of the buffer to map (used for kernel buffer lookup)
- * @attrs: SMMU attributes (used for QDA_MAP_REQUEST_ATTR)
- * @offset: Offset within buffer (used for QDA_MAP_REQUEST_ATTR)
- * @dsp_handle: Original DMA-BUF fd forwarded to DSP as the buffer identifier
- * @vaddrin: Input virtual address (optional)
- * @size: Size of the mapping
- * @vaddrout: [out] Output DSP virtual address
- */
-struct qda_mem_map {
-	__u32 request;	/* Request type: QDA_MAP_REQUEST_* */
-	__u32 flags;	/* Flags for DSP to map with */
-	__u32 handle;	/* GEM handle for kernel buffer lookup */
-	__u32 attrs;	/* SMMU attributes (for ATTR request) */
-	__u32 offset;	/* Offset within buffer (for ATTR request) */
-	__s32 dsp_handle;	/* Original DMA-BUF fd forwarded to DSP as buffer identifier */
-	__u64 vaddrin;	/* Optional virtual address */
-	__u64 size;	/* Size of mapping */
-	__u64 vaddrout;	/* DSP virtual address (output) */
-};
+/* Process attribute flags for drm_qda_init_create.attrs */
+#define QDA_INIT_ATTR_UNSIGNED_MODULE	(1U << 3)
 
-/**
- * struct qda_mem_unmap - Unmap memory from accelerator
- * @request: Request type (QDA_MUNMAP_REQUEST_LEGACY or QDA_MUNMAP_REQUEST_ATTR)
- * @handle: GEM handle for kernel buffer lookup (used for ATTR request)
- * @dsp_handle: Original DMA-BUF fd forwarded to DSP as the buffer identifier
- * @vaddr: Virtual address to unmap (used for ATTR request)
- * @vaddrout: DSP virtual address to unmap (used for LEGACY request)
- * @size: Size of the mapping to unmap
- */
-struct qda_mem_unmap {
-	__u32 request;	/* Request type: QDA_MUNMAP_REQUEST_* */
-	__u32 handle;	/* GEM handle for kernel buffer lookup */
-	__s32 dsp_handle;	/* Original DMA-BUF fd forwarded to DSP as buffer identifier */
-	__u32 pad;	/* Padding for alignment */
-	__u64 vaddr;	/* Virtual address (for ATTR request) */
-	__u64 vaddrout;	/* DSP virtual address (for LEGACY request) */
-	__u64 size;	/* Size of mapping */
-};
-
-/**
- * struct qda_init_create - Initialize and create a process on accelerator
- * @filelen: Length of the ELF file
- * @filehandle: GEM handle for the buffer containing the ELF file; 0 if using
- *              the direct file pointer
- * @attrs: Process attributes (debug, privileged, etc.)
- * @siglen: Length of signature data
- * @file: Pointer to ELF file data (if not using filehandle)
- */
-struct qda_init_create {
+/* struct drm_qda_init_create - DSP process creation parameters */
+struct drm_qda_init_create {
 	__u32 filelen;
 	__u32 filehandle;
 	__u32 attrs;
 	__u32 siglen;
 	__u64 file;
+};
+
+/* struct drm_qda_mem_map - Parameters for mapping a buffer into the DSP */
+struct drm_qda_mem_map {
+	__u32 request;
+	__u32 flags;
+	__u32 handle;
+	__u32 attrs;
+	__u32 offset;
+	__s32 dsp_handle;
+	__u64 vaddrin;
+	__u64 size;
+	__u64 vaddrout;
+};
+
+/* struct drm_qda_mem_unmap - Parameters for removing a DSP mapping */
+struct drm_qda_mem_unmap {
+	__u32 request;
+	__s32 dsp_handle;
+	__u64 vaddr;
+	__u64 vaddrout;
+	__u64 size;
 };
 
 /**
@@ -323,8 +288,8 @@ struct drm_qda_query {
 
 /* Protection domain types for drm_qda_remote_attach */
 #define QDA_ATTACH_ROOT_PD	1
-#define QDA_ATTACH_AUDIO_PD	2
-#define QDA_ATTACH_SENSORS_PD	3
+#define QDA_ATTACH_SENSORS_PD	2
+#define QDA_ATTACH_AUDIO_PD	3
 
 /**
  * struct drm_qda_remote_attach - Attach to a DSP-resident protection domain
@@ -334,7 +299,7 @@ struct drm_qda_query {
  * @name: Pointer to the name of the static PD to attach to (only for
  *        QDA_ATTACH_AUDIO_PD; must be 0 otherwise)
  *
- * Used with DRM_IOCTL_QDA_REMOTE_ATTACH. Requires CAP_SYS_ADMIN.
+ * Used with DRM_IOCTL_QDA_REMOTE_SESSION_ATTACH. Requires CAP_SYS_ADMIN.
  */
 struct drm_qda_remote_attach {
 	__u32 pd_type;
@@ -342,15 +307,31 @@ struct drm_qda_remote_attach {
 	__u64 name;
 };
 
+/* Request IDs for drm_qda_set_option.request_id */
+#define QDA_SET_OPTION_POLL_MODE	1
+
+/* Values for drm_qda_set_option.value with QDA_SET_OPTION_POLL_MODE */
+#define QDA_POLL_MODE_DISABLE	0
+#define QDA_POLL_MODE_ENABLE	1
+
+/* struct drm_qda_set_option - Set a per-session option */
+struct drm_qda_set_option {
+	__u32 request_id;
+	__u32 value;
+};
+
 /* DRM IOCTLs for QDA */
-#define DRM_IOCTL_QDA_QUERY	DRM_IOWR(DRM_COMMAND_BASE + DRM_QDA_QUERY, struct drm_qda_query)
+#define DRM_IOCTL_QDA_QUERY		DRM_IOWR(DRM_COMMAND_BASE + DRM_QDA_QUERY, struct drm_qda_query)
 #define DRM_IOCTL_QDA_GEM_CREATE	DRM_IOWR(DRM_COMMAND_BASE + DRM_QDA_GEM_CREATE, struct drm_qda_gem_create)
 #define DRM_IOCTL_QDA_GEM_MMAP_OFFSET	DRM_IOWR(DRM_COMMAND_BASE + DRM_QDA_GEM_MMAP_OFFSET, struct drm_qda_gem_mmap_offset)
-#define DRM_IOCTL_QDA_REMOTE_ATTACH	DRM_IOW(DRM_COMMAND_BASE + DRM_QDA_REMOTE_ATTACH, struct drm_qda_remote_attach)
-#define DRM_IOCTL_QDA_INIT_CREATE	DRM_IOWR(DRM_COMMAND_BASE + DRM_QDA_INIT_CREATE, struct qda_init_create)
-#define DRM_IOCTL_QDA_MAP		DRM_IOWR(DRM_COMMAND_BASE + DRM_QDA_MAP, struct qda_mem_map)
-#define DRM_IOCTL_QDA_MUNMAP		DRM_IOWR(DRM_COMMAND_BASE + DRM_QDA_MUNMAP, struct qda_mem_unmap)
-#define DRM_IOCTL_QDA_INVOKE		DRM_IOWR(DRM_COMMAND_BASE + DRM_QDA_INVOKE, struct qda_invoke_args)
+#define DRM_IOCTL_QDA_REMOTE_INVOKE	DRM_IOWR(DRM_COMMAND_BASE + DRM_QDA_REMOTE_INVOKE, struct drm_qda_invoke_args)
+#define DRM_IOCTL_QDA_REMOTE_SESSION_CREATE \
+	DRM_IOWR(DRM_COMMAND_BASE + DRM_QDA_REMOTE_SESSION_CREATE, struct drm_qda_init_create)
+#define DRM_IOCTL_QDA_REMOTE_MMAP	DRM_IOWR(DRM_COMMAND_BASE + DRM_QDA_REMOTE_MMAP, struct drm_qda_mem_map)
+#define DRM_IOCTL_QDA_REMOTE_MUNMAP	DRM_IOWR(DRM_COMMAND_BASE + DRM_QDA_REMOTE_MUNMAP, struct drm_qda_mem_unmap)
+#define DRM_IOCTL_QDA_REMOTE_SESSION_ATTACH \
+	DRM_IOW(DRM_COMMAND_BASE + DRM_QDA_REMOTE_SESSION_ATTACH, struct drm_qda_remote_attach)
+#define DRM_IOCTL_QDA_SET_OPTION	DRM_IOW(DRM_COMMAND_BASE + DRM_QDA_SET_OPTION, struct drm_qda_set_option)
 
 /* Helper macros for building scalars parameter */
 #define QDA_SCALARS(method, in, out) \

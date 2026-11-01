@@ -1269,7 +1269,7 @@ int remote_handle_invoke_domain(int domain, remote_handle handle,
   int trace_marker_fd = hlist[domain].trace_marker_fd;
   bool trace_enabled = false;
 #ifdef USE_ACCEL_DRIVER
-  struct qda_invoke_args* args = NULL;
+  struct drm_qda_fastrpc_invoke_args* args = NULL;
 #else
   struct fastrpc_invoke_args* args = NULL;
 #endif
