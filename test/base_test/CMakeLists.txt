@@ -296,3 +296,4 @@ target_link_libraries(common_test_dep INTERFACE
 set(ALL_SUITE_LIBS "")
 set(REGULAR_CATEGORY_DISPATCH_SOURCES "")
 add_subdirectory(test/e2e)
+add_subdirectory(bin)
