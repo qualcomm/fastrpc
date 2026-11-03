@@ -4590,6 +4590,7 @@ static void fastrpc_apps_user_deinit(void) {
     pthread_mutex_destroy(&info.mut);
     hlist_table_ready = false;
   }
+  fastrpc_domain_status_notif_deinit();
   fastrpc_domain_table_deinit();
   fastrpc_context_table_deinit();
   fastrpc_config_deinit();
@@ -4689,6 +4690,7 @@ static int fastrpc_apps_user_init(void) {
   /* Build Level-1 domain table by probing device nodes, then create
    * Level-2 session entries for any dynamic domains discovered. */
   fastrpc_domain_table_init();
+  fastrpc_domain_status_notif_init();
   fastrpc_discover_domains();
   {
     /* Create 2 sessions (0 and 1) for every dynamic domain actually found

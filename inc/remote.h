@@ -844,13 +844,51 @@ typedef struct {
 } fastrpc_domains_info;
 
 /**
+ * fastrpc_domain_status_notif_fn_t
+ * Callback fired when a domain status changes.
+ *
+ * @param context   Opaque pointer supplied at registration time.
+ * @param domain    Pointer to the full fastrpc_domain descriptor. Valid only
+ *                  for the duration of the callback.
+ * @retval          0 on success
+ */
+typedef int (*fastrpc_domain_status_notif_fn_t)(void *context,
+							const fastrpc_domain *domain);
+
+/**
+ * @struct fastrpc_domain_notif_info
+ * @brief Payload used with FASTRPC_REGISTER_DOMAIN_STATUS_NOTIFICATIONS and
+ *        FASTRPC_DEREGISTER_DOMAIN_STATUS_NOTIFICATIONS request ids.
+ */
+typedef struct {
+	/* [in] Logical domain id, or -1 for type/wildcard filter */
+	int domain_id;
+	/* [in] Domain type filter. Used only when domain_id == -1 */
+	fastrpc_domain_type domain_type;
+	/* [in] Client context, passed to callback */
+	void *context;
+	/* [in] Callback function pointer */
+	fastrpc_domain_status_notif_fn_t notifier_fn;
+} fastrpc_domain_notif_info;
+
+/**
  * @enum system_req_id
  * @brief Request IDs used with remote_system_request() to query available
- *        domains.
+ *        domains and manage domain status notifications.
  */
 typedef enum {
 	/** Query list of available domains */
 	FASTRPC_GET_DOMAINS = 0,
+	/**
+	 * Register callback for domain status notifications.
+	 * Use with system_req_payload.domain_notif (fastrpc_domain_notif_info).
+	 */
+	FASTRPC_REGISTER_DOMAIN_STATUS_NOTIFICATIONS,
+	/**
+	 * Deregister a previously registered domain status callback.
+	 * Use with system_req_payload.domain_notif (fastrpc_domain_notif_info).
+	 */
+	FASTRPC_DEREGISTER_DOMAIN_STATUS_NOTIFICATIONS,
 } system_req_id;
 
 /**
@@ -863,6 +901,8 @@ typedef struct {
 	union {
 		/* Used with FASTRPC_GET_DOMAINS */
 		fastrpc_domains_info sys;
+		/* Used with FASTRPC_REGISTER/DEREGISTER_DOMAIN_STATUS_NOTIFICATIONS */
+		fastrpc_domain_notif_info domain_notif;
 	};
 } system_req_payload;
 
