@@ -271,3 +271,28 @@ target_link_libraries(unity_dep INTERFACE unity)
 
 add_subdirectory(idl)
 add_subdirectory(utils)
+
+add_library(fastrpc_dep INTERFACE)
+target_include_directories(fastrpc_dep INTERFACE "${FASTRPC_INC_DIR}")
+target_link_libraries(fastrpc_dep INTERFACE cdsprpc)
+
+add_library(common_test_iface INTERFACE)
+add_dependencies(common_test_iface fastrpc_base_test_idl)
+target_include_directories(common_test_iface INTERFACE
+    "${CMAKE_SOURCE_DIR}"
+    "${FASTRPC_BASE_TEST_IDL_INC_DIR}")
+target_compile_definitions(common_test_iface INTERFACE
+    ${PLATFORM_C_DEFS}
+    ${UNITY_COMPILE_DEFS})
+add_library(common_test_dep INTERFACE)
+target_link_libraries(common_test_dep INTERFACE
+    common_test_iface
+    utils_dep
+    unity_dep
+    fastrpc_dep
+    fastrpc_base_test_stub
+    base_test_warnings)
+
+set(ALL_SUITE_LIBS "")
+set(REGULAR_CATEGORY_DISPATCH_SOURCES "")
+add_subdirectory(test/e2e)
