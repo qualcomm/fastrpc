@@ -373,17 +373,24 @@ struct handle_list *fastrpc_get_hlist_node(int domain) {
 
 /*
  * Return the entry for (domain, session), creating it if it doesn't exist.
- * The effective id is computed (domain + NUM_DOMAINS * session). A new entry
- * is built before taking the table lock and dropped if another thread added
- * the same session first, so other threads never see a partly built entry.
- * Creating an entry does not reserve the session.
+ * For legacy domains the effective id is (domain + NUM_DOMAINS * session);
+ * for dynamic domains it is (logical_id * EFFEC_DOMAIN_ID_MULTIPLIER +
+ * session), which only has room for session 0..EFFEC_DOMAIN_ID_MULTIPLIER-1
+ * -- a session at or past that wraps into the next logical domain's id
+ * range instead of erroring, so it must be rejected here rather than
+ * against the legacy-wide MAX_SESSIONS_LIMIT. A new entry is built before
+ * taking the table lock and dropped if another thread added the same
+ * session first, so other threads never see a partly built entry. Creating
+ * an entry does not reserve the session.
  */
 static struct handle_list *hlist_get_or_create_session(int domain, int session) {
   struct handle_list *me = NULL, *existing = NULL;
   int effec_domain;
+  int max_session = IS_DYNAMIC_DOMAIN_ID(domain) ?
+      EFFEC_DOMAIN_ID_MULTIPLIER : MAX_SESSIONS_LIMIT;
 
   if (!hlist_table_ready || !IS_VALID_DOMAIN_ID(domain) || session < 0 ||
-      session >= MAX_SESSIONS_LIMIT)
+      session >= max_session)
     return NULL;
   effec_domain = GET_EFFECTIVE_DOMAIN_ID(domain, session);
   existing = hlist_lookup(effec_domain);
@@ -402,6 +409,13 @@ static struct handle_list *hlist_get_or_create_session(int domain, int session) 
     return existing;
   }
   return me;
+}
+
+/* See declaration in fastrpc_internal.h. Best-effort: a NULL return (table
+ * not ready yet, or domain somehow invalid) just leaves normalize_effec_
+ * domain_id()'s bare-logical-id fallback with nothing to find later. */
+void fastrpc_ensure_default_session(int logical_domain) {
+  (void)hlist_get_or_create_session(logical_domain, 0);
 }
 
 /* Effective id of (domain, session), creating the session's entry if it is
@@ -451,6 +465,7 @@ static int fastrpc_trace = 0;
 static int domain_init(int domain, int *dev);
 static void domain_deinit(int domain);
 static int close_device_node(int domain_id, int dev);
+static const char *get_domain_name_str(int domain_id);
 extern int apps_mem_table_init(void);
 extern void apps_mem_table_deinit(void);
 
@@ -469,6 +484,10 @@ static void build_dsp_search_path_cache_for_domain(int domain) {
     FARF(ALWAYS, "Warning: %s: Invalid domain %d", __func__, domain);
     return;
   }
+
+  /* Dynamic domains use the shared DSP_LIBS_LOCATION — no per-domain cache slot */
+  if (IS_DYNAMIC_DOMAIN_ID(domain))
+    return;
 
   domain_path_cache = DSP_SEARCH_PATHS_CACHE[domain];
 
@@ -537,7 +556,8 @@ static void build_dsp_search_path_cache_for_domain(int domain) {
 }
 
 static const char *get_dsp_search_path_for_domain(int domain) {
-  if (IS_VALID_DOMAIN_ID(domain) && DSP_SEARCH_PATHS_CACHE[domain][0] != '\0')
+  if (!IS_DYNAMIC_DOMAIN_ID(domain) &&
+      IS_VALID_DOMAIN_ID(domain) && DSP_SEARCH_PATHS_CACHE[domain][0] != '\0')
     return DSP_SEARCH_PATHS_CACHE[domain];
 
   return DSP_LIBS_LOCATION;
@@ -1010,37 +1030,6 @@ static int get_domain_from_domain_name(const char *domain_name,
   VERIFY_IPRINTF("%s: %d\n", __func__, domain);
 bail:
   return domain;
-}
-
-static const char *get_domain_from_id(int domain_id) {
-  const char *uri_domain_suffix;
-  switch (domain_id) {
-  case ADSP_DOMAIN_ID:
-    uri_domain_suffix = ADSP_DOMAIN;
-    break;
-  case CDSP_DOMAIN_ID:
-    uri_domain_suffix = CDSP_DOMAIN;
-    break;
-  case CDSP1_DOMAIN_ID:
-    uri_domain_suffix = CDSP1_DOMAIN;
-    break;
-  case MDSP_DOMAIN_ID:
-    uri_domain_suffix = MDSP_DOMAIN;
-    break;
-  case SDSP_DOMAIN_ID:
-    uri_domain_suffix = SDSP_DOMAIN;
-    break;
-  case GDSP0_DOMAIN_ID:
-    uri_domain_suffix = GDSP0_DOMAIN;
-    break;
-  case GDSP1_DOMAIN_ID:
-    uri_domain_suffix = GDSP1_DOMAIN;
-    break;
-  default:
-    uri_domain_suffix = "invalid domain";
-    break;
-  }
-  return uri_domain_suffix;
 }
 
 #define IS_CONST_HANDLE(h) (((h) < 0xff) ? 1 : 0)
@@ -1810,36 +1799,33 @@ int remote_handle_open_domain(int domain, const char *name, remote_handle *ph,
      * For eg, the same app can call 'remote_handle64_open' with
      * "createstaticpd:sensorspd&_dom=adsp&_session=0" and
      * "createstaticpd:oispd&_dom=adsp&_session=1" to create a session
-     * on both static PDs.
+     * on both static PDs. pdName is matched by prefix below, so a
+     * trailing "&_dom=...&_session=..." suffix never affects the match;
+     * dsppdname is set from the matched literal, not from pdName, so it
+     * never ends up storing a dynamic domain's suffix.
      */
-    if (strstr(pdName, get_domain_from_id(GET_DOMAIN_FROM_EFFEC_DOMAIN_ID(domain))) &&
-        strstr(pdName, FASTRPC_SESSION_URI)) {
-      /* Truncate string in place by null-terminating at desired length */
-      pdName[strlen(pdName) -
-             strlen(get_domain_from_id(GET_DOMAIN_FROM_EFFEC_DOMAIN_ID(domain))) -
-             strlen(FASTRPC_SESSION1_URI)] = '\0';
-    } else if (strstr(pdName, get_domain_from_id(domain))) {
-      /* Truncate string in place by null-terminating at desired length */
-      pdName[strlen(pdName) - strlen(get_domain_from_id(domain))] = '\0';
-    }
     VERIFYC(MAX_DSPPD_NAMELEN > strlen(pdName), AEE_EBADPARM);
-    strlcpy(hlist_lookup(domain)->dsppdname, pdName, strlen(pdName) + 1);
     if (!strncmp(pdName, "audiopd", strlen("audiopd"))) {
       *ph = AUDIOPD_HANDLE;
       hlist_lookup(domain)->dsppd = AUDIO_STATICPD;
+      strlcpy(hlist_lookup(domain)->dsppdname, "audiopd", strlen("audiopd") + 1);
     } else if (!strncmp(pdName, "securepd", strlen("securepd"))) {
       FARF(ALWAYS, "%s: attaching to securePD\n", __func__);
       *ph = SECUREPD_HANDLE;
       hlist_lookup(domain)->dsppd = SECURE_STATICPD;
+      strlcpy(hlist_lookup(domain)->dsppdname, "securepd", strlen("securepd") + 1);
     } else if (!strncmp(pdName, "sensorspd", strlen("sensorspd"))) {
       *ph = SENSORPD_HANDLE;
       hlist_lookup(domain)->dsppd = SENSORS_STATICPD;
+      strlcpy(hlist_lookup(domain)->dsppdname, "sensorspd", strlen("sensorspd") + 1);
     } else if (!strncmp(pdName, "rootpd", strlen("rootpd"))) {
       *ph = ROOTPD_HANDLE;
       hlist_lookup(domain)->dsppd = GUEST_OS_SHARED;
+      strlcpy(hlist_lookup(domain)->dsppdname, "rootpd", strlen("rootpd") + 1);
     } else if (!strncmp(pdName, "oispd", strlen("oispd"))) {
       *ph = OISPD_HANDLE;
       hlist_lookup(domain)->dsppd = OIS_STATICPD;
+      strlcpy(hlist_lookup(domain)->dsppdname, "oispd", strlen("oispd") + 1);
     }
     if (pdname_uri) {
       free(pdname_uri);
@@ -2416,6 +2402,7 @@ int remote_handle_control_domain(int domain, remote_handle64 h, uint32_t req,
 
     (void)dev;
     VERIFYC(cap, AEE_EBADPARM);
+    cap->domain = normalize_effec_domain_id(cap->domain);
     VERIFYC(IS_VALID_EFFECTIVE_DOMAIN_ID(cap->domain), AEE_EBADPARM);
 
     nErr = fastrpc_get_cap(cap->domain, cap->attribute_ID, &cap->capability);
@@ -2726,6 +2713,7 @@ int remote_session_control(uint32_t req, void *data, uint32_t datalen) {
     }
     VERIFYC(datalen == sizeof(struct remote_rpc_thread_params), AEE_EBADPARM);
     if (params->domain != -1) {
+      params->domain = normalize_effec_domain_id(params->domain);
       if (!IS_VALID_EFFECTIVE_DOMAIN_ID(params->domain)) {
         nErr = AEE_EBADPARM;
         FARF(RUNTIME_RPC_LOW, "%s: Invalid domain ID %d passed", __func__,
@@ -2755,6 +2743,7 @@ int remote_session_control(uint32_t req, void *data, uint32_t datalen) {
             AEE_EBADPARM);
     VERIFYC(um != NULL, AEE_EBADPARM);
     if (um->domain != -1) {
+      um->domain = normalize_effec_domain_id(um->domain);
       VERIFYC(IS_VALID_EFFECTIVE_DOMAIN_ID(um->domain),
               AEE_EBADPARM);
       VERIFY(AEE_SUCCESS ==
@@ -2791,6 +2780,7 @@ int remote_session_control(uint32_t req, void *data, uint32_t datalen) {
               : (thread_priority + rel_thread_prio);
     }
     if (params->domain != -1) {
+      params->domain = normalize_effec_domain_id(params->domain);
       VERIFYC(IS_VALID_EFFECTIVE_DOMAIN_ID(params->domain),
               AEE_EBADPARM);
       VERIFY(AEE_SUCCESS == (nErr = store_domain_thread_params(
@@ -2812,7 +2802,8 @@ int remote_session_control(uint32_t req, void *data, uint32_t datalen) {
     VERIFYC(datalen == sizeof(struct remote_rpc_process_clean_params),
             AEE_EBADPARM);
     VERIFYC(dp, AEE_EBADPARM);
-    domain = dp->domain;
+    domain = normalize_effec_domain_id(dp->domain);
+    dp->domain = domain;
     VERIFY(AEE_SUCCESS == (nErr = fastrpc_dsp_process_clean(domain)));
     FARF(ALWAYS, "%s Remote process kill request for domain %d", __func__,
          domain);
@@ -2829,6 +2820,7 @@ int remote_session_control(uint32_t req, void *data, uint32_t datalen) {
     }
     VERIFYC(datalen == sizeof(struct remote_rpc_session_close), AEE_EBADPARM);
     if (sclose->domain != -1) {
+      sclose->domain = normalize_effec_domain_id(sclose->domain);
       VERIFYC(IS_VALID_EFFECTIVE_DOMAIN_ID(sclose->domain),
               AEE_EBADPARM);
       VERIFY(AEE_SUCCESS == (nErr = close_domain_session(sclose->domain)));
@@ -2848,6 +2840,7 @@ int remote_session_control(uint32_t req, void *data, uint32_t datalen) {
     VERIFYC(datalen == sizeof(struct remote_rpc_control_pd_dump), AEE_EBADPARM);
     VERIFYC(pddump != NULL, AEE_EBADPARM);
     if (pddump->domain != -1) {
+      pddump->domain = normalize_effec_domain_id(pddump->domain);
       VERIFY(AEE_SUCCESS ==
              (nErr = set_pd_dump_attribute(pddump->domain, pddump->enable)));
     } else {
@@ -2868,7 +2861,8 @@ int remote_session_control(uint32_t req, void *data, uint32_t datalen) {
 
     VERIFYC(datalen == sizeof(remote_rpc_process_exception), AEE_EBADPARM);
     VERIFYC(dp, AEE_EBADPARM);
-    domain = dp->domain;
+    domain = normalize_effec_domain_id(dp->domain);
+    dp->domain = domain;
     VERIFYC(IS_VALID_EFFECTIVE_DOMAIN_ID(domain), AEE_EBADPARM);
     /*
      * If any request causes exception on DSP, DSP returns AEE_EBADSTATE for the
@@ -2892,7 +2886,8 @@ int remote_session_control(uint32_t req, void *data, uint32_t datalen) {
     int ret_val = -1;
     VERIFYC(datalen == sizeof(struct remote_process_type), AEE_EBADPARM);
     VERIFYC(typ, AEE_EBADPARM);
-    domain = typ->domain;
+    domain = normalize_effec_domain_id(typ->domain);
+    typ->domain = domain;
     VERIFYC(IS_VALID_EFFECTIVE_DOMAIN_ID(domain), AEE_EBADPARM);
     ret_val = hlist_lookup(domain)->unsigned_module;
     if (ret_val != PROCESS_TYPE_UNSIGNED && ret_val != PROCESS_TYPE_SIGNED) {
@@ -2909,7 +2904,8 @@ int remote_session_control(uint32_t req, void *data, uint32_t datalen) {
         (struct remote_rpc_notif_register *)data;
     VERIFYC(datalen == sizeof(struct remote_rpc_notif_register), AEE_EBADPARM);
     VERIFYC(notif != NULL, AEE_EBADPARM);
-    domain = notif->domain;
+    domain = normalize_effec_domain_id(notif->domain);
+    notif->domain = domain;
     VERIFYC(IS_VALID_EFFECTIVE_DOMAIN_ID(domain), AEE_EBADPARM);
     if (domain != -1) {
       VERIFYC(is_status_notif_version2_supported(domain), AEE_EUNSUPPORTED);
@@ -2931,6 +2927,7 @@ int remote_session_control(uint32_t req, void *data, uint32_t datalen) {
     VERIFYC(datalen == sizeof(struct remote_rpc_pd_initmem_size), AEE_EBADPARM);
     VERIFYC(params != NULL, AEE_EBADPARM);
     if (params->domain != -1) {
+      params->domain = normalize_effec_domain_id(params->domain);
       if (!IS_VALID_EFFECTIVE_DOMAIN_ID(params->domain)) {
         nErr = AEE_EBADPARM;
         FARF(ERROR, "%s: Invalid domain ID %d passed", __func__,
@@ -3040,20 +3037,23 @@ int remote_session_control(uint32_t req, void *data, uint32_t datalen) {
             AEE_EBADPARM);
     VERIFYC(rpc_uri->uri != NULL, AEE_EBADPARM);
     VERIFYC(rpc_uri->uri_len > rpc_uri->module_uri_len, AEE_EBADSIZE);
-    ret_val = snprintf(0, 0, "%s%s%s%s%d", rpc_uri->module_uri,
-                       FASTRPC_DOMAIN_URI, SUBSYSTEM_NAME[domain],
-                       FASTRPC_SESSION_URI, rpc_uri->session_id);
-    if (rpc_uri->uri_len <= ret_val) {
-      nErr = AEE_EBADSIZE;
-      FARF(ERROR,
-           "ERROR 0x%x: %s Session URI length %u is not enough, need %u "
-           "characters",
-           nErr, __func__, rpc_uri->uri_len, ret_val);
+    {
+      const char *dom_name = get_domain_name_str(domain);
+      ret_val = snprintf(0, 0, "%s%s%s%s%d", rpc_uri->module_uri,
+                         FASTRPC_DOMAIN_URI, dom_name,
+                         FASTRPC_SESSION_URI, rpc_uri->session_id);
+      if (rpc_uri->uri_len <= ret_val) {
+        nErr = AEE_EBADSIZE;
+        FARF(ERROR,
+             "ERROR 0x%x: %s Session URI length %u is not enough, need %u "
+             "characters",
+             nErr, __func__, rpc_uri->uri_len, ret_val);
+      }
+      ret_val = snprintf(rpc_uri->uri, rpc_uri->uri_len, "%s%s%s%s%d",
+                         rpc_uri->module_uri, FASTRPC_DOMAIN_URI,
+                         dom_name, FASTRPC_SESSION_URI,
+                         rpc_uri->session_id);
     }
-    ret_val = snprintf(rpc_uri->uri, rpc_uri->uri_len, "%s%s%s%s%d",
-                       rpc_uri->module_uri, FASTRPC_DOMAIN_URI,
-                       SUBSYSTEM_NAME[domain], FASTRPC_SESSION_URI,
-                       rpc_uri->session_id);
     if (ret_val < 0) {
       nErr = AEE_EBADSIZE;
       FARF(ERROR, "ERROR 0x%x: %s Invalid Session URI length %u", nErr,
@@ -3064,6 +3064,16 @@ int remote_session_control(uint32_t req, void *data, uint32_t datalen) {
   case FASTRPC_CONTEXT_CREATE:
     VERIFYC(datalen == sizeof(fastrpc_context_create)
               && data, AEE_EBADPARM);
+    {
+      /* Normalize any legacy effective domain IDs in the array to dynamic */
+      fastrpc_context_create *ctx = (fastrpc_context_create *)data;
+      if (ctx->effec_domain_ids && ctx->num_domain_ids > 0) {
+        uint32_t ci;
+        for (ci = 0; ci < ctx->num_domain_ids; ci++)
+          ctx->effec_domain_ids[ci] = (uint32_t)normalize_effec_domain_id(
+                                        (int)ctx->effec_domain_ids[ci]);
+      }
+    }
     VERIFY(AEE_SUCCESS == (nErr = fastrpc_create_context(data)));
     break;
   case FASTRPC_CONTEXT_DESTROY:
@@ -3094,10 +3104,80 @@ bail:
   return nErr;
 }
 
-/* Function to get domain id from URI
- * @uri: URI string
- * @type: Type of URI
- * @returns: 0 on success, valid non-zero error code on failure
+/*
+ * get_domain_name_str - return domain name string for a domain ID.
+ * For legacy IDs uses SUBSYSTEM_NAME[]; for dynamic logical IDs queries Level-1.
+ */
+static const char *get_domain_name_str(int domain_id) {
+  if (IS_DYNAMIC_DOMAIN_ID(domain_id)) {
+    static __thread char name_buf[MAX_DOMAIN_NAMELEN];
+    fastrpc_domain_internal d;
+
+    if (!fastrpc_get_domain_by_logical_id(domain_id, &d))
+      return "unknown";
+    strlcpy(name_buf, d.domain_info.name, sizeof(name_buf));
+    return name_buf;
+  }
+  if (domain_id >= 0 && domain_id < NUM_DOMAINS)
+    return SUBSYSTEM_NAME[domain_id];
+  return "unknown";
+}
+
+/*
+ * legacy_uri_to_logical_id - look up the Level-1 dynamic logical_id for a
+ * legacy URI token (e.g. "&_dom=cdsp"). If the Level-1 table has been
+ * populated and the legacy domain has a dynamic equivalent, return that
+ * logical_id so both legacy and dynamic URI paths converge on the same
+ * session. Falls back to fallback_id if Level-1 is not yet populated.
+ */
+static int legacy_uri_to_logical_id(const char *legacy_name, int fallback_id) {
+  fastrpc_domain_internal d;
+
+  if (!fastrpc_get_domain_by_name(legacy_name, strlen(legacy_name), &d))
+    return fallback_id;
+  return (int)d.domain_info.id;
+}
+
+static int try_uri_domain_match(const char *uri) {
+  char dom_tok[MAX_DOMAIN_NAMELEN + 8]; /* "&_dom=" + name + NUL */
+  int logical_id;
+
+  /*
+   * Legacy URI tokens: convert to dynamic logical_id via Level-1 table.
+   * Both "&_dom=cdsp" and "&_dom=nsp1000" then resolve to logical_id=1000,
+   * producing the same effective domain ID (100000 for session 0).
+   * Fallback to legacy domain ID if Level-1 is not yet populated.
+   */
+  if (strstr(uri, ADSP_DOMAIN))  return legacy_uri_to_logical_id("adsp",  ADSP_DOMAIN_ID);
+  if (strstr(uri, MDSP_DOMAIN))  return legacy_uri_to_logical_id("mdsp",  MDSP_DOMAIN_ID);
+  if (strstr(uri, SDSP_DOMAIN))  return legacy_uri_to_logical_id("sdsp",  SDSP_DOMAIN_ID);
+  if (strstr(uri, CDSP1_DOMAIN)) return legacy_uri_to_logical_id("cdsp1", CDSP1_DOMAIN_ID);
+  if (strstr(uri, CDSP_DOMAIN))  return legacy_uri_to_logical_id("cdsp",  CDSP_DOMAIN_ID);
+  if (strstr(uri, GDSP0_DOMAIN)) return legacy_uri_to_logical_id("gdsp0", GDSP0_DOMAIN_ID);
+  if (strstr(uri, GDSP1_DOMAIN)) return legacy_uri_to_logical_id("gdsp1", GDSP1_DOMAIN_ID);
+
+  /*
+   * Try dynamic domain names from Level-1 table ("&_dom=hpass5001" etc.).
+   * Iterate whatever was actually discovered instead of a hardcoded
+   * instance range, so a newly discovered instance (e.g. a 5th NSP core)
+   * is matched here with no code change.
+   */
+  for (logical_id = fastrpc_next_logical_domain(-1); logical_id >= 0;
+       logical_id = fastrpc_next_logical_domain(logical_id)) {
+    fastrpc_domain_internal d;
+
+    if (!fastrpc_get_domain_by_logical_id(logical_id, &d)) continue;
+    snprintf(dom_tok, sizeof(dom_tok), "&_dom=%s", d.domain_info.name);
+    if (strstr(uri, dom_tok)) return logical_id;
+  }
+  return INVALID_DOMAIN_ID;
+}
+
+/* Resolves a domain name/URI to a domain id.
+ * @uri: standalone domain name, or a module URI containing "&_dom="/"&_session="
+ * @type: DOMAIN_NAME_STAND_ALONE or DOMAIN_NAME_IN_URI
+ * @returns: logical/legacy domain id, or an effective domain id for
+ *           DOMAIN_NAME_IN_URI; INVALID_DOMAIN_ID on no match.
  */
 int get_domain_from_name(const char *uri, uint32_t type) {
   int domain = DEFAULT_DOMAIN_ID;
@@ -3106,6 +3186,25 @@ int get_domain_from_name(const char *uri, uint32_t type) {
   int effec_domain = -1;
 
   if (uri && type == DOMAIN_NAME_STAND_ALONE) {
+    /*
+     * Query Level-1 table first — handles both dynamic ("hpass5001",
+     * "nsp1002") and legacy ("adsp", "cdsp", "cdsp1") names, always
+     * returning the logical_id:
+     *   logical_id=5000 ("adsp")    → effec = 5000*100+session = 500000+session
+     *   logical_id=5001 ("hpass5001") → effec = 500100+session
+     * For a legacy-aliased domain, this still resolves to the same
+     * Level-2 session entry that remote_handle64_open("lib.so&_dom=adsp")
+     * would use, since normalize_effec_domain_id() (called at every API
+     * entry point) converts an old app's legacy numeric effective ID
+     * (e.g. 3 for cdsp) to the same dynamic session.
+     */
+    fastrpc_domain_internal dinfo;
+
+    if (fastrpc_get_domain_by_name(uri, strlen(uri), &dinfo)) {
+      domain = dinfo.domain_info.id; /* always logical_id */
+      return domain;
+    }
+    /* Level-1 not yet populated or name not found — fall back to static map */
     if (!strncmp(uri, ADSP_DOMAIN_NAME, strlen(ADSP_DOMAIN_NAME))) {
       domain = ADSP_DOMAIN_ID;
     } else if (!strncmp(uri, MDSP_DOMAIN_NAME,
@@ -3133,22 +3232,8 @@ int get_domain_from_name(const char *uri, uint32_t type) {
     }
   }
   if (uri && type == DOMAIN_NAME_IN_URI) {
-    if (strstr(uri, ADSP_DOMAIN)) {
-      domain = ADSP_DOMAIN_ID;
-    } else if (strstr(uri, MDSP_DOMAIN)) {
-      domain = MDSP_DOMAIN_ID;
-    } else if (strstr(uri, SDSP_DOMAIN)) {
-      domain = SDSP_DOMAIN_ID;
-    } else if (strstr(uri, CDSP1_DOMAIN)) {
-      domain = CDSP1_DOMAIN_ID;
-    } else if (strstr(uri, CDSP_DOMAIN)) {
-      domain = CDSP_DOMAIN_ID;
-    } else if (strstr(uri, GDSP0_DOMAIN)) {
-      domain = GDSP0_DOMAIN_ID;
-    } else if (strstr(uri, GDSP1_DOMAIN)) {
-      domain = GDSP1_DOMAIN_ID;
-    } else {
-      domain = INVALID_DOMAIN_ID;
+    domain = try_uri_domain_match(uri);
+    if (domain == INVALID_DOMAIN_ID) {
       FARF(ERROR, "Invalid domain name: %s\n", uri);
       goto bail;
     }
@@ -3162,6 +3247,17 @@ int get_domain_from_name(const char *uri, uint32_t type) {
       if (session_id >= 0 && session_id < MAX_SESSIONS_LIMIT &&
           (effec_domain = fastrpc_get_or_create_effec_domain(
                domain, session_id)) >= 0) {
+        domain = effec_domain;
+      } else {
+        domain = INVALID_DOMAIN_ID;
+        FARF(ERROR, "Invalid domain name: %s\n", uri);
+      }
+    } else if (IS_DYNAMIC_DOMAIN_ID(domain)) {
+      /* No "&_session=" token: default to session 0. For dynamic domains
+       * the logical_id itself is not a valid effective domain id (unlike
+       * legacy, where the legacy id already is the session-0 effective
+       * id), so it must still be converted. */
+      if ((effec_domain = fastrpc_get_or_create_effec_domain(domain, 0)) >= 0) {
         domain = effec_domain;
       } else {
         domain = INVALID_DOMAIN_ID;
@@ -3199,7 +3295,7 @@ int get_current_domain(void) {
     // use default domain if thread tlskey not found
     domain = DEFAULT_DOMAIN_ID;
   }
-  return domain;
+  return normalize_effec_domain_id(domain);
 }
 
 bool is_process_exiting(int domain) {
@@ -3242,8 +3338,13 @@ PL_DEP(listener_android);
 
 static int attach_guestos(int domain) {
   int attach;
+  int dom = GET_DOMAIN_FROM_EFFEC_DOMAIN_ID(domain);
 
-  switch (GET_DOMAIN_FROM_EFFEC_DOMAIN_ID(domain)) {
+  /* Dynamic domain IDs (HPASS/NSP): always USERPD */
+  if (IS_DYNAMIC_DOMAIN_ID(dom))
+    return USERPD;
+
+  switch (dom) {
   case MDSP_DOMAIN_ID:
   case ADSP_DOMAIN_ID:
   case CDSP_DOMAIN_ID:
@@ -3292,7 +3393,7 @@ static void domain_deinit(int domain) {
     fastrpc_notif_domain_deinit(domain);
     fastrpc_clear_handle_list(MULTI_DOMAIN_HANDLE_LIST_ID, domain);
     fastrpc_clear_handle_list(REVERSE_HANDLE_LIST_ID, domain);
-    if (domain == DEFAULT_DOMAIN_ID) {
+    if (domain == normalize_effec_domain_id(DEFAULT_DOMAIN_ID)) {
       fastrpc_clear_handle_list(NON_DOMAIN_HANDLE_LIST_ID, domain);
     }
     fastrpc_perf_deinit();
@@ -3333,8 +3434,42 @@ static void domain_deinit(int domain) {
   pthread_mutex_unlock(&hlist_lookup(domain)->mut);
 }
 
+/*
+ * get_dynamic_device_names - build device node paths from the raw /dev
+ * basename captured at discovery time (dev_basename, e.g. "cdsp3",
+ * "gdsp0"), instead of a fixed per-instance table -- so any dynamically
+ * discovered instance can be opened, not just the ones hardcoded here
+ * when this table was last written.
+ */
+static void get_dynamic_device_names(int domain,
+                                     const char **secure_name,
+                                     const char **non_secure_name)
+{
+  static __thread char non_secure_buf[sizeof("/dev/fastrpc-") + MAX_DOMAIN_NAMELEN];
+  static __thread char secure_buf[sizeof("/dev/fastrpc-") + MAX_DOMAIN_NAMELEN + sizeof("-secure") - 1];
+  fastrpc_domain_internal d;
+
+  if (!fastrpc_get_domain_by_logical_id(domain, &d) || !d.dev_basename[0]) {
+    FARF(ERROR, "ERROR: %s: no device basename for logical_id %d", __func__, domain);
+    *secure_name = NULL;
+    *non_secure_name = NULL;
+    return;
+  }
+
+  snprintf(non_secure_buf, sizeof(non_secure_buf), "/dev/fastrpc-%s", d.dev_basename);
+  snprintf(secure_buf, sizeof(secure_buf), "/dev/fastrpc-%s-secure", d.dev_basename);
+  *non_secure_name = non_secure_buf;
+  *secure_name = secure_buf;
+}
+
 void get_domain_device_names(int domain_id, const char **secure_name, const char **non_secure_name) {
-  int domain = GET_DOMAIN_FROM_EFFEC_DOMAIN_ID(domain_id);
+  int domain = domain_id;
+
+  /* Dynamic domain: derive device node from the discovered basename */
+  if (IS_DYNAMIC_DOMAIN_ID(domain)) {
+    get_dynamic_device_names(domain, secure_name, non_secure_name);
+    return;
+  }
 
   switch (domain) {
   case ADSP_DOMAIN_ID:
@@ -3382,12 +3517,22 @@ int open_device_node(int domain_id) {
   if (IS_VALID_DOMAIN_ID(domain)) {
     get_domain_device_names(domain, &secure_dev, &non_secure_dev);
     dev = open(secure_dev, O_NONBLOCK);
+    if (dev >= 0) {
+      FARF(ALWAYS,
+           "%s: opened secure device node %s -> fd %d for domain %d, sess %d",
+           __func__, secure_dev, dev, domain_id, sess_id);
+    }
     if ((dev < 0) && ((errno == ENOENT) || (errno == EACCES))) {
       FARF(RUNTIME_RPC_HIGH,
            "Device node %s open failed for domain %d (errno %s),"
            "falling back to node %s \n",
            secure_dev, domain, strerror(errno), non_secure_dev);
       dev = open(non_secure_dev, O_NONBLOCK);
+      if (dev >= 0) {
+        FARF(ALWAYS,
+             "%s: opened non-secure device node %s -> fd %d for domain %d, sess %d",
+             __func__, non_secure_dev, dev, domain_id, sess_id);
+      }
     }
   }
   if (dev < 0)
@@ -3522,17 +3667,22 @@ static int try_open_shell_file(int domain, const char *shell_name,
   if (!nErr)
     goto bail;
 
-  /* 3. Fallback to /vendor/dsp/<subsystem>/<shell_name> */
+  /* 3. Fallback to /vendor/dsp/<subsystem>/<shell_name>
+   * Use get_domain_name_str() to handle both legacy (SUBSYSTEM_NAME[]) and
+   * dynamic domain IDs ("hpass5001" etc.) without out-of-bounds access. */
   free(absName);
   absName = NULL;
-  /* "<vendor>" + "<subsys>" + "/" + "<name>" + NUL */
-  absNameLen = strlen(VENDOR_DSP_LOCATION) + strlen(SUBSYSTEM_NAME[domain]) +
-               1 + strlen(shell_name) + 1;
-  VERIFYC(NULL != (absName = (char *)malloc(absNameLen)), AEE_ENOMEMORY);
-  strlcpy(absName, VENDOR_DSP_LOCATION, absNameLen);
-  strlcat(absName, SUBSYSTEM_NAME[domain], absNameLen);
-  strlcat(absName, "/", absNameLen);
-  strlcat(absName, shell_name, absNameLen);
+  {
+    const char *subsys = get_domain_name_str(domain);
+    /* "<vendor>" + "<subsys>" + "/" + "<name>" + NUL */
+    absNameLen = strlen(VENDOR_DSP_LOCATION) + strlen(subsys) +
+                 1 + strlen(shell_name) + 1;
+    VERIFYC(NULL != (absName = (char *)malloc(absNameLen)), AEE_ENOMEMORY);
+    strlcpy(absName, VENDOR_DSP_LOCATION, absNameLen);
+    strlcat(absName, subsys, absNameLen);
+    strlcat(absName, "/", absNameLen);
+    strlcat(absName, shell_name, absNameLen);
+  }
 
   nErr = apps_std_fopen(absName, "r", fh);
 bail:
@@ -3562,7 +3712,13 @@ static int open_shell(int domain_id, apps_std_FILE *fh, int unsigned_shell) {
     shell_name = UNSIGNED_SHELL;
   }
 
-  if (domain == MDSP_DOMAIN_ID) {
+  bool is_mdsp = (domain == MDSP_DOMAIN_ID);
+  if (!is_mdsp && IS_DYNAMIC_DOMAIN_ID(domain)) {
+    fastrpc_domain_internal d;
+    is_mdsp = fastrpc_get_domain_by_logical_id(domain, &d) &&
+              d.domain_info.type == FASTRPC_MDSP;
+  }
+  if (is_mdsp) {
     return nErr;
   }
   /*
@@ -3570,7 +3726,22 @@ static int open_shell(int domain_id, apps_std_FILE *fh, int unsigned_shell) {
    * success, so a NULL here would fault instead of returning an error.
    */
   VERIFYC(fh != NULL, AEE_EBADPARM);
-  snprintf(domain_str, sizeof(domain_str), "%d", domain);
+
+  /*
+   * Prefer the legacy domain ID for shell naming/path lookup when this
+   * dynamic domain has one, so targets shipping only the legacy-named
+   * shell (e.g. fastrpc_shell_3 for nsp1000/cdsp) keep working.
+   */
+  int shell_id = domain;
+  if (IS_DYNAMIC_DOMAIN_ID(domain)) {
+    fastrpc_domain_internal d;
+
+    if (fastrpc_get_domain_by_logical_id(domain, &d) && d.legacy_domain_id >= 0)
+      shell_id = d.legacy_domain_id;
+    /* else: new domain (e.g. nsp1002) with no legacy — keep logical_id */
+  }
+
+  snprintf(domain_str, sizeof(domain_str), "%d", shell_id);
 
   /*
    * Preferred name is the domain-suffixed one, e.g. "fastrpc_shell_3" /
@@ -3582,7 +3753,11 @@ static int open_shell(int domain_id, apps_std_FILE *fh, int unsigned_shell) {
   strlcpy(shell_absName, shell_name, shell_absNameLen);
   strlcat(shell_absName, domain_str, shell_absNameLen);
 
-  nErr = try_open_shell_file(domain, shell_absName, fh);
+  /*
+   * Pass shell_id (not domain) so path 3's subsystem directory
+   * (/vendor/dsp/<subsys>/<name>) also uses the legacy name when available.
+   */
+  nErr = try_open_shell_file(shell_id, shell_absName, fh);
   if (!nErr) {
     FARF(RUNTIME_RPC_HIGH, "Successfully opened %s, domain %d", shell_absName,
          domain);
@@ -3601,10 +3776,11 @@ static int open_shell(int domain_id, apps_std_FILE *fh, int unsigned_shell) {
           AEE_ENOMEMORY);
   strlcpy(shell_baseName, shell_name, shell_baseNameLen + 1);
 
-  nErr = try_open_shell_file(domain, shell_baseName, fh);
+  nErr = try_open_shell_file(shell_id, shell_baseName, fh);
   if (!nErr)
     FARF(RUNTIME_RPC_HIGH, "Successfully opened %s, domain %d", shell_baseName,
          domain);
+
 bail:
   /*
    * Log before releasing the name buffers, so the exact names attempted can be
@@ -3612,7 +3788,13 @@ bail:
    * first candidate already succeeded.
    */
   if (nErr != AEE_SUCCESS) {
-    if (domain == SDSP_DOMAIN_ID && fh != NULL) {
+    bool is_sdsp = (domain == SDSP_DOMAIN_ID);
+    if (!is_sdsp && IS_DYNAMIC_DOMAIN_ID(domain)) {
+      fastrpc_domain_internal d;
+      is_sdsp = fastrpc_get_domain_by_logical_id(domain, &d) &&
+                d.domain_info.type == FASTRPC_SDSP;
+    }
+    if (is_sdsp && fh != NULL) {
       nErr = AEE_SUCCESS;
       *fh = -1;
     } else {
@@ -3640,13 +3822,31 @@ bail:
  *
  * Return	: 0 on success
  */
+/*
+ * dom may be a legacy bare id or a dynamic logical id (see
+ * GET_DOMAIN_FROM_EFFEC_DOMAIN_ID). The legacy id list below only covers
+ * NSP instances that predate dynamic discovery -- any NSP reached via its
+ * dynamic logical id (e.g. cdsp2/cdsp3) is recognized via the Level-1
+ * table's type instead.
+ */
+static bool is_nsp_domain(int dom) {
+  if (dom == CDSP_DOMAIN_ID || dom == CDSP1_DOMAIN_ID ||
+      dom == GDSP0_DOMAIN_ID || dom == GDSP1_DOMAIN_ID)
+    return true;
+  if (IS_DYNAMIC_DOMAIN_ID(dom)) {
+    fastrpc_domain_internal d;
+    return fastrpc_get_domain_by_logical_id(dom, &d) &&
+           d.domain_info.type == FASTRPC_NSP;
+  }
+  return false;
+}
+
 static int fastrpc_enable_kernel_optimizations(int domain) {
   int nErr = AEE_SUCCESS, dev = hlist_lookup(domain)->dev,
       dom = GET_DOMAIN_FROM_EFFEC_DOMAIN_ID(domain);
   const uint32_t max_concurrency = 25;
 
-  if (((dom != CDSP_DOMAIN_ID) && (dom != CDSP1_DOMAIN_ID) &&
-    (dom != GDSP0_DOMAIN_ID) && (dom != GDSP1_DOMAIN_ID)) || (hlist_lookup(domain)->dsppd != USERPD))
+  if (!is_nsp_domain(dom) || (hlist_lookup(domain)->dsppd != USERPD))
     goto bail;
   errno = 0;
 
@@ -4101,7 +4301,7 @@ static int domain_init(int domain, int *dev) {
   VERIFY(AEE_SUCCESS == (nErr = fastrpc_mem_open(domain)));
   VERIFY(AEE_SUCCESS == (nErr = apps_mem_init(domain)));
 
-  if (dom == CDSP_DOMAIN_ID || dom == CDSP1_DOMAIN_ID || dom == GDSP0_DOMAIN_ID || dom == GDSP1_DOMAIN_ID) {
+  if (is_nsp_domain(dom)) {
     panic_handle = get_adsp_current_process1_handle(domain);
     if (panic_handle != INVALID_HANDLE) {
       int ret = -1;
@@ -4150,7 +4350,13 @@ static int domain_init(int domain, int *dev) {
   VERIFY(AEE_SUCCESS == (nErr = listener_android_domain_init(
                              domain, hlist_lookup(domain)->th_params.update_requested,
                              &hlist_lookup(domain)->th_params.r_sem)));
-  if ((dom != SDSP_DOMAIN_ID) && hlist_lookup(domain)->dsppd == ROOT_PD) {
+  bool is_sdsp_domain = (dom == SDSP_DOMAIN_ID);
+  if (!is_sdsp_domain && IS_DYNAMIC_DOMAIN_ID(dom)) {
+    fastrpc_domain_internal sdsp_d;
+    is_sdsp_domain = fastrpc_get_domain_by_logical_id(dom, &sdsp_d) &&
+                     sdsp_d.domain_info.type == FASTRPC_SDSP;
+  }
+  if (!is_sdsp_domain && hlist_lookup(domain)->dsppd == ROOT_PD) {
     remote_handle64 handle = 0;
     handle = get_adspmsgd_adsp1_handle(domain);
     if (handle != INVALID_HANDLE) {
@@ -4210,6 +4416,7 @@ static void fastrpc_apps_user_deinit(void) {
     pthread_mutex_destroy(&info.mut);
     hlist_table_ready = false;
   }
+  fastrpc_domain_table_deinit();
   fastrpc_context_table_deinit();
   fastrpc_config_deinit();
   deinit_process_signals();
@@ -4251,7 +4458,7 @@ static void exit_thread(void *value) {
           FARF(RUNTIME_RPC_HIGH, "%s: nErr:0x%x, dom:%d, h:0x%" PRIx64,
                __func__, nErr, domain, handle);
         }
-      } else if (domain == DEFAULT_DOMAIN_ID) {
+      } else if (domain == normalize_effec_domain_id(DEFAULT_DOMAIN_ID)) {
         nErr = adsp_current_process_thread_exit();
         if (nErr) {
           FARF(RUNTIME_RPC_HIGH, "%s: nErr:0x%x, dom:%d", __func__, nErr, domain);
@@ -4304,6 +4511,29 @@ static int fastrpc_apps_user_init(void) {
       }
     }
   }
+
+  /* Build Level-1 domain table by probing device nodes, then create
+   * Level-2 session entries for any dynamic domains discovered. */
+  fastrpc_domain_table_init();
+  fastrpc_discover_domains();
+  {
+    /* Create 2 sessions (0 and 1) for every dynamic domain actually found
+     * in the Level-1 table -- iterated directly instead of a hardcoded
+     * instance range, so any family/count discovered at runtime (including
+     * ones added after this was written) gets pre-created the same way. */
+    int logical_id, s;
+
+    for (logical_id = fastrpc_next_logical_domain(-1); logical_id >= 0;
+         logical_id = fastrpc_next_logical_domain(logical_id)) {
+      for (s = 0; s < 2; s++) {
+        /* hlist_get_or_create_session uses GET_EFFECTIVE_DOMAIN_ID
+         * which now handles dynamic IDs correctly */
+        VERIFYC(NULL != hlist_get_or_create_session(logical_id, s),
+                AEE_ENOMEMORY);
+      }
+    }
+  }
+
   listener_android_init();
   GenCrc32Tab(POLY32, crc_table);
   fastrpc_notif_init();

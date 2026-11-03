@@ -11,6 +11,7 @@ LIBDSPRPC_CFLAGS += -DPARSE_YAML @YAML_CFLAGS@ @BSD_CFLAGS@ -DDEFAULT_DSP_SEARCH
 endif
 
 LIBDSPRPC_SOURCES = \
+		fastrpc_domains.c \
 		fastrpc_apps_user.c \
 		fastrpc_perf.c \
 		fastrpc_pm.c \

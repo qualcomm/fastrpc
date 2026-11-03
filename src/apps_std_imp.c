@@ -113,6 +113,27 @@ static QList apps_std_qlst;
 static QList apps_std_dirlist;
 static pthread_mutex_t apps_std_mt;
 extern const char *SUBSYSTEM_NAME[];
+
+/*
+ * SUBSYSTEM_NAME[] only covers legacy domain ids [0, NUM_DOMAINS). A dynamic
+ * logical id (>= FASTRPC_MIN_LOGICAL_DOMAIN_ID) indexed directly into it is
+ * an out-of-bounds read, so route it through the Level-1 domain table.
+ */
+static const char *apps_std_domain_name(int domain) {
+  if (IS_DYNAMIC_DOMAIN_ID(domain)) {
+    static __thread char name_buf[MAX_DOMAIN_NAMELEN];
+    fastrpc_domain_internal d;
+
+    if (!fastrpc_get_domain_by_logical_id(domain, &d))
+      return "reserved";
+    strlcpy(name_buf, d.domain_info.name, sizeof(name_buf));
+    return name_buf;
+  }
+  if (domain >= 0 && domain < NUM_DOMAINS)
+    return SUBSYSTEM_NAME[domain];
+  return "reserved";
+}
+
 struct mem_io_to_fd {
   QNode qn;
   int size;

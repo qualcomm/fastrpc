@@ -57,7 +57,10 @@ const char *DSP_ARCH_KEY[NUM_DOMAINS] = {
 static char DSP_ARCH_FROM_YAML[NUM_DOMAINS][8] = {{0}};
 
 const char *get_dsp_arch_from_yaml(int domain) {
-  if (!IS_VALID_DOMAIN_ID(domain))
+  /* DSP_ARCH_FROM_YAML[] only covers legacy domain ids [0, NUM_DOMAINS) --
+   * IS_VALID_DOMAIN_ID() also accepts dynamic logical ids, which would be
+   * an out-of-bounds index here. */
+  if (domain < 0 || domain >= NUM_DOMAINS)
     return NULL;
   if (DSP_ARCH_FROM_YAML[domain][0] == '\0')
     return NULL;

@@ -170,7 +170,7 @@ static int get_domain(int domain) {
   if (domain == -1) {
     domain = get_current_domain();
   }
-  return domain;
+  return normalize_effec_domain_id(domain);
 }
 
 void dspsignal_domain_deinit(int domain) {

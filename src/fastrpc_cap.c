@@ -29,6 +29,12 @@ static inline uint32_t fastrpc_check_if_dsp_present_pil(uint32_t domain) {
 	// mark rest of the list as reserved to avoid out of bound access
 	const char *SUBSYSTEM_DEV_NAME[] = {"/dev/subsys_adsp", "", "/dev/subsys_slpi", "/dev/subsys_cdsp", "/dev/subsys_cdsp1", "/dev/subsys_gdsp0", "/dev/subsys_gdsp1", "reserved", "reserved", "reserved", "reserved", "reserved", "reserved", "reserved", "reserved", "reserved"};
 
+	// GET_DOMAIN_FROM_EFFEC_DOMAIN_ID() returns the dynamic logical_id
+	// as-is for dynamic domains, which is not a valid index into this
+	// legacy-only array.
+	if (domain >= (uint32_t)(sizeof(SUBSYSTEM_DEV_NAME) / sizeof(SUBSYSTEM_DEV_NAME[0])))
+		return 0;
+
 	// If device file is present, then target supports that DSP
 	if (!stat(SUBSYSTEM_DEV_NAME[domain], &sb)) {
 		domain_supported = 1;
@@ -90,7 +96,13 @@ bail :
 }
 
 int fastrpc_get_cap(uint32_t domain, uint32_t attributeID, uint32_t *capability) {
+   /* dom is deliberately computed from the ORIGINAL domain, before
+    * normalization below, so the legacy domain number stays in the kernel
+    * ioctl payload for a legacy-origin call. Only the session lookup
+    * (fastrpc_session_open()) needs the normalized dynamic id. */
    int nErr = AEE_SUCCESS, dev = -1, dom = GET_DOMAIN_FROM_EFFEC_DOMAIN_ID(domain);
+
+   domain = (uint32_t)normalize_effec_domain_id((int)domain);
 
    VERIFYC(IS_VALID_EFFECTIVE_DOMAIN_ID(domain), AEE_EBADPARM);
    VERIFYC(capability != NULL, AEE_EBADPARM);
@@ -99,9 +111,33 @@ int fastrpc_get_cap(uint32_t domain, uint32_t attributeID, uint32_t *capability)
    *capability = 0;
 
    if (attributeID == DOMAIN_SUPPORT) {
-      *capability = fastrpc_check_if_dsp_present_pil(dom);
-      if (*capability == 0) {
-        *capability = fastrpc_check_if_dsp_present_rproc(dom);
+      /*
+       * fastrpc_check_if_dsp_present_{pil,rproc}() only know the 7 legacy
+       * subsystem names. A dynamic domain with a legacy alias (e.g.
+       * cdsp/nsp1000) can still be checked via that alias. A dynamic-only
+       * instance (e.g. cdsp2/nsp1002) has no legacy name to check against --
+       * fall back to the Level-1 table's discovered status instead, which
+       * is itself a presence signal (populated from /dev/fastrpc-* node
+       * presence, at least as direct as the legacy subsys/remoteproc checks).
+       */
+      uint32_t presence_dom = dom;
+      bool checked_via_table = false;
+      if (IS_DYNAMIC_DOMAIN_ID(dom)) {
+        fastrpc_domain_internal d;
+        if (fastrpc_get_domain_by_logical_id(dom, &d)) {
+          if (d.legacy_domain_id >= 0) {
+            presence_dom = (uint32_t)d.legacy_domain_id;
+          } else {
+            *capability = d.domain_info.status ? 1 : 0;
+            checked_via_table = true;
+          }
+        }
+      }
+      if (!checked_via_table) {
+        *capability = fastrpc_check_if_dsp_present_pil(presence_dom);
+        if (*capability == 0) {
+          *capability = fastrpc_check_if_dsp_present_rproc(presence_dom);
+        }
       }
       if (*capability == 0) {
         FARF(ALWAYS, "Warning! %s domain %d is not present\n", __func__, dom);
@@ -109,7 +145,7 @@ int fastrpc_get_cap(uint32_t domain, uint32_t attributeID, uint32_t *capability)
       goto bail;
    }
 
-   VERIFY(AEE_SUCCESS == (nErr = fastrpc_session_open(dom, &dev)));
+   VERIFY(AEE_SUCCESS == (nErr = fastrpc_session_open(domain, &dev)));
    errno = 0;
    nErr = ioctl_getdspinfo(dev, dom, attributeID, capability);
    if(nErr) {
@@ -121,7 +157,7 @@ int fastrpc_get_cap(uint32_t domain, uint32_t attributeID, uint32_t *capability)
 
 bail:
    if(dev != -1)
-      fastrpc_session_close(dom, dev);
+      fastrpc_session_close(domain, dev);
    if (nErr) {
       FARF(ERROR, "Warning 0x%x: %s failed to get attribute %u for domain %u (errno %s)", nErr, __func__, attributeID, domain, strerror(errno));
    }
@@ -143,7 +179,7 @@ static int check_status_notif_version2_capability(int domain)
 {
 	int nErr = 0;
 	struct remote_dsp_capability cap = {0};
-	cap.domain = GET_DOMAIN_FROM_EFFEC_DOMAIN_ID(domain);
+	cap.domain = domain;
 	cap.attribute_ID = STATUS_NOTIFICATION_SUPPORT;
 
 	nErr= fastrpc_get_cap(cap.domain, cap.attribute_ID, &cap.capability);
