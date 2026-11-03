@@ -139,7 +139,7 @@ int ioctl_getinfo(int dev, uint32_t *info) {
 
 int ioctl_getdspinfo(int dev, int domain, uint32_t attr, uint32_t *capability) {
   int ioErr = AEE_SUCCESS;
-  static struct fastrpc_ioctl_capability cap = {0};
+  struct fastrpc_ioctl_capability cap = {0};
 
   if (attr >= PERF_V2_DRIVER_SUPPORT && attr < FASTRPC_MAX_ATTRIBUTES) {
     *capability = 0;

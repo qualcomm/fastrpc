@@ -160,6 +160,13 @@ bool fastrpc_get_cached_shell_path(int logical_id, int unsigned_shell,
 void fastrpc_set_cached_shell_path(int logical_id, int unsigned_shell,
                                    const char *path);
 
+/* Domain-status notification API; callbacks fire on up/down change. */
+void fastrpc_domain_status_notif_init(void);
+void fastrpc_domain_status_notif_deinit(void);
+void fastrpc_notify_domain_status(fastrpc_domain domain_info);
+int  fastrpc_register_domain_status_notif(fastrpc_domain_notif_info *info);
+int  fastrpc_deregister_domain_status_notif(fastrpc_domain_notif_info *info);
+
 /* True if a session entry exists for the effective domain id */
 bool fastrpc_is_valid_effec_domain(int effec_domain_id);
 

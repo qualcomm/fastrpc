@@ -32,6 +32,7 @@ static fastrpc_domain_table g_domain_table;
 
 static struct fastrpc_domain_hash_node *domain_table_find(int logical_id);
 int fastrpc_discover_domains(void);
+void fastrpc_notify_domain_status(fastrpc_domain domain_info);
 
 /* Fallback poll interval (ms). */
 #define FASTRPC_POLLING_INTERVAL_MS     1000
@@ -250,10 +251,14 @@ static void fastrpc_handle_dev_event(const char *filename, bool appeared)
 		return; /* no change */
 	}
 	node->domain_obj.domain_info.status = new_status;
+	fastrpc_domain domain_info = node->domain_obj.domain_info;
 	pthread_mutex_unlock(&g_domain_table.mut);
 
 	if (appeared)
 		g_poller.domains_exist = true;
+
+	/* Fire callbacks outside the table lock */
+	fastrpc_notify_domain_status(domain_info);
 }
 
 static void *fastrpc_inotify_watcher_thread(void *arg)
@@ -493,6 +498,20 @@ static void fastrpc_polling_watcher_deinit(void)
 	g_poller.domains_exist  = false;
 }
 
+/* -----------------------------------------------------------------------
+ * Domain-status notification list.
+ * ----------------------------------------------------------------------- */
+struct fastrpc_domain_status_notif {
+	QNode qn;
+	int                                 domain_id;   /* logical_id or -1 for type filter */
+	fastrpc_domain_type                 domain_type; /* used when domain_id == -1 */
+	void                               *context;
+	fastrpc_domain_status_notif_fn_t    notifier_fn;
+};
+
+static QList             domain_status_notif_list;
+static pthread_mutex_t   domain_status_notif_mut = PTHREAD_MUTEX_INITIALIZER;
+
 void fastrpc_domains_table_lock(void)
 {
 	pthread_mutex_lock(&g_domain_table.mut);
@@ -529,6 +548,147 @@ static struct fastrpc_domain_hash_node *domain_table_find(int logical_id)
 	HASH_FIND_INT(g_domain_table.tbl, &logical_id, node);
 	pthread_mutex_unlock(&g_domain_table.mut);
 	return node;
+}
+
+void fastrpc_domain_status_notif_init(void)
+{
+	QList_Ctor(&domain_status_notif_list);
+}
+
+void fastrpc_domain_status_notif_deinit(void)
+{
+	QNode *pn = NULL, *pnn = NULL;
+	struct fastrpc_domain_status_notif *node = NULL;
+
+	pthread_mutex_lock(&domain_status_notif_mut);
+	if (!QList_IsEmpty(&domain_status_notif_list)) {
+		QLIST_NEXTSAFE_FOR_ALL(&domain_status_notif_list, pn, pnn) {
+			node = STD_RECOVER_REC(struct fastrpc_domain_status_notif, qn, pn);
+			if (node) {
+				QNode_DequeueZ(&node->qn);
+				free(node);
+			}
+		}
+	}
+	pthread_mutex_unlock(&domain_status_notif_mut);
+	/*
+	 * domain_status_notif_mut is a static PTHREAD_MUTEX_INITIALIZER, never
+	 * pthread_mutex_init()'d by fastrpc_domain_status_notif_init() -- it's
+	 * valid for the whole process lifetime. Do not destroy it here: this
+	 * deinit can run more than once per process (e.g. fastrpc_apps_user_init()
+	 * calls it from its own failure path, and the normal process-exit path
+	 * calls it again), and locking an already-destroyed mutex on any
+	 * subsequent call is undefined behavior.
+	 */
+}
+
+/* Callbacks run outside domain_status_notif_mut to avoid reentrant deadlock. */
+void fastrpc_notify_domain_status(fastrpc_domain domain_info)
+{
+	QNode *pn = NULL, *pnn = NULL;
+	struct fastrpc_domain_status_notif *node = NULL;
+	struct { fastrpc_domain_status_notif_fn_t fn; void *ctx; } *cbs = NULL, *grown;
+	int count = 0, cap = 0, i;
+
+	pthread_mutex_lock(&domain_status_notif_mut);
+	QLIST_NEXTSAFE_FOR_ALL(&domain_status_notif_list, pn, pnn) {
+		node = STD_RECOVER_REC(struct fastrpc_domain_status_notif, qn, pn);
+		if (!node || !fastrpc_domain_filter_matches(node->domain_id,
+		                                            node->domain_type,
+		                                            &domain_info))
+			continue;
+		if (count == cap) {
+			cap = cap ? cap * 2 : 4;
+			grown = realloc(cbs, cap * sizeof(*cbs));
+			if (!grown)
+				break;
+			cbs = grown;
+		}
+		cbs[count].fn  = node->notifier_fn;
+		cbs[count].ctx = node->context;
+		count++;
+	}
+	pthread_mutex_unlock(&domain_status_notif_mut);
+
+	for (i = 0; i < count; i++)
+		cbs[i].fn(cbs[i].ctx, &domain_info);
+	free(cbs);
+}
+
+/* Also fires a catch-up callback for already-discovered matching domains. */
+int fastrpc_register_domain_status_notif(fastrpc_domain_notif_info *info)
+{
+	struct fastrpc_domain_status_notif *node = NULL;
+	struct fastrpc_domain_hash_node *dnode = NULL, *tmp = NULL;
+	fastrpc_domain snapshot[FASTRPC_MAX_DISCOVERED_DOMAINS];
+	int snapshot_count = 0, i;
+	int nErr = AEE_SUCCESS;
+
+	VERIFYC(info && info->notifier_fn, AEE_EBADPARM);
+	/*
+	 * -1 is the documented wildcard-by-type sentinel; any other negative
+	 * value is invalid input, not a wildcard. Without this check it falls
+	 * through to fastrpc_domain_filter_matches()'s domain_id>=0 branch,
+	 * which treats any id<0 the same as -1, silently matching every
+	 * domain regardless of the caller's domain_type.
+	 */
+	VERIFYC(info->domain_id >= -1, AEE_EBADPARM);
+
+	VERIFYC(NULL != (node = calloc(1, sizeof(*node))), AEE_ENOMEMORY);
+	QNode_CtorZ(&node->qn);
+	node->domain_id   = info->domain_id;
+	node->domain_type = (info->domain_id == -1) ? info->domain_type
+	                                             : FASTRPC_ALL_DOMAINS;
+	node->context     = info->context;
+	node->notifier_fn = info->notifier_fn;
+
+	pthread_mutex_lock(&domain_status_notif_mut);
+	QList_AppendNode(&domain_status_notif_list, &node->qn);
+	pthread_mutex_unlock(&domain_status_notif_mut);
+
+	fastrpc_domains_table_lock();
+	HASH_ITER(hh, g_domain_table.tbl, dnode, tmp) {
+		if (snapshot_count >= FASTRPC_MAX_DISCOVERED_DOMAINS)
+			break;
+		if (fastrpc_domain_filter_matches(node->domain_id, node->domain_type,
+		                                  &dnode->domain_obj.domain_info))
+			snapshot[snapshot_count++] = dnode->domain_obj.domain_info;
+	}
+	fastrpc_domains_table_unlock();
+
+	for (i = 0; i < snapshot_count; i++)
+		node->notifier_fn(node->context, &snapshot[i]);
+bail:
+	if (nErr)
+		free(node);
+	return nErr;
+}
+
+int fastrpc_deregister_domain_status_notif(fastrpc_domain_notif_info *info)
+{
+	QNode *pn = NULL, *pnn = NULL;
+	struct fastrpc_domain_status_notif *node = NULL;
+	int nErr = AEE_ENOSUCH;
+
+	VERIFYC(info && info->notifier_fn, AEE_EBADPARM);
+	pthread_mutex_lock(&domain_status_notif_mut);
+	QLIST_NEXTSAFE_FOR_ALL(&domain_status_notif_list, pn, pnn) {
+		node = STD_RECOVER_REC(struct fastrpc_domain_status_notif, qn, pn);
+		if (node &&
+		    node->domain_id   == info->domain_id &&
+		    node->domain_type == ((info->domain_id == -1)
+		                          ? info->domain_type : FASTRPC_ALL_DOMAINS) &&
+		    node->context     == info->context &&
+		    node->notifier_fn == info->notifier_fn) {
+			QNode_DequeueZ(&node->qn);
+			free(node);
+			nErr = AEE_SUCCESS;
+			break;
+		}
+	}
+	pthread_mutex_unlock(&domain_status_notif_mut);
+bail:
+	return nErr;
 }
 
 void fastrpc_domain_table_init(void)
@@ -576,6 +736,7 @@ int fastrpc_discover_domains(void)
 		int instance_id, logical_id, legacy_id;
 		const char *legacy_nm;
 		struct fastrpc_domain_hash_node *node;
+		int new_status, old_status;
 
 		if (!fastrpc_dev_basename(de->d_name, base, sizeof(base)))
 			continue;
@@ -602,10 +763,12 @@ int fastrpc_discover_domains(void)
 		 * under this same lock.
 		 */
 		pthread_mutex_lock(&g_domain_table.mut);
+		new_status = 1;
+		old_status = node->domain_obj.domain_info.status;
 		node->domain_obj.domain_info.id          = logical_id;
 		node->domain_obj.domain_info.instance_id = instance_id;
 		node->domain_obj.domain_info.type        = type;
-		node->domain_obj.domain_info.status      = 1;
+		node->domain_obj.domain_info.status      = new_status;
 		node->domain_obj.domain_info.card        = 0;
 		node->domain_obj.domain_info.soc_id      = 0;
 		strlcpy(node->domain_obj.domain_info.name, name, MAX_DOMAIN_NAMELEN);
@@ -614,6 +777,7 @@ int fastrpc_discover_domains(void)
 		if (legacy_nm && legacy_nm[0])
 			strlcpy(node->domain_obj.legacy_domain_name,
 				legacy_nm, MAX_DOMAIN_NAMELEN);
+		fastrpc_domain domain_info = node->domain_obj.domain_info;
 		pthread_mutex_unlock(&g_domain_table.mut);
 
 		/*
@@ -625,12 +789,25 @@ int fastrpc_discover_domains(void)
 		 * on every discovery pass.
 		 */
 		fastrpc_ensure_default_session(logical_id);
+
+		/*
+		 * Fire domain-status callbacks when status changes. This handles:
+		 *   - DSP coming up after being down  (0→1)
+		 *   - SSR recovery (1→0→1)
+		 *   - First discovery when callbacks are already registered
+		 *     and the domain is found up (0→1 for new entry)
+		 * Fired outside the lock -- see fastrpc_notify_domain_status().
+		 */
+		if (old_status != new_status)
+			fastrpc_notify_domain_status(domain_info);
 	}
 	closedir(dirp);
 
 	/* Anything previously up but not seen this pass is now down (SSR etc). */
 	{
 		struct fastrpc_domain_hash_node *node, *tmp;
+		fastrpc_domain down[FASTRPC_MAX_DISCOVERED_DOMAINS];
+		int down_count = 0;
 
 		pthread_mutex_lock(&g_domain_table.mut);
 		HASH_ITER(hh, g_domain_table.tbl, node, tmp) {
@@ -644,10 +821,18 @@ int fastrpc_discover_domains(void)
 					break;
 				}
 			}
-			if (!seen)
-				node->domain_obj.domain_info.status = 0;
+			if (seen)
+				continue;
+
+			node->domain_obj.domain_info.status = 0;
+			if (down_count < FASTRPC_MAX_DISCOVERED_DOMAINS)
+				down[down_count++] = node->domain_obj.domain_info;
 		}
 		pthread_mutex_unlock(&g_domain_table.mut);
+
+		/* fire callbacks outside g_domain_table.mut */
+		for (i = 0; i < down_count; i++)
+			fastrpc_notify_domain_status(down[i]);
 	}
 
 	return AEE_SUCCESS;
@@ -957,6 +1142,17 @@ int remote_system_request(system_req_payload *req)
 	switch (req->id) {
 	case FASTRPC_GET_DOMAINS:
 		return fastrpc_get_domains(&req->sys);
+
+	case FASTRPC_REGISTER_DOMAIN_STATUS_NOTIFICATIONS:
+		/*
+		 * Register a callback for domain up/down events. Registration
+		 * is accepted unconditionally. Callbacks fire during the
+		 * re-probe in fastrpc_get_domains() when status changes.
+		 */
+		return fastrpc_register_domain_status_notif(&req->domain_notif);
+
+	case FASTRPC_DEREGISTER_DOMAIN_STATUS_NOTIFICATIONS:
+		return fastrpc_deregister_domain_status_notif(&req->domain_notif);
 
 	default:
 		return AEE_EBADPARM;
