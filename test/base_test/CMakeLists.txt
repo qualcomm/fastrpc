@@ -269,3 +269,4 @@ target_compile_definitions(unity PRIVATE ${UNITY_COMPILE_DEFS})
 add_library(unity_dep INTERFACE)
 target_link_libraries(unity_dep INTERFACE unity)
 
+add_subdirectory(idl)
