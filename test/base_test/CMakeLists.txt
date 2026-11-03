@@ -270,3 +270,4 @@ add_library(unity_dep INTERFACE)
 target_link_libraries(unity_dep INTERFACE unity)
 
 add_subdirectory(idl)
+add_subdirectory(utils)
