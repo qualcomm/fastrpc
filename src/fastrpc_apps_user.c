@@ -3692,24 +3692,31 @@ static void get_process_testsig(apps_std_FILE *fp, uint64_t *ptrlen) {
  *	@domain		: DSP domain ID (not effective domain ID)
  *	@shell_name	: Shell file name to look for
  *	@fh		: [out] Handle of the opened file
+ *	@out_path	: [out] NULL-safe; on success, malloc'd absolute path that
+ *			  was actually opened. Caller must free() it.
  *
  * Return	: AEE_SUCCESS if the file was opened, error code otherwise
  */
 static int try_open_shell_file(int domain, const char *shell_name,
-                               apps_std_FILE *fh) {
+                               apps_std_FILE *fh, char **out_path) {
   char *absName = NULL;
   size_t absNameLen = 0;
   int nErr = AEE_SUCCESS;
 
+  if (out_path)
+    *out_path = NULL;
+
   /*
    * domain is the DSP domain (GET_DOMAIN_FROM_EFFEC_DOMAIN_ID() of the
-   * effective id), so it is in [0, NUM_DOMAINS) and safe to use as a
-   * SUBSYSTEM_NAME[] index.
+   * effective id) -- legacy or dynamic. fopen_from_dirlist() takes it
+   * explicitly and resolves the path name via the Level-1 table for
+   * dynamic domains, rather than indexing SUBSYSTEM_NAME[] directly.
    */
   VERIFYC(IS_VALID_DOMAIN_ID(domain) && shell_name && fh, AEE_EBADPARM);
 
   /* 1. Search the configured DSP library locations. */
-  nErr = fopen_from_dirlist(DSP_LIBS_LOCATION, ";", "r", shell_name, fh);
+  nErr = fopen_from_dirlist(DSP_LIBS_LOCATION, ";", "r", shell_name, domain, fh,
+                            out_path);
   if (!nErr)
     goto bail;
 
@@ -3720,8 +3727,13 @@ static int try_open_shell_file(int domain, const char *shell_name,
   strlcat(absName, shell_name, absNameLen);
 
   nErr = apps_std_fopen(absName, "r", fh);
-  if (!nErr)
+  if (!nErr) {
+    if (out_path) {
+      *out_path = absName;   /* ownership transferred to caller */
+      absName = NULL;
+    }
     goto bail;
+  }
 
   /* 3. Fallback to /vendor/dsp/<subsystem>/<shell_name>
    * Use get_domain_name_str() to handle both legacy (SUBSYSTEM_NAME[]) and
@@ -3741,6 +3753,10 @@ static int try_open_shell_file(int domain, const char *shell_name,
   }
 
   nErr = apps_std_fopen(absName, "r", fh);
+  if (!nErr && out_path) {
+    *out_path = absName;   /* ownership transferred to caller */
+    absName = NULL;
+  }
 bail:
   free(absName);
   if (nErr != AEE_SUCCESS) {
@@ -3755,14 +3771,16 @@ bail:
   return nErr;
 }
 
-static int open_shell(int domain_id, apps_std_FILE *fh, int unsigned_shell) {
+static int open_shell(int domain_id, int dev, apps_std_FILE *fh, int unsigned_shell) {
   char *shell_absName = NULL;
   char *shell_baseName = NULL;
+  char *resolved_path = NULL;
   char domain_str[16] = {0};
   size_t shell_absNameLen = 0, shell_baseNameLen = 0;
   int nErr = AEE_SUCCESS;
   int domain = GET_DOMAIN_FROM_EFFEC_DOMAIN_ID(domain_id);
   const char *shell_name = SIGNED_SHELL;
+  (void)dev;
 
   if (1 == unsigned_shell) {
     shell_name = UNSIGNED_SHELL;
@@ -3782,6 +3800,40 @@ static int open_shell(int domain_id, apps_std_FILE *fh, int unsigned_shell) {
    * success, so a NULL here would fault instead of returning an error.
    */
   VERIFYC(fh != NULL, AEE_EBADPARM);
+
+  /*
+   * cap_logical_id identifies the physical domain for both the HPASS/LPASS
+   * capability lookup below and the shell-path cache -- a legacy-aliased
+   * domain (e.g. "adsp") shares the same cache slot as its dynamic logical
+   * id (hpass5000), since both resolve to the same physical shell.
+   */
+  int cap_logical_id = IS_DYNAMIC_DOMAIN_ID(domain)
+                            ? domain
+                            : fastrpc_get_logical_id_for_legacy(domain);
+
+  /*
+   * Cache hit: this physical domain already had its shell resolved by an
+   * earlier session (open_shell() runs once per session, not once per
+   * physical domain, so this skips the entire DSP_LIBS_LOCATION/vendor
+   * search -- and the DSP_IMAGE_CONFIG capability query below it -- for
+   * every session after the first). Falls through to the full search below
+   * if the cached path no longer opens (file genuinely moved/removed).
+   */
+  if (cap_logical_id >= 0) {
+    char cached_path[PATH_MAX];
+
+    if (fastrpc_get_cached_shell_path(cap_logical_id, unsigned_shell,
+                                       cached_path, sizeof(cached_path))) {
+      nErr = apps_std_fopen(cached_path, "r", fh);
+      if (!nErr) {
+        FARF(RUNTIME_RPC_HIGH, "%s: cache hit, opened '%s' directly for domain %d",
+             __func__, cached_path, domain);
+        return nErr;
+      }
+      FARF(ALWAYS, "%s: cached shell path '%s' no longer valid for domain %d, "
+           "re-resolving", __func__, cached_path, domain);
+    }
+  }
 
   /*
    * Prefer the legacy domain ID for shell naming/path lookup when this
@@ -3810,10 +3862,10 @@ static int open_shell(int domain_id, apps_std_FILE *fh, int unsigned_shell) {
   strlcat(shell_absName, domain_str, shell_absNameLen);
 
   /*
-   * Pass shell_id (not domain) so path 3's subsystem directory
-   * (/vendor/dsp/<subsys>/<name>) also uses the legacy name when available.
+   * Pass shell_id (not domain) so path 3's subsystem directory also uses
+   * the legacy name when available.
    */
-  nErr = try_open_shell_file(shell_id, shell_absName, fh);
+  nErr = try_open_shell_file(shell_id, shell_absName, fh, &resolved_path);
   if (!nErr) {
     FARF(RUNTIME_RPC_HIGH, "Successfully opened %s, domain %d", shell_absName,
          domain);
@@ -3832,10 +3884,73 @@ static int open_shell(int domain_id, apps_std_FILE *fh, int unsigned_shell) {
           AEE_ENOMEMORY);
   strlcpy(shell_baseName, shell_name, shell_baseNameLen + 1);
 
-  nErr = try_open_shell_file(shell_id, shell_baseName, fh);
-  if (!nErr)
+  nErr = try_open_shell_file(shell_id, shell_baseName, fh, &resolved_path);
+  if (!nErr) {
     FARF(RUNTIME_RPC_HIGH, "Successfully opened %s, domain %d", shell_baseName,
          domain);
+    goto bail;
+  }
+
+  /*
+   * Fallback to cdsp's shell for other instances of the SAME cdsp family
+   * (cdsp1, cdsp2, cdsp3, ... -- all compute cores sharing one image with
+   * cdsp, whether or not they have a legacy alias). Restricted by
+   * dev_basename prefix rather than FASTRPC_NSP type alone: gdsp shares
+   * that type but is a different DSP family with its own distinct image
+   * -- if gdsp0/gdsp1's own shell search genuinely fails, fail loudly
+   * instead of silently loading cdsp's shell onto it.
+   */
+  if (IS_DYNAMIC_DOMAIN_ID(domain)) {
+    fastrpc_domain_internal dinfo;
+    bool have_dinfo = fastrpc_get_domain_by_logical_id(domain, &dinfo);
+    int base_shell_id = -1;
+
+    if (have_dinfo && dinfo.domain_info.type == FASTRPC_NSP &&
+        !strncmp(dinfo.dev_basename, "cdsp", 4) &&
+        shell_id != CDSP_DOMAIN_ID) {
+      base_shell_id = CDSP_DOMAIN_ID;
+
+      FARF(ALWAYS,
+           "%s: NSP fallback: domain %d (shell_id=%d) → retrying '%s' "
+           "with primary shell_id=%d",
+           __func__, domain, shell_id, shell_baseName, base_shell_id);
+
+      nErr = try_open_shell_file(base_shell_id, shell_baseName, fh, &resolved_path);
+      if (!nErr)
+        FARF(ALWAYS,
+             "Opened shell '%s' via NSP fallback (domain=%d → cdsp/)",
+             shell_baseName, domain);
+
+    }
+  }
+
+  /*
+   * adsp family (LPASS/HPASS, distinguished by capability not name):
+   * fall back to plain "adsp"'s shell for instances with no shell of
+   * their own (adsp1, adsp2, ... -- all sharing the same image as plain
+   * adsp unless they ship an override). Mirrors the cdsp/NSP fallback
+   * above; no image-config-specific subdir search.
+   */
+  if (IS_DYNAMIC_DOMAIN_ID(domain)) {
+    fastrpc_domain_internal dinfo;
+    bool have_dinfo = fastrpc_get_domain_by_logical_id(domain, &dinfo);
+
+    if (have_dinfo && (dinfo.domain_info.type == FASTRPC_HPASS ||
+                       dinfo.domain_info.type == FASTRPC_LPASS) &&
+        !strncmp(dinfo.dev_basename, "adsp", 4) &&
+        shell_id != ADSP_DOMAIN_ID) {
+      FARF(ALWAYS,
+           "%s: adsp fallback: domain %d (shell_id=%d) → retrying '%s' "
+           "with primary shell_id=%d",
+           __func__, domain, shell_id, shell_baseName, ADSP_DOMAIN_ID);
+
+      nErr = try_open_shell_file(ADSP_DOMAIN_ID, shell_baseName, fh, &resolved_path);
+      if (!nErr)
+        FARF(ALWAYS,
+             "Opened shell '%s' via adsp fallback (domain=%d → adsp/)",
+             shell_baseName, domain);
+    }
+  }
 
 bail:
   /*
@@ -3862,7 +3977,10 @@ bail:
            shell_baseName ? shell_baseName : "<not built>",
            DSP_LIBS_LOCATION, VENDOR_DSP_LOCATION, strerror(errno));
     }
+  } else if (cap_logical_id >= 0 && resolved_path) {
+    fastrpc_set_cached_shell_path(cap_logical_id, unsigned_shell, resolved_path);
   }
+  free(resolved_path);
   free(shell_absName);
   free(shell_baseName);
   return nErr;
@@ -4116,7 +4234,7 @@ static int remote_init(int domain) {
 
 #ifndef VIRTUAL_FASTRPC
 #if !defined(SYSTEM_RPC_LIBRARY)
-      open_shell(domain, &fh, hlist_lookup(domain)->unsigned_module);
+      open_shell(domain, dev, &fh, hlist_lookup(domain)->unsigned_module);
 #endif
 #endif
 

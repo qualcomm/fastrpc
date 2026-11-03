@@ -5,6 +5,7 @@
 #define FASTRPC_INTERNAL_H
 
 #include <errno.h>
+#include <limits.h>
 #include <stdbool.h>
 #include <semaphore.h>
 
@@ -103,11 +104,19 @@ typedef struct {
      * trigger classification (e.g. open a session) rather than trust it. */
     bool           type_classified;
 
+    /* Cached DSP_IMAGE_CONFIG capability (enum dsp_image_config), 0 = not yet queried. */
+    uint32_t       dsp_image_config;
+
     /* Raw /dev basename as discovered (e.g. "cdsp3", "gdsp0") -- the
      * "fastrpc-" prefix and "-secure" suffix stripped. Lets device-open
      * reconstruct both node paths for ANY discovered instance instead of
      * a fixed per-instance table. */
     char           dev_basename[MAX_DOMAIN_NAMELEN];
+
+    /* Cached shell file path that worked last time, per signed(0)/unsigned(1)
+     * variant -- avoids re-walking DSP_LIBS_LOCATION/VENDOR_DSP_LOCATION on
+     * every session of a domain whose shell isn't at the default location. */
+    char           shell_path[2][PATH_MAX];
 } fastrpc_domain_internal;
 
 /*
@@ -173,6 +182,15 @@ int convert_legacy_effec_domain_to_dynamic(int effec_domain);
  * resolved from capability, not name). */
 void fastrpc_set_domain_type(int logical_id, fastrpc_domain_type type);
 
+/* Caches DSP_IMAGE_CONFIG per logical domain; queries the kernel once. */
+uint32_t fastrpc_get_cached_image_config(int logical_id, int dev);
+
+/* Per-physical-domain shell path cache -- see shell_path[] above. */
+bool fastrpc_get_cached_shell_path(int logical_id, int unsigned_shell,
+                                   char *out, size_t out_len);
+void fastrpc_set_cached_shell_path(int logical_id, int unsigned_shell,
+                                   const char *path);
+
 /* True if a session entry exists for the effective domain id */
 bool fastrpc_is_valid_effec_domain(int effec_domain_id);
 
@@ -200,7 +218,7 @@ bool fastrpc_is_valid_effec_domain(int effec_domain_id);
  **/
 
 /* Max value of remote_dsp_attributes, used to validate the attribute ID*/
-#define FASTRPC_MAX_DSP_ATTRIBUTES MCID_MULTICAST + 1
+#define FASTRPC_MAX_DSP_ATTRIBUTES DSP_IMAGE_CONFIG + 1
 
 /* Max value of remote_mem_map_flags, used to validate the input flag */
 #define REMOTE_MAP_MAX_FLAG REMOTE_MAP_MEM_STATIC + 1

@@ -126,7 +126,11 @@ static const char *apps_std_domain_name(int domain) {
 
     if (!fastrpc_get_domain_by_logical_id(domain, &d))
       return "reserved";
-    strlcpy(name_buf, d.domain_info.name, sizeof(name_buf));
+    /* dev_basename ("adsp1") is the real on-device directory name; the
+     * synthetic discovery name (domain_info.name, "hpass5001") never
+     * corresponds to an actual directory on target. */
+    strlcpy(name_buf, d.dev_basename[0] ? d.dev_basename : d.domain_info.name,
+            sizeof(name_buf));
     return name_buf;
   }
   if (domain >= 0 && domain < NUM_DOMAINS)
@@ -1025,13 +1029,16 @@ bail:
   return nErr;
 }
 
-int fopen_from_dirlist(const char *dirList, const char *delim, 
-    const char *mode, const char *name, apps_std_FILE *psout) {
+int fopen_from_dirlist(const char *dirList, const char *delim,
+    const char *mode, const char *name, int domain, apps_std_FILE *psout,
+    char **out_path) {
   int nErr = AEE_SUCCESS;
   char *absName = NULL, *dirName = NULL, *pos = NULL;
   char *dirListCopy = NULL, *dirListPtr = NULL;
   uint16_t absNameLen = 0;
-  int domain = GET_DOMAIN_FROM_EFFEC_DOMAIN_ID(get_current_domain());
+
+  if (out_path)
+    *out_path = NULL;
 
   VERIFYC(NULL != dirList, AEE_EBADPARM);
 
@@ -1050,14 +1057,15 @@ int fopen_from_dirlist(const char *dirList, const char *delim,
     }
 
     // Append domain to path
+    const char *domain_name = apps_std_domain_name(domain);
     absNameLen =
-        strlen(dirName) + strlen(name) + 2 + strlen(SUBSYSTEM_NAME[domain]) + 1;
+        strlen(dirName) + strlen(name) + 2 + strlen(domain_name) + 1;
     VERIFYC(NULL != (absName = (char *)malloc(sizeof(char) * absNameLen)),
             AEE_ENOMEMORY);
     if ('\0' != *dirName) {
       strlcpy(absName, dirName, absNameLen);
       strlcat(absName, "/", absNameLen);
-      strlcat(absName, SUBSYSTEM_NAME[domain], absNameLen);
+      strlcat(absName, domain_name, absNameLen);
       strlcat(absName, "/", absNameLen);
       strlcat(absName, name, absNameLen);
     } else {
@@ -1068,7 +1076,10 @@ int fopen_from_dirlist(const char *dirList, const char *delim,
     if (AEE_SUCCESS == nErr) {
       // Success
       FARF(ALWAYS, "Successfully opened file %s", absName);
-      FREEIF(absName);
+      if (out_path)
+        *out_path = absName;   /* ownership transferred to caller */
+      else
+        FREEIF(absName);
       FREEIF(dirListCopy);
       return nErr;
     }
@@ -1095,7 +1106,10 @@ int fopen_from_dirlist(const char *dirList, const char *delim,
           (strncmp(name, TESTSIG_FILE_NAME,
                        strlen(TESTSIG_FILE_NAME)) != 0))
         FARF(ALWAYS, "Successfully opened file %s", name);
-      FREEIF(absName);
+      if (out_path)
+        *out_path = absName;   /* ownership transferred to caller */
+      else
+        FREEIF(absName);
       FREEIF(dirListCopy);
       return nErr;
     }
@@ -1141,7 +1155,8 @@ __QAIC_IMPL_EXPORT int __QAIC_IMPL(apps_std_fopen_with_env)(
   VERIFYC(NULL != (dirList = dirListBuf), AEE_EBADPARM);
   FARF(RUNTIME_RPC_HIGH, "%s dirList %s", __func__, dirList);
 
-  nErr = fopen_from_dirlist(dirList, delim, mode, name, psout);
+  nErr = fopen_from_dirlist(dirList, delim, mode, name,
+      GET_DOMAIN_FROM_EFFEC_DOMAIN_ID(get_current_domain()), psout, NULL);
 
 bail:
   FREEIF(dirListBuf);
@@ -1222,14 +1237,15 @@ __QAIC_IMPL_EXPORT int __QAIC_IMPL(apps_std_fopen_with_env_fd)(
     }
 
     // Append domain to path
+    const char *domain_name = apps_std_domain_name(domain);
     absNameLen =
-        strlen(dirName) + strlen(name) + 2 + strlen("adsp") + 1;
+        strlen(dirName) + strlen(name) + 2 + strlen(domain_name) + 1;
     VERIFYC(NULL != (absName = (char *)malloc(sizeof(char) * absNameLen)),
             AEE_ENOMEMORY);
     if ('\0' != *dirName) {
       strlcpy(absName, dirName, absNameLen);
       strlcat(absName, "/", absNameLen);
-      strlcat(absName, SUBSYSTEM_NAME[domain], absNameLen);
+      strlcat(absName, domain_name, absNameLen);
       strlcat(absName, "/", absNameLen);
       strlcat(absName, name, absNameLen);
     } else {
@@ -1357,12 +1373,13 @@ __QAIC_HEADER_EXPORT int __QAIC_IMPL(apps_std_get_search_paths_with_env)(
   // Get the number of folders
   path = strtok_r(dirListBuf, delim, &saveptr);
   while (path != NULL) {
-    pathDomainLen = strlen(path) + 1 + strlen("adsp") + 1;
+    const char *domain_name = apps_std_domain_name(domain);
+    pathDomainLen = strlen(path) + 1 + strlen(domain_name) + 1;
     VERIFYC(pathDomain = (char *)malloc(sizeof(char) * (pathDomainLen)),
             AEE_ENOMEMORY);
     strlcpy(pathDomain, path, pathDomainLen);
     strlcat(pathDomain, "/", pathDomainLen);
-    strlcat(pathDomain, SUBSYSTEM_NAME[domain], pathDomainLen);
+    strlcat(pathDomain, domain_name, pathDomainLen);
     // If the path exists, add it to the return
     if ((stat(pathDomain, &st) == 0) && (S_ISDIR(st.st_mode))) {
       *maxPathLen = STD_MAX(*maxPathLen, strlen(pathDomain) + 1);

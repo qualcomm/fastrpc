@@ -914,6 +914,121 @@ static int fastrpc_get_domains(fastrpc_domains_info *info)
 	return AEE_SUCCESS;
 }
 
+/* Caches DSP_IMAGE_CONFIG per physical domain; queries the kernel once. */
+uint32_t fastrpc_get_cached_image_config(int logical_id, int dev)
+{
+    struct fastrpc_domain_hash_node *node = domain_table_find(logical_id);
+
+    if (!node) {
+        FARF(ALWAYS,
+             "%s: logical_id %d not in Level-1 table — returning 0 (unknown)",
+             __func__, logical_id);
+        return 0;
+    }
+
+    /* dsp_image_config is a node field -- only safe to touch under the
+     * table lock, same as domain_info (see fastrpc_discover_domains()).
+     */
+    pthread_mutex_lock(&g_domain_table.mut);
+    uint32_t cached_cfg = node->domain_obj.dsp_image_config;
+    pthread_mutex_unlock(&g_domain_table.mut);
+
+    /* Cache hit: return immediately without any kernel call */
+    if (cached_cfg != 0) {
+        FARF(RUNTIME_RPC_HIGH,
+             "%s: cache hit for logical_id %d → dsp_image_config=%u",
+             __func__, logical_id, cached_cfg);
+        return cached_cfg;
+    }
+
+    /* Cache miss: query kernel via ioctl_getdspinfo() */
+    if (dev < 0) {
+        FARF(ALWAYS,
+             "%s: cache miss for logical_id %d but dev=%d — cannot query",
+             __func__, logical_id, dev);
+        return 0;
+    }
+
+    uint32_t cfg = 0;
+    int nErr = ioctl_getdspinfo(dev, logical_id, DSP_IMAGE_CONFIG, &cfg);
+    if (nErr != AEE_SUCCESS || cfg == 0) {
+        FARF(ALWAYS,
+             "Warning 0x%x: %s: DSP_IMAGE_CONFIG ioctl failed for "
+             "logical_id %d dev %d — defaulting to 0 (unknown)",
+             nErr, __func__, logical_id, dev);
+        return 0;
+    }
+
+    /* Store in Level-1 — shared across ALL sessions of this physical domain */
+    char name[MAX_DOMAIN_NAMELEN];
+    pthread_mutex_lock(&g_domain_table.mut);
+    node->domain_obj.dsp_image_config = cfg;
+    strlcpy(name, node->domain_obj.domain_info.name, sizeof(name));
+    pthread_mutex_unlock(&g_domain_table.mut);
+
+    const char *cfg_str =
+        (cfg == FASTRPC_DSP_COMPUTE)       ? "COMPUTE" :
+        (cfg == FASTRPC_DSP_COMPUTE_LITE)  ? "COMPUTE_LITE" :
+        (cfg == FASTRPC_DSP_AUDIO)         ? "AUDIO" :
+        "UNKNOWN";
+    FARF(ALWAYS,
+         "%s: cached DSP_IMAGE_CONFIG for logical_id %d (%s): %u → %s",
+         __func__, logical_id, name, cfg, cfg_str);
+
+    return cfg;
+}
+
+/*
+ * Returns the exact shell path that worked last time for this physical
+ * domain's signed (unsigned_shell=0) or unsigned (unsigned_shell=1) shell,
+ * if one was recorded -- avoids re-walking DSP_LIBS_LOCATION/VENDOR_DSP_LOCATION
+ * on every session of a domain whose shell isn't at the default location.
+ * False (out untouched) if nothing cached yet.
+ */
+bool fastrpc_get_cached_shell_path(int logical_id, int unsigned_shell,
+                                   char *out, size_t out_len)
+{
+	struct fastrpc_domain_hash_node *node = domain_table_find(logical_id);
+	int idx = unsigned_shell ? 1 : 0;
+	bool found = false;
+
+	if (!node || !out)
+		return false;
+
+	pthread_mutex_lock(&g_domain_table.mut);
+	if (node->domain_obj.shell_path[idx][0] != '\0') {
+		strlcpy(out, node->domain_obj.shell_path[idx], out_len);
+		found = true;
+	}
+	pthread_mutex_unlock(&g_domain_table.mut);
+	return found;
+}
+
+/* Caches the exact shell path that worked for a physical domain, separately
+ * for the signed/unsigned shell variant (a client can run different
+ * sessions of the same domain as signed vs unsigned). */
+void fastrpc_set_cached_shell_path(int logical_id, int unsigned_shell,
+                                   const char *path)
+{
+	struct fastrpc_domain_hash_node *node = domain_table_find(logical_id);
+	int idx = unsigned_shell ? 1 : 0;
+
+	if (!node) {
+		FARF(ALWAYS,
+		     "%s: logical_id %d not in Level-1 table — not caching shell path",
+		     __func__, logical_id);
+		return;
+	}
+
+	pthread_mutex_lock(&g_domain_table.mut);
+	strlcpy(node->domain_obj.shell_path[idx], path,
+		sizeof(node->domain_obj.shell_path[idx]));
+	pthread_mutex_unlock(&g_domain_table.mut);
+
+	FARF(ALWAYS, "%s: cached %s shell path for logical_id %d: %s",
+	     __func__, unsigned_shell ? "unsigned" : "signed", logical_id, path);
+}
+
 int remote_system_request(system_req_payload *req)
 {
 	int nErr = AEE_SUCCESS;
