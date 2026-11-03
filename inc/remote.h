@@ -314,7 +314,27 @@ enum remote_dsp_attributes {
     ASYNC_FASTRPC_SUPPORT,        /** Async FastRPC Support */
     STATUS_NOTIFICATION_SUPPORT , /** DSP User PD status notification Support */
     MCID_MULTICAST,               /** Multicast widget programming */
+    DSP_IMAGE_CONFIG        = 14, /** Configuration of image flashed on DSP.
+                                    * Will be one of `enum dsp_image_config`
+                                    */
     /** Update FASTRPC_MAX_DSP_ATTRIBUTES when adding new value to this enum */
+};
+
+/**
+ * @enum dsp_image_config
+ * @brief Type of DSP image that can be queried as a capability using the
+ * `DSP_IMAGE_CONFIG` attribute with `remote_handle_control` api with
+ * `DSPRPC_GET_DSP_INFO` request id.
+ */
+enum dsp_image_config {
+    /** Compute image (eg: NSP) */
+    FASTRPC_DSP_COMPUTE = 1,
+
+    /** Compute-lite image (eg: HPASS with NSP image) */
+    FASTRPC_DSP_COMPUTE_LITE,
+
+    /** Audio image (eg: LPASS / HPASS with audio image) */
+    FASTRPC_DSP_AUDIO,
 };
 
 /** Macro for backward compatibility. Clients can compile wakelock request code

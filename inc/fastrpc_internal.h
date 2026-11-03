@@ -5,6 +5,7 @@
 #define FASTRPC_INTERNAL_H
 
 #include <errno.h>
+#include <limits.h>
 #include <stdbool.h>
 #include <semaphore.h>
 
@@ -76,11 +77,19 @@ typedef struct {
     int            legacy_domain_id;        /* e.g. ADSP_DOMAIN_ID=0, or -1 */
     char           legacy_domain_name[MAX_DOMAIN_NAMELEN]; /* e.g. "adsp" or "" */
 
+    /* Cached DSP_IMAGE_CONFIG capability (enum dsp_image_config), 0 = not yet queried. */
+    uint32_t       dsp_image_config;
+
     /* Raw /dev basename as discovered (e.g. "cdsp3", "gdsp0") -- the
      * "fastrpc-" prefix and "-secure" suffix stripped. Lets device-open
      * reconstruct both node paths for ANY discovered instance instead of
      * a fixed per-instance table. */
     char           dev_basename[MAX_DOMAIN_NAMELEN];
+
+    /* Cached shell file path that worked last time, per signed(0)/unsigned(1)
+     * variant -- avoids re-walking DSP_LIBS_LOCATION/VENDOR_DSP_LOCATION on
+     * every session of a domain whose shell isn't at the default location. */
+    char           shell_path[2][PATH_MAX];
 } fastrpc_domain_internal;
 
 /*
@@ -141,6 +150,15 @@ int fastrpc_next_logical_domain(int prev);
  */
 int convert_legacy_domain_to_dynamic(int domain);
 int convert_legacy_effec_domain_to_dynamic(int effec_domain);
+
+/* Caches DSP_IMAGE_CONFIG per logical domain; queries the kernel once. */
+uint32_t fastrpc_get_cached_image_config(int logical_id, int dev);
+
+/* Per-physical-domain shell path cache -- see shell_path[] above. */
+bool fastrpc_get_cached_shell_path(int logical_id, int unsigned_shell,
+                                   char *out, size_t out_len);
+void fastrpc_set_cached_shell_path(int logical_id, int unsigned_shell,
+                                   const char *path);
 
 /* True if a session entry exists for the effective domain id */
 bool fastrpc_is_valid_effec_domain(int effec_domain_id);
