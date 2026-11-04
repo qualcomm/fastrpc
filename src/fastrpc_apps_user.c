@@ -2704,6 +2704,21 @@ bail:
   return nErr;
 }
 
+/*
+ * A caller's domain_name buffer is only guaranteed to hold domain_name_len
+ * bytes (per the struct docs: "length, without NULL character"), not a NUL
+ * terminator -- get_domain_from_name() takes no length and calls strlen()
+ * internally, so passing the raw pointer directly is an out-of-bounds read
+ * for a buffer sized to exactly domain_name_len. Copy at most that many
+ * bytes (clamped to the local buffer) and NUL-terminate before use.
+ */
+static void safe_domain_name_copy(char *dst, size_t dst_size,
+                                   const char *src, uint32_t src_len) {
+  size_t n = src_len < (dst_size - 1) ? src_len : (dst_size - 1);
+  memcpy(dst, src, n);
+  dst[n] = '\0';
+}
+
 /* Set remote session parameters like thread stack size, running on unsigned PD,
  * killing remote process PD etc */
 int remote_session_control(uint32_t req, void *data, uint32_t datalen) {
@@ -2971,10 +2986,14 @@ int remote_session_control(uint32_t req, void *data, uint32_t datalen) {
     struct handle_list *hl = NULL;
 
     VERIFYC(datalen == sizeof(remote_rpc_reserve_new_session_t), AEE_EBADPARM);
+    char domain_name_buf[32];
+
     VERIFYC(sess && sess->domain_name != NULL && sess->domain_name_len > 0 &&
                 sess->session_name && sess->session_name_len > 0,
             AEE_EBADPARM);
-    domain = get_domain_from_name(sess->domain_name, DOMAIN_NAME_STAND_ALONE);
+    safe_domain_name_copy(domain_name_buf, sizeof(domain_name_buf),
+                           sess->domain_name, sess->domain_name_len);
+    domain = get_domain_from_name(domain_name_buf, DOMAIN_NAME_STAND_ALONE);
     VERIFYC(IS_VALID_DOMAIN_ID(domain), AEE_EBADPARM);
     // Set effective_domain_id and session_id to invalid IDs
     sess->effective_domain_id = (uint32_t)-1;
@@ -3007,14 +3026,16 @@ int remote_session_control(uint32_t req, void *data, uint32_t datalen) {
     remote_rpc_effective_domain_id_t *effec_domain_id =
         (remote_rpc_effective_domain_id_t *)data;
     int effec_domain = -1;
+    char domain_name_buf[32];
 
     VERIFYC(datalen == sizeof(remote_rpc_effective_domain_id_t), AEE_EBADPARM);
     VERIFYC(effec_domain_id && effec_domain_id->domain_name &&
                 effec_domain_id->domain_name_len > 0 &&
                 effec_domain_id->session_id < MAX_SESSIONS_LIMIT,
             AEE_EBADPARM);
-    domain = get_domain_from_name(effec_domain_id->domain_name,
-                                  DOMAIN_NAME_STAND_ALONE);
+    safe_domain_name_copy(domain_name_buf, sizeof(domain_name_buf),
+                           effec_domain_id->domain_name, effec_domain_id->domain_name_len);
+    domain = get_domain_from_name(domain_name_buf, DOMAIN_NAME_STAND_ALONE);
     VERIFYC(IS_VALID_DOMAIN_ID(domain), AEE_EBADPARM);
     /* Works with or without an earlier FASTRPC_RESERVE_NEW_SESSION: the id
      * is domain + NUM_DOMAINS * session, and a session that has no entry
@@ -3028,19 +3049,31 @@ int remote_session_control(uint32_t req, void *data, uint32_t datalen) {
   case FASTRPC_GET_URI: {
     remote_rpc_get_uri_t *rpc_uri = (remote_rpc_get_uri_t *)data;
     int ret_val = -1;
+    char domain_name_buf[32];
+    char *module_uri_buf = NULL;
 
     VERIFYC(datalen == sizeof(remote_rpc_get_uri_t), AEE_EBADPARM);
     VERIFYC(rpc_uri && rpc_uri->domain_name && rpc_uri->domain_name_len > 0 &&
                 rpc_uri->session_id < MAX_SESSIONS_LIMIT,
             AEE_EBADPARM);
-    domain =
-        get_domain_from_name(rpc_uri->domain_name, DOMAIN_NAME_STAND_ALONE);
+    safe_domain_name_copy(domain_name_buf, sizeof(domain_name_buf),
+                           rpc_uri->domain_name, rpc_uri->domain_name_len);
+    domain = get_domain_from_name(domain_name_buf, DOMAIN_NAME_STAND_ALONE);
     VERIFYC(IS_VALID_DOMAIN_ID(domain), AEE_EBADPARM);
     VERIFYC(rpc_uri->module_uri != NULL && rpc_uri->module_uri_len > 0,
             AEE_EBADPARM);
     VERIFYC(rpc_uri->uri != NULL, AEE_EBADPARM);
     VERIFYC(rpc_uri->uri_len > rpc_uri->module_uri_len, AEE_EBADSIZE);
-    ret_val = snprintf(0, 0, "%s%s%s%s%d", rpc_uri->module_uri,
+    /*
+     * module_uri_len is documented as the length "without NULL character" --
+     * the caller's buffer isn't guaranteed to be NUL-terminated there, so it
+     * can't be passed directly to the %s below.
+     */
+    VERIFYC(NULL != (module_uri_buf = (char *)calloc(1, rpc_uri->module_uri_len + 1)),
+            AEE_ENOMEMORY);
+    memcpy(module_uri_buf, rpc_uri->module_uri, rpc_uri->module_uri_len);
+    module_uri_buf[rpc_uri->module_uri_len] = '\0';
+    ret_val = snprintf(0, 0, "%s%s%s%s%d", module_uri_buf,
                        FASTRPC_DOMAIN_URI, SUBSYSTEM_NAME[domain],
                        FASTRPC_SESSION_URI, rpc_uri->session_id);
     if (rpc_uri->uri_len <= ret_val) {
@@ -3051,9 +3084,10 @@ int remote_session_control(uint32_t req, void *data, uint32_t datalen) {
            nErr, __func__, rpc_uri->uri_len, ret_val);
     }
     ret_val = snprintf(rpc_uri->uri, rpc_uri->uri_len, "%s%s%s%s%d",
-                       rpc_uri->module_uri, FASTRPC_DOMAIN_URI,
+                       module_uri_buf, FASTRPC_DOMAIN_URI,
                        SUBSYSTEM_NAME[domain], FASTRPC_SESSION_URI,
                        rpc_uri->session_id);
+    free(module_uri_buf);
     if (ret_val < 0) {
       nErr = AEE_EBADSIZE;
       FARF(ERROR, "ERROR 0x%x: %s Invalid Session URI length %u", nErr,
@@ -3106,25 +3140,23 @@ int get_domain_from_name(const char *uri, uint32_t type) {
   int effec_domain = -1;
 
   if (uri && type == DOMAIN_NAME_STAND_ALONE) {
-    if (!strncmp(uri, ADSP_DOMAIN_NAME, strlen(ADSP_DOMAIN_NAME))) {
+    /*
+     * Exact match only (not strncmp/prefix) -- a prefix match would let
+     * "adsp<garbage>" silently resolve as plain "adsp".
+     */
+    if (!strcmp(uri, ADSP_DOMAIN_NAME)) {
       domain = ADSP_DOMAIN_ID;
-    } else if (!strncmp(uri, MDSP_DOMAIN_NAME,
-                            strlen(MDSP_DOMAIN_NAME))) {
+    } else if (!strcmp(uri, MDSP_DOMAIN_NAME)) {
       domain = MDSP_DOMAIN_ID;
-    } else if (!strncmp(uri, SDSP_DOMAIN_NAME,
-                            strlen(SDSP_DOMAIN_NAME))) {
+    } else if (!strcmp(uri, SDSP_DOMAIN_NAME)) {
       domain = SDSP_DOMAIN_ID;
-    } else if (!strncmp(uri, CDSP1_DOMAIN_NAME,
-                            strlen(CDSP1_DOMAIN_NAME))) {
+    } else if (!strcmp(uri, CDSP1_DOMAIN_NAME)) {
       domain = CDSP1_DOMAIN_ID;
-    } else if (!strncmp(uri, CDSP_DOMAIN_NAME,
-                            strlen(CDSP_DOMAIN_NAME))) {
+    } else if (!strcmp(uri, CDSP_DOMAIN_NAME)) {
       domain = CDSP_DOMAIN_ID;
-    } else if (!strncmp(uri, GDSP0_DOMAIN_NAME,
-                            strlen(GDSP0_DOMAIN_NAME))) {
+    } else if (!strcmp(uri, GDSP0_DOMAIN_NAME)) {
       domain = GDSP0_DOMAIN_ID;
-    } else if (!strncmp(uri, GDSP1_DOMAIN_NAME,
-                            strlen(GDSP1_DOMAIN_NAME))) {
+    } else if (!strcmp(uri, GDSP1_DOMAIN_NAME)) {
       domain = GDSP1_DOMAIN_ID;
     } else {
       domain = INVALID_DOMAIN_ID;

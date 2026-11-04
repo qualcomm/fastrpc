@@ -1078,6 +1078,9 @@ int fopen_from_dirlist(const char *dirList, const char *delim,
       FREEIF(dirListCopy);
       return nErr;
     }
+    /* Fallback attempt failed -- free before the next dirList entry
+     * reassigns absName, or this allocation leaks. */
+    FREEIF(absName);
   }
 bail:
   FREEIF(absName);
