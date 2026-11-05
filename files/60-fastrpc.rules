@@ -4,16 +4,46 @@
 ACTION=="add", SUBSYSTEM=="dma_heap", KERNEL=="system", RUN+="/bin/setfacl -m g:fastrpc:rw $env{DEVNAME}"
 
 # FastRPC DSP device nodes
-# Device nodes are owned by root:fastrpc with 0640 permissions
-ACTION=="add", SUBSYSTEM=="misc", KERNEL=="fastrpc-adsp",         OWNER="root", GROUP="fastrpc", MODE="0640", TAG+="systemd", ENV{SYSTEMD_WANTS}+="adsprpcd.service", ENV{SYSTEMD_WANTS}+="adsprpcd_audiopd.service"
-ACTION=="add", SUBSYSTEM=="misc", KERNEL=="fastrpc-adsp-secure",  TAG+="systemd", ENV{SYSTEMD_WANTS}+="adsprpcd.service", ENV{SYSTEMD_WANTS}+="adsprpcd_audiopd.service"
-ACTION=="add", SUBSYSTEM=="misc", KERNEL=="fastrpc-cdsp",         OWNER="root", GROUP="fastrpc", MODE="0640", TAG+="systemd", ENV{SYSTEMD_WANTS}+="cdsprpcd.service"
-ACTION=="add", SUBSYSTEM=="misc", KERNEL=="fastrpc-cdsp-secure",  TAG+="systemd", ENV{SYSTEMD_WANTS}+="cdsprpcd.service"
-ACTION=="add", SUBSYSTEM=="misc", KERNEL=="fastrpc-cdsp1",        OWNER="root", GROUP="fastrpc", MODE="0640", TAG+="systemd", ENV{SYSTEMD_WANTS}+="cdsp1rpcd.service"
-ACTION=="add", SUBSYSTEM=="misc", KERNEL=="fastrpc-cdsp1-secure", TAG+="systemd", ENV{SYSTEMD_WANTS}+="cdsp1rpcd.service"
-ACTION=="add", SUBSYSTEM=="misc", KERNEL=="fastrpc-gdsp0",        OWNER="root", GROUP="fastrpc", MODE="0640", TAG+="systemd", ENV{SYSTEMD_WANTS}+="gdsp0rpcd.service"
-ACTION=="add", SUBSYSTEM=="misc", KERNEL=="fastrpc-gdsp0-secure", TAG+="systemd", ENV{SYSTEMD_WANTS}+="gdsp0rpcd.service"
-ACTION=="add", SUBSYSTEM=="misc", KERNEL=="fastrpc-gdsp1",        OWNER="root", GROUP="fastrpc", MODE="0640", TAG+="systemd", ENV{SYSTEMD_WANTS}+="gdsp1rpcd.service"
-ACTION=="add", SUBSYSTEM=="misc", KERNEL=="fastrpc-gdsp1-secure", TAG+="systemd", ENV{SYSTEMD_WANTS}+="gdsp1rpcd.service"
+# Device nodes are owned by root:fastrpc with 0640 permissions.
+#
+# Instances that existed before dynamic domain discovery (adsp, cdsp,
+# cdsp1, gdsp0, gdsp1) keep their own exact-match rule pointing at their
+# original, non-templated unit name, so anything that enables/starts them
+# by that exact legacy name keeps working.
+#
+# Every other instance (adsp2+, cdsp2+) is started as an instance
+# of the adsprpcd@/cdsprpcd@ systemd template unit (see
+# files/*.service.in). The instance name is derived from the device's own
+# kernel name (PROGRAM strips the "fastrpc-" prefix and "-secure"
+# suffix), so a new instance of an already-supported family needs no new
+# rule line here -- only a genuinely new DSP family would. gdsp has no
+# template unit -- only gdsp0/gdsp1 are supported today.
+
+# adsp: bare name is legacy, adsp1/adsp2/... (no legacy name) use the template.
+ACTION=="add", SUBSYSTEM=="misc", KERNEL=="fastrpc-adsp",              OWNER="root", GROUP="fastrpc", MODE="0640", TAG+="systemd", ENV{SYSTEMD_WANTS}+="adsprpcd.service", ENV{SYSTEMD_WANTS}+="adsprpcd_audiopd.service"
+ACTION=="add", SUBSYSTEM=="misc", KERNEL=="fastrpc-adsp-secure",       TAG+="systemd", ENV{SYSTEMD_WANTS}+="adsprpcd.service", ENV{SYSTEMD_WANTS}+="adsprpcd_audiopd.service"
+ACTION=="add", SUBSYSTEM=="misc", KERNEL=="fastrpc-adsp[0-9]",         OWNER="root", GROUP="fastrpc", MODE="0640", TAG+="systemd", PROGRAM=="/bin/sh -c 'n=${1#fastrpc-}; echo ${n%-secure}' -- %k", ENV{SYSTEMD_WANTS}+="adsprpcd@%c.service", ENV{SYSTEMD_WANTS}+="adsprpcd_audiopd@%c.service"
+ACTION=="add", SUBSYSTEM=="misc", KERNEL=="fastrpc-adsp[0-9]-secure",  TAG+="systemd", PROGRAM=="/bin/sh -c 'n=${1#fastrpc-}; echo ${n%-secure}' -- %k", ENV{SYSTEMD_WANTS}+="adsprpcd@%c.service", ENV{SYSTEMD_WANTS}+="adsprpcd_audiopd@%c.service"
+ACTION=="add", SUBSYSTEM=="misc", KERNEL=="fastrpc-adsp[0-9][0-9]",        OWNER="root", GROUP="fastrpc", MODE="0640", TAG+="systemd", PROGRAM=="/bin/sh -c 'n=${1#fastrpc-}; echo ${n%-secure}' -- %k", ENV{SYSTEMD_WANTS}+="adsprpcd@%c.service", ENV{SYSTEMD_WANTS}+="adsprpcd_audiopd@%c.service"
+ACTION=="add", SUBSYSTEM=="misc", KERNEL=="fastrpc-adsp[0-9][0-9]-secure", TAG+="systemd", PROGRAM=="/bin/sh -c 'n=${1#fastrpc-}; echo ${n%-secure}' -- %k", ENV{SYSTEMD_WANTS}+="adsprpcd@%c.service", ENV{SYSTEMD_WANTS}+="adsprpcd_audiopd@%c.service"
+
+# cdsp/cdsp1: both legacy (bare name and instance "1"); cdsp2+ use the
+# template -- the single-digit glob below excludes "1" ([02-9]).
+ACTION=="add", SUBSYSTEM=="misc", KERNEL=="fastrpc-cdsp",              OWNER="root", GROUP="fastrpc", MODE="0640", TAG+="systemd", ENV{SYSTEMD_WANTS}+="cdsprpcd.service"
+ACTION=="add", SUBSYSTEM=="misc", KERNEL=="fastrpc-cdsp-secure",       TAG+="systemd", ENV{SYSTEMD_WANTS}+="cdsprpcd.service"
+ACTION=="add", SUBSYSTEM=="misc", KERNEL=="fastrpc-cdsp1",             OWNER="root", GROUP="fastrpc", MODE="0640", TAG+="systemd", ENV{SYSTEMD_WANTS}+="cdsp1rpcd.service"
+ACTION=="add", SUBSYSTEM=="misc", KERNEL=="fastrpc-cdsp1-secure",      TAG+="systemd", ENV{SYSTEMD_WANTS}+="cdsp1rpcd.service"
+ACTION=="add", SUBSYSTEM=="misc", KERNEL=="fastrpc-cdsp[02-9]",        OWNER="root", GROUP="fastrpc", MODE="0640", TAG+="systemd", PROGRAM=="/bin/sh -c 'n=${1#fastrpc-}; echo ${n%-secure}' -- %k", ENV{SYSTEMD_WANTS}+="cdsprpcd@%c.service"
+ACTION=="add", SUBSYSTEM=="misc", KERNEL=="fastrpc-cdsp[02-9]-secure", TAG+="systemd", PROGRAM=="/bin/sh -c 'n=${1#fastrpc-}; echo ${n%-secure}' -- %k", ENV{SYSTEMD_WANTS}+="cdsprpcd@%c.service"
+ACTION=="add", SUBSYSTEM=="misc", KERNEL=="fastrpc-cdsp[0-9][0-9]",        OWNER="root", GROUP="fastrpc", MODE="0640", TAG+="systemd", PROGRAM=="/bin/sh -c 'n=${1#fastrpc-}; echo ${n%-secure}' -- %k", ENV{SYSTEMD_WANTS}+="cdsprpcd@%c.service"
+ACTION=="add", SUBSYSTEM=="misc", KERNEL=="fastrpc-cdsp[0-9][0-9]-secure", TAG+="systemd", PROGRAM=="/bin/sh -c 'n=${1#fastrpc-}; echo ${n%-secure}' -- %k", ENV{SYSTEMD_WANTS}+="cdsprpcd@%c.service"
+
+# gdsp0/gdsp1 only -- no other gdsp instances exist, so no template unit.
+ACTION=="add", SUBSYSTEM=="misc", KERNEL=="fastrpc-gdsp0",             OWNER="root", GROUP="fastrpc", MODE="0640", TAG+="systemd", ENV{SYSTEMD_WANTS}+="gdsp0rpcd.service"
+ACTION=="add", SUBSYSTEM=="misc", KERNEL=="fastrpc-gdsp0-secure",      TAG+="systemd", ENV{SYSTEMD_WANTS}+="gdsp0rpcd.service"
+ACTION=="add", SUBSYSTEM=="misc", KERNEL=="fastrpc-gdsp1",             OWNER="root", GROUP="fastrpc", MODE="0640", TAG+="systemd", ENV{SYSTEMD_WANTS}+="gdsp1rpcd.service"
+ACTION=="add", SUBSYSTEM=="misc", KERNEL=="fastrpc-gdsp1-secure",      TAG+="systemd", ENV{SYSTEMD_WANTS}+="gdsp1rpcd.service"
+
+# sDSP has only a single instance today -- plain (non-template) unit.
 ACTION=="add", SUBSYSTEM=="misc", KERNEL=="fastrpc-sdsp",         OWNER="root", GROUP="fastrpc", MODE="0640", TAG+="systemd", ENV{SYSTEMD_WANTS}+="sdsprpcd.service"
 ACTION=="add", SUBSYSTEM=="misc", KERNEL=="fastrpc-sdsp-secure",  TAG+="systemd", ENV{SYSTEMD_WANTS}+="sdsprpcd.service"

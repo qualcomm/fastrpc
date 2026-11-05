@@ -1,0 +1,14 @@
+[Unit]
+Description=audiopd aDSP RPC daemon (%i)
+After=dev-fastrpc\x2d%i.device dev-fastrpc\x2d%i\x2dsecure.device
+ConditionPathExists=|/dev/fastrpc-%i
+ConditionPathExists=|/dev/fastrpc-%i-secure
+
+[Service]
+Type=exec
+ExecStart=@sbindir@/adsprpcd audiopd %i
+Restart=on-failure
+RestartSec=5
+# AEE_ENOMEMORY AEE_EITEMBUSY AEE_EUNSUPPORTED
+RestartPreventExitStatus=2 32 20
+RestartForceExitStatus=SIGTERM
