@@ -1,0 +1,14 @@
+[Unit]
+Description=cDSP RPC daemon (%i)
+After=dev-fastrpc\x2d%i.device dev-fastrpc\x2d%i\x2dsecure.device
+ConditionPathExists=|/dev/fastrpc-%i
+ConditionPathExists=|/dev/fastrpc-%i-secure
+
+[Service]
+Type=exec
+ExecStart=@sbindir@/cdsprpcd rootpd %i
+Restart=on-failure
+RestartSec=5
+RestartForceExitStatus=SIGTERM
+# AEE_EITEMBUSY
+RestartPreventExitStatus=32

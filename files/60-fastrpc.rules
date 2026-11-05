@@ -4,16 +4,35 @@
 ACTION=="add", SUBSYSTEM=="dma_heap", KERNEL=="system", RUN+="/bin/setfacl -m g:fastrpc:rw $env{DEVNAME}"
 
 # FastRPC DSP device nodes
-# Device nodes are owned by root:fastrpc with 0640 permissions
-ACTION=="add", SUBSYSTEM=="misc", KERNEL=="fastrpc-adsp",         OWNER="root", GROUP="fastrpc", MODE="0640", TAG+="systemd", ENV{SYSTEMD_WANTS}+="adsprpcd.service", ENV{SYSTEMD_WANTS}+="adsprpcd_audiopd.service"
-ACTION=="add", SUBSYSTEM=="misc", KERNEL=="fastrpc-adsp-secure",  TAG+="systemd", ENV{SYSTEMD_WANTS}+="adsprpcd.service", ENV{SYSTEMD_WANTS}+="adsprpcd_audiopd.service"
-ACTION=="add", SUBSYSTEM=="misc", KERNEL=="fastrpc-cdsp",         OWNER="root", GROUP="fastrpc", MODE="0640", TAG+="systemd", ENV{SYSTEMD_WANTS}+="cdsprpcd.service"
-ACTION=="add", SUBSYSTEM=="misc", KERNEL=="fastrpc-cdsp-secure",  TAG+="systemd", ENV{SYSTEMD_WANTS}+="cdsprpcd.service"
-ACTION=="add", SUBSYSTEM=="misc", KERNEL=="fastrpc-cdsp1",        OWNER="root", GROUP="fastrpc", MODE="0640", TAG+="systemd", ENV{SYSTEMD_WANTS}+="cdsp1rpcd.service"
-ACTION=="add", SUBSYSTEM=="misc", KERNEL=="fastrpc-cdsp1-secure", TAG+="systemd", ENV{SYSTEMD_WANTS}+="cdsp1rpcd.service"
-ACTION=="add", SUBSYSTEM=="misc", KERNEL=="fastrpc-gdsp0",        OWNER="root", GROUP="fastrpc", MODE="0640", TAG+="systemd", ENV{SYSTEMD_WANTS}+="gdsp0rpcd.service"
-ACTION=="add", SUBSYSTEM=="misc", KERNEL=="fastrpc-gdsp0-secure", TAG+="systemd", ENV{SYSTEMD_WANTS}+="gdsp0rpcd.service"
-ACTION=="add", SUBSYSTEM=="misc", KERNEL=="fastrpc-gdsp1",        OWNER="root", GROUP="fastrpc", MODE="0640", TAG+="systemd", ENV{SYSTEMD_WANTS}+="gdsp1rpcd.service"
-ACTION=="add", SUBSYSTEM=="misc", KERNEL=="fastrpc-gdsp1-secure", TAG+="systemd", ENV{SYSTEMD_WANTS}+="gdsp1rpcd.service"
+# Device nodes are owned by root:fastrpc with 0640 permissions.
+#
+# adsp/cdsp/gdsp each support more than one instance (adsp, adsp1, adsp2,
+# ...), started as an instance of the adsprpcd@/cdsprpcd@/gdsprpcd@ systemd
+# template unit (see files/*.service.in). The instance name is derived from
+# the device's own kernel name (PROGRAM strips the "fastrpc-" prefix and
+# "-secure" suffix), so a new instance of an already-supported family
+# (another adspN/cdspN/gdspN, up to 99) needs no new rule line here -- only
+# a genuinely new DSP family would need one.
+
+ACTION=="add", SUBSYSTEM=="misc", KERNEL=="fastrpc-adsp",              OWNER="root", GROUP="fastrpc", MODE="0640", TAG+="systemd", PROGRAM=="/bin/sh -c 'n=${1#fastrpc-}; echo ${n%-secure}' -- %k", ENV{SYSTEMD_WANTS}+="adsprpcd@%c.service", ENV{SYSTEMD_WANTS}+="adsprpcd_audiopd.service"
+ACTION=="add", SUBSYSTEM=="misc", KERNEL=="fastrpc-adsp-secure",       TAG+="systemd", PROGRAM=="/bin/sh -c 'n=${1#fastrpc-}; echo ${n%-secure}' -- %k", ENV{SYSTEMD_WANTS}+="adsprpcd@%c.service", ENV{SYSTEMD_WANTS}+="adsprpcd_audiopd.service"
+ACTION=="add", SUBSYSTEM=="misc", KERNEL=="fastrpc-adsp[0-9]",         OWNER="root", GROUP="fastrpc", MODE="0640", TAG+="systemd", PROGRAM=="/bin/sh -c 'n=${1#fastrpc-}; echo ${n%-secure}' -- %k", ENV{SYSTEMD_WANTS}+="adsprpcd@%c.service"
+ACTION=="add", SUBSYSTEM=="misc", KERNEL=="fastrpc-adsp[0-9]-secure",  TAG+="systemd", PROGRAM=="/bin/sh -c 'n=${1#fastrpc-}; echo ${n%-secure}' -- %k", ENV{SYSTEMD_WANTS}+="adsprpcd@%c.service"
+ACTION=="add", SUBSYSTEM=="misc", KERNEL=="fastrpc-adsp[0-9][0-9]",        OWNER="root", GROUP="fastrpc", MODE="0640", TAG+="systemd", PROGRAM=="/bin/sh -c 'n=${1#fastrpc-}; echo ${n%-secure}' -- %k", ENV{SYSTEMD_WANTS}+="adsprpcd@%c.service"
+ACTION=="add", SUBSYSTEM=="misc", KERNEL=="fastrpc-adsp[0-9][0-9]-secure", TAG+="systemd", PROGRAM=="/bin/sh -c 'n=${1#fastrpc-}; echo ${n%-secure}' -- %k", ENV{SYSTEMD_WANTS}+="adsprpcd@%c.service"
+
+ACTION=="add", SUBSYSTEM=="misc", KERNEL=="fastrpc-cdsp",              OWNER="root", GROUP="fastrpc", MODE="0640", TAG+="systemd", PROGRAM=="/bin/sh -c 'n=${1#fastrpc-}; echo ${n%-secure}' -- %k", ENV{SYSTEMD_WANTS}+="cdsprpcd@%c.service"
+ACTION=="add", SUBSYSTEM=="misc", KERNEL=="fastrpc-cdsp-secure",       TAG+="systemd", PROGRAM=="/bin/sh -c 'n=${1#fastrpc-}; echo ${n%-secure}' -- %k", ENV{SYSTEMD_WANTS}+="cdsprpcd@%c.service"
+ACTION=="add", SUBSYSTEM=="misc", KERNEL=="fastrpc-cdsp[0-9]",         OWNER="root", GROUP="fastrpc", MODE="0640", TAG+="systemd", PROGRAM=="/bin/sh -c 'n=${1#fastrpc-}; echo ${n%-secure}' -- %k", ENV{SYSTEMD_WANTS}+="cdsprpcd@%c.service"
+ACTION=="add", SUBSYSTEM=="misc", KERNEL=="fastrpc-cdsp[0-9]-secure",  TAG+="systemd", PROGRAM=="/bin/sh -c 'n=${1#fastrpc-}; echo ${n%-secure}' -- %k", ENV{SYSTEMD_WANTS}+="cdsprpcd@%c.service"
+ACTION=="add", SUBSYSTEM=="misc", KERNEL=="fastrpc-cdsp[0-9][0-9]",        OWNER="root", GROUP="fastrpc", MODE="0640", TAG+="systemd", PROGRAM=="/bin/sh -c 'n=${1#fastrpc-}; echo ${n%-secure}' -- %k", ENV{SYSTEMD_WANTS}+="cdsprpcd@%c.service"
+ACTION=="add", SUBSYSTEM=="misc", KERNEL=="fastrpc-cdsp[0-9][0-9]-secure", TAG+="systemd", PROGRAM=="/bin/sh -c 'n=${1#fastrpc-}; echo ${n%-secure}' -- %k", ENV{SYSTEMD_WANTS}+="cdsprpcd@%c.service"
+
+ACTION=="add", SUBSYSTEM=="misc", KERNEL=="fastrpc-gdsp[0-9]",         OWNER="root", GROUP="fastrpc", MODE="0640", TAG+="systemd", PROGRAM=="/bin/sh -c 'n=${1#fastrpc-}; echo ${n%-secure}' -- %k", ENV{SYSTEMD_WANTS}+="gdsprpcd@%c.service"
+ACTION=="add", SUBSYSTEM=="misc", KERNEL=="fastrpc-gdsp[0-9]-secure",  TAG+="systemd", PROGRAM=="/bin/sh -c 'n=${1#fastrpc-}; echo ${n%-secure}' -- %k", ENV{SYSTEMD_WANTS}+="gdsprpcd@%c.service"
+ACTION=="add", SUBSYSTEM=="misc", KERNEL=="fastrpc-gdsp[0-9][0-9]",        OWNER="root", GROUP="fastrpc", MODE="0640", TAG+="systemd", PROGRAM=="/bin/sh -c 'n=${1#fastrpc-}; echo ${n%-secure}' -- %k", ENV{SYSTEMD_WANTS}+="gdsprpcd@%c.service"
+ACTION=="add", SUBSYSTEM=="misc", KERNEL=="fastrpc-gdsp[0-9][0-9]-secure", TAG+="systemd", PROGRAM=="/bin/sh -c 'n=${1#fastrpc-}; echo ${n%-secure}' -- %k", ENV{SYSTEMD_WANTS}+="gdsprpcd@%c.service"
+
+# sDSP has only a single instance today -- plain (non-template) unit.
 ACTION=="add", SUBSYSTEM=="misc", KERNEL=="fastrpc-sdsp",         OWNER="root", GROUP="fastrpc", MODE="0640", TAG+="systemd", ENV{SYSTEMD_WANTS}+="sdsprpcd.service"
 ACTION=="add", SUBSYSTEM=="misc", KERNEL=="fastrpc-sdsp-secure",  TAG+="systemd", ENV{SYSTEMD_WANTS}+="sdsprpcd.service"
