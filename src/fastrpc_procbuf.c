@@ -150,49 +150,64 @@ bail:
 static int pack_proc_shared_buf_params(int domain, uint32_t param_id,
 		void *param_addr, uint32_t param_size)
 {
-	uint32_t *buf_start_addr = (uint32_t*)hlist[domain].proc_sharedbuf;
-	uint32_t align_param_size = param_size;
-	/* Params pack address */
-	uint32_t *buf_write_addr = (uint32_t*)hlist[domain].proc_sharedbuf_cur_addr,
-		*buf_last_addr = buf_start_addr + PROC_SHAREDBUF_SIZE;
+	uint8_t *buf_start_addr = (uint8_t *)hlist[domain].proc_sharedbuf;
+	uint8_t *buf_write_addr =
+		(uint8_t *)hlist[domain].proc_sharedbuf_cur_addr;
+	uint8_t *buf_last_addr;
+	size_t align_param_size;
+	size_t remaining;
+	size_t max_param_size =
+		(size_t)(PROC_ATTR_BUF_ID_SIZE_MASK & ~(WORD_SIZE - 1));
+	uint32_t *buf_header;
+	uint32_t *buf_count;
 
-	if (param_addr == NULL || param_size <= 0 || param_id < 0 ||
-		param_id >= PROC_ATTR_BUF_MAX_ID) {
+	if (param_addr == NULL || param_size == 0 ||
+		param_id >= PROC_ATTR_BUF_MAX_ID || buf_start_addr == NULL) {
 		FARF(ERROR, "Error: %s: invalid param %u or size %u or addr 0x%x",
 				__func__, param_id, param_size, param_addr);
 		return AEE_EBADPARM;
 	}
+	if ((size_t)param_size > max_param_size) {
+		FARF(ERROR, "Error: %s: parameter size %u exceeds encodable limit",
+			__func__, param_size);
+		return AEE_EBADPARM;
+	}
+
+	buf_last_addr = buf_start_addr + PROC_SHAREDBUF_SIZE;
 	if (buf_write_addr == NULL) {
 		/*
 		 * Total no of param ids (4 bytes) are packed at shared buffer initial address,
 		 * so add 4 bytes to start pack process params
 		 */
-		buf_write_addr = (uint32_t*)((char*)buf_start_addr + WORD_SIZE);
+		buf_write_addr = buf_start_addr + WORD_SIZE;
 	}
-	/* Align the params size in multiple of 4 bytes (word) for easy unpacking at DSP */
-	align_param_size = ALIGN_B(param_size, WORD_SIZE);
+	if (buf_write_addr < buf_start_addr || buf_write_addr > buf_last_addr ||
+		((uintptr_t)buf_write_addr & (WORD_SIZE - 1)) != 0) {
+		FARF(ERROR, "Error: %s: invalid proc shared buffer cursor", __func__);
+		return AEE_ERPC;
+	}
 
-	if (buf_last_addr < (uint32_t*)((char*)buf_write_addr + align_param_size + sizeof(param_id))) {
+	/* Align the params size in multiple of 4 bytes (word) for easy unpacking at DSP */
+	align_param_size = ((size_t)param_size + (WORD_SIZE - 1)) &
+		~((size_t)WORD_SIZE - 1);
+	remaining = (size_t)(buf_last_addr - buf_write_addr);
+	if (remaining < sizeof(*buf_header) ||
+		align_param_size > remaining - sizeof(*buf_header)) {
 		FARF(ERROR, "Error: %s: proc shared buffer exhausted to pack param_id:%u params",
 			__func__, param_id);
 		return AEE_ERPC;
 	}
-	/* Write param_id */
-	*buf_write_addr = param_id;
 
-	/* Shift param_id to first 8 bits */
-	*buf_write_addr = (*buf_write_addr) << PROC_ATTR_BUF_ID_POS;
-
-	/* Write param size in last 24 bits */
-	*buf_write_addr = (*buf_write_addr) + (PROC_ATTR_BUF_ID_SIZE_MASK & align_param_size);
-	buf_write_addr++;
-
-	memcpy(buf_write_addr, param_addr, STD_MIN(buf_last_addr - buf_write_addr, param_size));
-	buf_write_addr = (uint32_t*)((char*)buf_write_addr + align_param_size);
-	hlist[domain].proc_sharedbuf_cur_addr = buf_write_addr;
+	buf_header = (uint32_t *)buf_write_addr;
+	*buf_header = (param_id << PROC_ATTR_BUF_ID_POS) |
+		(PROC_ATTR_BUF_ID_SIZE_MASK & (uint32_t)align_param_size);
+	memcpy(buf_write_addr + sizeof(*buf_header), param_addr, param_size);
+	buf_write_addr += sizeof(*buf_header) + align_param_size;
+	hlist[domain].proc_sharedbuf_cur_addr = (uint32_t *)buf_write_addr;
 
 	/* Increase the number of ids in start address */
-	(*buf_start_addr)++;
+	buf_count = (uint32_t *)buf_start_addr;
+	(*buf_count)++;
 	return AEE_SUCCESS;
 }
 
@@ -248,7 +263,9 @@ void fastrpc_process_pack_params(int dev, int domain) {
 		FARF(ERROR, "Error 0x%x: %s: Failed to pack effective domain id %d in shared buffer",
 				nErr, __func__, domain);
 	}
-	lib_names = (char *)malloc(sizeof(char) * MAX_NON_PRELOAD_LIBS_LEN);
+	/* zero-initialized so get_non_preload_lib_names()'s strlen() is always
+	 * safe, even when nothing ends up being appended via strlcat(). */
+	lib_names = (char *)calloc(1, sizeof(char) * MAX_NON_PRELOAD_LIBS_LEN);
 	if (lib_names) {
 		if (AEE_SUCCESS == get_non_preload_lib_names(&lib_names, &buffer_size, domain)) {
 			nErr = pack_proc_shared_buf_params(domain, CUSTOM_DSP_SEARCH_PATH_LIBS_ID, lib_names, buffer_size);
