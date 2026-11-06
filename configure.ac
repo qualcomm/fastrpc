@@ -37,6 +37,50 @@ AC_PROG_INSTALL
 AC_PROG_MAKE_SET
 AM_PROG_CC_C_O
 
+# Enable code coverage instrumentation and reporting
+AC_ARG_ENABLE([code-coverage],
+  [AS_HELP_STRING([--enable-code-coverage],
+                  [Enable gcov-compatible code coverage instrumentation])],
+  [enable_code_coverage=$enableval],
+  [enable_code_coverage=no])
+
+AS_CASE([$enable_code_coverage],
+  [yes|no], [],
+  [AC_MSG_ERROR([bad value '$enable_code_coverage' for --enable-code-coverage])])
+
+AM_CONDITIONAL([CODE_COVERAGE_ENABLED],
+  [test "x$enable_code_coverage" = "xyes"])
+
+AS_IF([test "x$enable_code_coverage" = "xyes"], [
+  AC_MSG_CHECKING([whether $CC supports code coverage instrumentation])
+  saved_CFLAGS="$CFLAGS"
+  saved_LDFLAGS="$LDFLAGS"
+  CFLAGS="$CFLAGS -O0 -g --coverage"
+  LDFLAGS="$LDFLAGS --coverage"
+  AC_LINK_IFELSE([AC_LANG_PROGRAM([], [])],
+    [AC_MSG_RESULT([yes])],
+    [CFLAGS="$saved_CFLAGS"
+     LDFLAGS="$saved_LDFLAGS"
+     AC_MSG_RESULT([no])
+     AC_MSG_ERROR([$CC does not support --coverage])])
+
+  AC_PATH_PROG([LCOV], [lcov], [no])
+  AS_IF([test "x$LCOV" = "xno"],
+    [AC_MSG_ERROR([lcov is required with --enable-code-coverage])])
+
+  AC_PATH_PROG([GENHTML], [genhtml], [no])
+  AS_IF([test "x$GENHTML" = "xno"],
+    [AC_MSG_ERROR([genhtml is required with --enable-code-coverage])])
+
+  AC_CHECK_TOOL([GCOV], [gcov], [no])
+  AS_IF([test "x$GCOV" = "xno"],
+    [AC_MSG_ERROR([a gcov-compatible tool is required with --enable-code-coverage])])
+
+  AC_MSG_NOTICE([Code coverage instrumentation enabled])
+], [
+  AC_MSG_NOTICE([Code coverage instrumentation disabled (use --enable-code-coverage to enable)])
+])
+
 # Checks for libraries.
 
 # Enable pkg-config
