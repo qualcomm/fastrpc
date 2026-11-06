@@ -17,6 +17,7 @@
 #include "AEEStdErr.h"
 #include "fastrpc_common.h"
 #include "fastrpc_ioctl.h"
+#include "fastrpc_hash_table.h"
 
 // Aligns the memory
 #define ALIGN_B(p, a)	      (((p) + ((a) - 1)) & ~((a) - 1))
@@ -70,28 +71,41 @@ static __inline uint32_t Q6_R_cl0_R(uint32_t num) {
 
 #define FASTRPC_INFO_SMMU   (1 << 0)
 
-#define GET_SESSION_ID_FROM_DOMAIN_ID(domain_id) ((int)(domain_id / NUM_DOMAINS))
+#define GET_SESSION_ID_FROM_DOMAIN_ID(domain_id) ((int)((domain_id) / NUM_DOMAINS))
 
-/* From actual domain ID (0-3) and session ID, get effective domain ID */
-#define GET_EFFECTIVE_DOMAIN_ID(domain, session) (domain + (NUM_DOMAINS * session))
+/* From actual domain ID and session ID, get effective domain ID */
+#define GET_EFFECTIVE_DOMAIN_ID(domain, session) ((domain) + (NUM_DOMAINS * (session)))
 
 /* From effective domain ID, get actual domain ID */
-#define GET_DOMAIN_FROM_EFFEC_DOMAIN_ID(effec_dom_id) (effec_dom_id & DOMAIN_ID_MASK)
+#define GET_DOMAIN_FROM_EFFEC_DOMAIN_ID(effec_dom_id) ((effec_dom_id) % NUM_DOMAINS)
 
 /* Check if given domain ID is in valid range */
 #define IS_VALID_DOMAIN_ID(domain) ((domain >= 0) && (domain < NUM_DOMAINS))
 
-/* Check if given effective domain ID is in valid range */
-#define IS_VALID_EFFECTIVE_DOMAIN_ID(domain) ((domain >= 0) && (domain < NUM_DOMAINS_EXTEND))
+/* Check if given effective domain ID has a session entry (see
+ * fastrpc_is_valid_effec_domain()). Sessions are created when they are
+ * reserved or first used, so there is no fixed range to compare against. */
+#define IS_VALID_EFFECTIVE_DOMAIN_ID(domain) fastrpc_is_valid_effec_domain(domain)
 
-/* Check if given effective domain ID is in extended range */
-#define IS_EXTENDED_DOMAIN_ID(domain) ((domain >= NUM_DOMAINS) && (domain < NUM_DOMAINS_EXTEND))
+/* Check if given effective domain ID is for a session other than 0 */
+#define IS_EXTENDED_DOMAIN_ID(domain) ((domain) >= NUM_DOMAINS)
 
 /* Loop thru list of all domain ids */
 #define FOR_EACH_DOMAIN_ID(i) for(i = 0; i < NUM_DOMAINS; i++)
 
-/* Loop thru list of all effective domain ids */
-#define FOR_EACH_EFFECTIVE_DOMAIN_ID(i) for(i = 0; i < NUM_DOMAINS_EXTEND; i++)
+/*
+ * Loop thru every effective domain id that has a session entry, in
+ * increasing order. No lock is held while the body runs, so break and goto
+ * are safe.
+ */
+#define FOR_EACH_EFFECTIVE_DOMAIN_ID(i) \
+	for ((i) = fastrpc_next_effec_domain(-1); (i) >= 0; \
+	     (i) = fastrpc_next_effec_domain(i))
+
+/* True if a session entry exists for the effective domain id */
+bool fastrpc_is_valid_effec_domain(int effec_domain_id);
+/* Smallest existing effective domain id greater than prev, or -1 if none */
+int fastrpc_next_effec_domain(int prev);
 
 /**
  * @brief  PD initialization types used to create different kinds of PD
@@ -322,7 +336,20 @@ struct handle_list {
 	void *proc_sharedbuf;
 	/* current process shared buffer address to pack process params */
 	uint32_t *proc_sharedbuf_cur_addr;
+	/* Per-session wake-lock-enable flag (was the separate
+	 * fastrpc_wake_lock_enable[] array). */
+	uint32_t wake_lock_enable;
+	/* Adds "int domain;" (the effective domain id, used as the hash key) and
+	 * "UT_hash_handle hh;" so this struct can be an entry of the hlist
+	 * hash table in fastrpc_apps_user.c. */
+	ADD_DOMAIN_HASH();
 };
+
+/**
+  * @brief Lookup-only accessor for a session's handle_list entry, defined in
+  * fastrpc_apps_user.c. Returns NULL if the session has no entry.
+  **/
+struct handle_list *fastrpc_get_hlist_node(int domain);
 
 /**
   * @brief API to get the DSP_SEARCH_PATH stored locally as static.
