@@ -14,6 +14,7 @@ install-sh
 ltmain.sh
 missing
 test-driver
+/test/base_test/builddir/
 
 # build time artifacts
 Makefile
