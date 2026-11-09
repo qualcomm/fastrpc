@@ -1,6 +1,6 @@
 #!/usr/bin/bash
 # Copyright (c) Qualcomm Technologies, Inc.
-# SPDX-License-Identifier: BSD-3-Clause-Clear
+# SPDX-License-Identifier: BSD-3-Clause
 
 set -euo pipefail
 
