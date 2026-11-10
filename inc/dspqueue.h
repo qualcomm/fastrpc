@@ -230,6 +230,7 @@ extern "C" {
  *         - AEE_ENOMEMORY: Not enough memory available
  *         - AEE_EUNSUPPORTED: Message queue not supported on the given DSP
  *         - AEE_EBADPARM: Bad parameters, e.g. Invalid domain (use CDSP_DOMAIN_ID for cDSP)
+ *         - AEE_EBADSTATE: Domain unavailable after queue teardown failure
  *         - AEE_ERPC: Internal RPC error, e.g. Queue list corrupt
  */
 AEEResult dspqueue_create(int domain,
