@@ -175,6 +175,10 @@ sudo ldconfig              # Update dynamic linker cache
 sudo systemd-sysusers      # Create fastrpc group
 ```
 
+For the optional device-side `base_test` suite, see
+[`test/base_test/README.md`](test/base_test/README.md) for prerequisites, build,
+deployment, and usage instructions.
+
 ### Steps to cross-compile the project on Ubuntu
 
 1. **Install the cross compiler and required dependencies:**

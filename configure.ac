@@ -11,7 +11,7 @@ AM_INIT_AUTOMAKE(1.10 foreign subdir-objects)
 LT_INIT(disable-static)
 
 AS_CASE([$host],
-  [*-linux-android], [
+  [*-linux-android*], [
   compile_for_android=yes
   ], [
   compile_for_android=no
@@ -20,6 +20,114 @@ AS_CASE([$host],
 
 AM_CONDITIONAL([ANDROID_CC],
 [test "$compile_for_android" = yes])
+
+# Optional standalone CMake base-test build.  Keep all of its prerequisites
+# conditional so the normal FastRPC build remains self-contained.
+AC_ARG_ENABLE([base-test],
+  [AS_HELP_STRING([--enable-base-test],
+                  [enable the CMake base-test sub-build])],
+  [enable_base_test=$enableval],
+  [enable_base_test=no])
+AS_CASE([$enable_base_test],
+  [yes|no], [],
+  [AC_MSG_ERROR([bad value '$enable_base_test' for --enable-base-test])])
+
+AC_ARG_VAR([QAIC_EXECUTABLE],
+  [path to the QAIC compiler used by base-test (or qaic on PATH)])
+AC_ARG_VAR([HEXAGON_CLANG],
+  [Hexagon compiler used to build the base-test DSP skeleton])
+AC_ARG_VAR([HEXAGON_LD],
+  [Hexagon linker used to link the base-test DSP skeleton])
+AC_ARG_VAR([DSP_ARCH],
+  [Hexagon DSP architecture for base-test (default: 73)])
+AC_ARG_VAR([ANDROID_NDK_HOME],
+  [Android NDK root used to build the Android base-test])
+
+AC_ARG_WITH([qaic],
+  [AS_HELP_STRING([--with-qaic=PATH],
+                  [path to the QAIC compiler used by base-test])],
+  [QAIC_EXECUTABLE=$withval])
+
+AC_ARG_WITH([dsp-arch],
+  [AS_HELP_STRING([--with-dsp-arch=ARCH],
+                  [Hexagon DSP architecture for base-test (default: 73)])],
+  [base_test_dsp_arch=$withval],
+  [AS_IF([test -n "$DSP_ARCH"],
+         [base_test_dsp_arch=$DSP_ARCH],
+         [base_test_dsp_arch=73])])
+
+AC_ARG_VAR([CMAKE], [CMake executable used to build base-test])
+
+base_test_toolchain_file=
+base_test_cmake_extra_args=
+
+AS_IF([test "x$enable_base_test" = xyes], [
+  AS_CASE([$host_os],
+    [linux-gnu*|linux-musl*|linux-android*], [],
+    [AC_MSG_ERROR([base-test supports only Linux (glibc/musl) or Android targets; got $host])])
+  AS_IF([test "x$host_cpu" != xaarch64], [
+    AC_MSG_ERROR([base-test requires an aarch64 target; got $host])
+  ])
+  AS_IF([test "$compile_for_android" = yes], [
+    AS_IF([test -z "$ANDROID_NDK_HOME"], [
+      AC_MSG_ERROR([ANDROID_NDK_HOME must be set to build base-test for Android])
+    ])
+    base_test_ndk_home=`cd "$ANDROID_NDK_HOME" 2>/dev/null && pwd`
+    AS_IF([test -z "$base_test_ndk_home"], [
+      AC_MSG_ERROR([Android NDK directory not found: $ANDROID_NDK_HOME])
+    ])
+    base_test_toolchain_file="$base_test_ndk_home/build/cmake/android.toolchain.cmake"
+    AS_IF([test ! -f "$base_test_toolchain_file"], [
+      AC_MSG_ERROR([Android NDK toolchain file not found: $base_test_toolchain_file])
+    ])
+    unset base_test_ndk_home
+    base_test_cmake_extra_args='-DANDROID_ABI=arm64-v8a'
+  ], [
+    base_test_srcdir=`cd "$srcdir" && pwd`
+    base_test_toolchain_file="$base_test_srcdir/test/base_test/cmake/toolchain/aarch64-linux-gnu.cmake"
+  ])
+  AS_IF([test -z "$QAIC_EXECUTABLE"], [
+    AC_PATH_PROG([QAIC_EXECUTABLE], [qaic], [no])
+  ])
+  AS_IF([test "x$QAIC_EXECUTABLE" = xno || test ! -x "$QAIC_EXECUTABLE"], [
+    AC_MSG_ERROR([QAIC compiler is not executable: $QAIC_EXECUTABLE; set QAIC_EXECUTABLE or use --with-qaic=PATH])
+  ])
+  AS_IF([test -n "$HEXAGON_CLANG"], [
+    AS_IF([test ! -x "$HEXAGON_CLANG" || test -d "$HEXAGON_CLANG"], [
+      AC_MSG_ERROR([HEXAGON_CLANG is not an executable file: $HEXAGON_CLANG])
+    ])
+  ])
+  AS_IF([test -n "$HEXAGON_LD"], [
+    AS_IF([test ! -x "$HEXAGON_LD" || test -d "$HEXAGON_LD"], [
+      AC_MSG_ERROR([HEXAGON_LD is not an executable file: $HEXAGON_LD])
+    ])
+  ])
+  case "$base_test_dsp_arch" in
+    ''|*[[!0123456789]]*)
+      AC_MSG_ERROR([--with-dsp-arch must contain only decimal digits]) ;;
+  esac
+  AC_PATH_PROG([CMAKE], [cmake], [no])
+  AS_IF([test "x$CMAKE" = xno], [
+    AC_MSG_ERROR([cmake is required with --enable-base-test])
+  ])
+  AS_IF([test ! -f "$srcdir/test/base_test/CMakeLists.txt"], [
+    AC_MSG_ERROR([test/base_test/CMakeLists.txt is missing])
+  ])
+  AS_IF([test ! -f "$srcdir/test/base_test/vendor/unity/CMakeLists.txt"], [
+    AC_MSG_ERROR([base-test Unity submodule is missing; run git submodule update --init --recursive])
+  ])
+])
+
+AM_CONDITIONAL([BASE_TEST_ENABLED],
+  [test "x$enable_base_test" = xyes])
+AC_SUBST([BASE_TEST_TOOLCHAIN_FILE], [$base_test_toolchain_file])
+AC_SUBST([BASE_TEST_CMAKE_EXTRA_ARGS], [$base_test_cmake_extra_args])
+AC_SUBST([BASE_TEST_DSP_ARCH], [$base_test_dsp_arch])
+AC_SUBST([QAIC_EXECUTABLE])
+AC_SUBST([HEXAGON_CLANG])
+AC_SUBST([HEXAGON_LD])
+AC_SUBST([ANDROID_NDK_HOME])
+AC_SUBST([CMAKE])
 
 # Add shared object versioning
 m4_define([LT_MAJOR], [1])
