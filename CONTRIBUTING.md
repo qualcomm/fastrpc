@@ -6,6 +6,7 @@ Your help is essential for keeping this project great and for making it better.
 
 - [Before you begin](#before-you-begin)
 - [Guidelines](#guidelines)
+- [Code Style](#code-style)
 - [Branching strategy](#branching-strategy)
 - [Setup](#setup)
 - [Get code](#get-code)
@@ -18,7 +19,7 @@ Your help is essential for keeping this project great and for making it better.
 - [Submission](#submission)
 
 ## Before you begin
-- Please read our [Code of Conduct](CODE-OF-CONDUCT.md) and [License](LICENSE) and ensure that you agree to abide by them.
+- Please read our [Code of Conduct](CODE-OF-CONDUCT.md) and [License](LICENSE.txt) and ensure that you agree to abide by them.
 - For every new feature or bug fix, always start a new issue on https://github.com/quic/fastrpc/issues.
 - To contribute a bug-fix, please follow the steps in the next sections without any further discussion.
 - To contribute new features, extensions, utility functions or other significant changes, please describe and discuss the change with us via the GitHub issue that you created above. **A pull request (PR) submitted without discussion and agreement with the project maintainers may be subject to rejection, or significant changes may be requested prior to its acceptance.**
@@ -30,6 +31,11 @@ Please follow the guidelines below to increase the likelihood and speed of your 
 - Write a [good commit message](http://tbaggery.com/2008/04/19/a-note-about-git-commit-messages.html).
 - Every commit must be signed with the [Developer Certificate of Origin](https://developercertificate.org) (by adding the `-s` option to your `git commit` command).
 - Each PR submission will trigger a build, test, code quality check and static analysis processes. Submitters are required to fix all failures and warnings prior to acceptance.
+
+## Code Style
+In addition to matching the existing formatting of the file or folder you're editing (see `.clang-format`/`.editorconfig`), the following conventions are used consistently across this codebase and should be followed in new code:
+- **No unsafe string functions.** Do not use `strcpy`, `strcat`, `sprintf`, `vsprintf`, `gets`, or `alloca`. Use the bounds-checked equivalents already used throughout this codebase instead: `strlcpy`/`strlcat` (from libbsd) and `snprintf`.
+- **Header guards use `#ifndef`/`#define`/`#endif`**, not `#pragma once`. Match the existing headers in `inc/`.
 
 ## Branching strategy
 Contributors should develop on [their own fork](https://help.github.com/en/github/getting-started-with-github/fork-a-repo) on branches based off of the `development` branch and then pull requests should be made into the [upstream `development` branch](https://github.com/quic/fastrpc/tree/development).
@@ -128,7 +134,7 @@ It is recommended that you commit code to your branches often. Prior to pushing 
 https://git-scm.com/book/en/v2/Git-Tools-Rewriting-History 
 
 ## Submission
-When you're ready to submit your code, issue a pull request from the branch on your FORK into the develop branch on the upstream repository using these [instructions](https://help.github.com/en/github/collaborating-with-issues-and-pull-requests/creating-a-pull-request-from-a-fork).
+When you're ready to submit your code, issue a pull request from the branch on your FORK into the development branch on the upstream repository using these [instructions](https://help.github.com/en/github/collaborating-with-issues-and-pull-requests/creating-a-pull-request-from-a-fork).
 1. Go to your forked repo page `https://github.com/YOUR_USERNAME/fastrpc` and click "New Pull Request".
 1. Under "*compare changes*", select the base (destination) repository as `quic/fastrpc` and the branch as `base:development` to the left of the arrow.
 1. Under "*compare changes*", select the head (source) repository as `YOUR_USERNAME/fastrpc` and the branch as `base:branch_short_feature_description` to the right of the arrow.

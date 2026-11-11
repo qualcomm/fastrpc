@@ -77,8 +77,11 @@
 #define NOTIF_GETSESSION(response)	-1;
 #define NOTIF_GETSTATUS(response)	-1;
 
-#define FASTRPC_INVOKE2_STATUS_NOTIF		2	//TODO: Temporary change (Bharath to fix)
-#define FASTRPC_INVOKE2_KERNEL_OPTIMIZATIONS	1	//TODO: Temporary change (Bharath to fix)
+// NOTE: These values are defined here as a stopgap because the upstream
+// kernel UAPI header does not yet expose them. Replace with the kernel
+// header's definitions once available.
+#define FASTRPC_INVOKE2_STATUS_NOTIF		2
+#define FASTRPC_INVOKE2_KERNEL_OPTIMIZATIONS	1
 #ifndef FASTRPC_MAX_DSP_ATTRIBUTES_FALLBACK
 #define FASTRPC_MAX_DSP_ATTRIBUTES_FALLBACK  1
 #endif
