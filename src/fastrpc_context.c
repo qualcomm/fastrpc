@@ -228,7 +228,10 @@ int fastrpc_create_context(fastrpc_context_create *create) {
 
 	// Basic sanity checks on client inputs
 	VERIFYC(create->effec_domain_ids && !create->flags, AEE_EBADPARM);
-	VERIFYC(num_domain_ids && num_domain_ids < NUM_DOMAINS_EXTEND,
+	/* MAX_DOMAINS_EXTEND bounds how many effective domain ids can exist
+	 * (legacy sessions 0-1 plus reserved sessions). Each id is checked
+	 * for an entry when the context's domains are set up. */
+	VERIFYC(num_domain_ids && num_domain_ids < MAX_DOMAINS_EXTEND,
 		AEE_EBADPARM);
 
 	VERIFYC(NULL != (ctx = fastrpc_context_init(num_domain_ids)),

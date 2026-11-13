@@ -23,12 +23,6 @@
 #define NUM_DOMAINS 8
 #endif /*NUM_DOMAINS*/
 
-/* Number of sessions allowed per process */
-#ifndef NUM_SESSIONS
-#define NUM_SESSIONS 4
-#define DOMAIN_ID_MASK 7
-#endif /*NUM_SESSIONS*/
-
 /* Default domain id, in case of non domains*/
 #ifndef DEFAULT_DOMAIN_ID
 #define DEFAULT_DOMAIN_ID 3
@@ -40,10 +34,18 @@
 #define INVALID_KEY    (pthread_key_t)(-1)
 #define INVALID_DEVICE (-1)
 
-// Number of domains extended to include sessions
-// Domain ID extended (0 - 3): Domain id (0 - 3), session id 0
-// Domain ID extended (4 - 7): Domain id (0 - 3), session id 1
-#define NUM_DOMAINS_EXTEND (NUM_DOMAINS * NUM_SESSIONS)
+// Effective domain ids created at process init, one per (domain, session):
+// Domain ID extended (0 - 7): Domain id (0 - 7), session id 0
+// Domain ID extended (8 - 15): Domain id (0 - 7), session id 1
+// Existing clients hardcode these ids. Further sessions are created when they
+// are reserved or first used, with effective id domain + NUM_DOMAINS * session.
+#define NUM_DOMAINS_EXTEND (NUM_DOMAINS * 2)
+
+// Safety valve to bound a runaway session-reservation loop. This is not a
+// design limit: how many sessions a process really gets is decided by the
+// kernel refusing to open further sessions.
+#define MAX_SESSIONS_LIMIT 1000
+#define MAX_DOMAINS_EXTEND (NUM_DOMAINS * MAX_SESSIONS_LIMIT)
 
 // Domain name types
 #define DOMAIN_NAME_IN_URI 1 // Domain name with standard module URI
