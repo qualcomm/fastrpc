@@ -77,7 +77,6 @@
 
 #define VENDOR_DSP_LOCATION "/vendor/dsp/"
 #define VENDOR_DOM_LOCATION "/vendor/dsp/xdsp/"
-#define HEXAGON_LIBS_PATH_PREFIX CONFIG_BASE_DIR "/hexagon"
 
 char DSP_LIBS_LOCATION[PATH_MAX] = DEFAULT_DSP_SEARCH_PATHS;
 static char DSP_SEARCH_PATHS_CACHE[NUM_DOMAINS][PATH_MAX] = {{0}};
@@ -508,11 +507,11 @@ static void build_dsp_search_path_cache_for_domain(int domain) {
    * The user-set ADSP_LIBRARY_PATH env is prepended at open-time by
    * apps_std_imp, so the effective resolution order is:
    *   1. ADSP_LIBRARY_PATH (user/container, highest priority)
-   *   2. arch-specific path  (e.g. CONFIG_BASE_DIR/hexagon/v75)
+   *   2. arch-specific path  (e.g. CONFIG_BASE_DIR/v75)
    *   3. DSP_LIBS_LOCATION   (board-specific path from YAML + generic fallback)
    */
   if (snprintf(arch_path, sizeof(arch_path), "%s/%s",
-               HEXAGON_LIBS_PATH_PREFIX, arch_str) >= (int)sizeof(arch_path)) {
+               CONFIG_BASE_DIR, arch_str) >= (int)sizeof(arch_path)) {
     FARF(ALWAYS,
          "Warning: %s: ARCH path truncated for domain %d, "
          "using DSP_LIBS_LOCATION only",
