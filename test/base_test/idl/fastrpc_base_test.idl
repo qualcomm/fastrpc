@@ -1,0 +1,21 @@
+#include "AEEStdDef.idl"
+#include "remote.idl"
+
+const string IDL_VERSION = "1.2.6";
+
+/**
+ * fastrpc_base_test - DSP module used by the base-test calculator and HAP E2E suites.
+ *
+ * Handle open/close methods are inherited from remote_handle64.  The methods
+ * below are the only additional operations exposed by this test interface.
+ */
+interface fastrpc_base_test : remote_handle64 {
+    /** Calculator sum operation. */
+    long calculator_sum(in sequence<long> values, rout int64 result);
+
+    /** Calculator maximum operation. */
+    long calculator_max(in sequence<long> values, rout long result);
+
+    /** Configure HAP FARF runtime logging and emit sample messages. */
+    long hap_example_farf_runtime(in long runtime_logging_enable);
+};
