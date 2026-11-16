@@ -1077,6 +1077,31 @@ uint32_t fastrpc_get_cached_image_config(int logical_id, int dev)
     return cfg;
 }
 
+/* Caches an arch-specific DSP library search path per physical domain,
+ * resolved by the caller from ARCH_VER at domain-init time. */
+void fastrpc_set_cached_dsp_search_path(int logical_id, const char *path)
+{
+	struct fastrpc_domain_hash_node *node = domain_table_find(logical_id);
+
+	if (!node) {
+		FARF(ALWAYS,
+		     "%s: logical_id %d not in Level-1 table — not caching search path",
+		     __func__, logical_id);
+		return;
+	}
+
+	/* dsp_search_path is a node field -- only safe to touch under the
+	 * table lock, same as dsp_image_config/domain_info.
+	 */
+	pthread_mutex_lock(&g_domain_table.mut);
+	strlcpy(node->domain_obj.dsp_search_path, path,
+		sizeof(node->domain_obj.dsp_search_path));
+	pthread_mutex_unlock(&g_domain_table.mut);
+
+	FARF(ALWAYS, "%s: cached DSP search path for logical_id %d: %s",
+	     __func__, logical_id, path);
+}
+
 /*
  * Returns the exact shell path that worked last time for this physical
  * domain's signed (unsigned_shell=0) or unsigned (unsigned_shell=1) shell,
