@@ -473,31 +473,102 @@ extern void apps_mem_table_deinit(void);
 static uint32_t crc_table[256];
 static atomic_bool timer_expired = false;
 
+/*
+ * Builds "<HEXAGON_LIBS_PATH_PREFIX>/<arch_str>;<DSP_LIBS_LOCATION>" into
+ * out (size out_len), so the arch-specific directory is searched before the
+ * generic board/YAML paths. Returns false (out left untouched by the
+ * caller's responsibility to fall back) on any truncation.
+ */
+static bool build_arch_search_path(const char *arch_str, int domain,
+                                    char *out, size_t out_len) {
+  char arch_path[PATH_MAX] = {0};
+
+  if (snprintf(arch_path, sizeof(arch_path), "%s/%s",
+               HEXAGON_LIBS_PATH_PREFIX, arch_str) >= (int)sizeof(arch_path)) {
+    FARF(ALWAYS,
+         "Warning: %s: ARCH path truncated for domain %d, "
+         "using DSP_LIBS_LOCATION only",
+         __func__, domain);
+    return false;
+  }
+
+  strlcpy(out, arch_path, out_len);
+  strlcat(out, ";", out_len);
+  if (strlcat(out, DSP_LIBS_LOCATION, out_len) >= out_len) {
+    FARF(ALWAYS,
+         "Warning: %s: Failed to build search list for domain %d, "
+         "using DSP_LIBS_LOCATION only",
+         __func__, domain);
+    return false;
+  }
+
+  return true;
+}
+
 static void build_dsp_search_path_cache_for_domain(int domain) {
   int nErr = AEE_SUCCESS;
   fastrpc_capability cap = {0, ARCH_VER, 0};
   char arch_str[64] = {0};
-  char arch_path[PATH_MAX] = {0};
   char *domain_path_cache = NULL;
+  char dynamic_path[PATH_MAX] = {0};
   const char *yaml_arch = NULL;
 
-  if (!IS_VALID_DOMAIN_ID(domain)) {
+  if (!IS_VALID_EFFECTIVE_DOMAIN_ID(domain)) {
     FARF(ALWAYS, "Warning: %s: Invalid domain %d", __func__, domain);
     return;
   }
 
-  /* Dynamic domains use the shared DSP_LIBS_LOCATION — no per-domain cache slot */
-  if (IS_DYNAMIC_DOMAIN_ID(domain))
+  /* Runs once per SESSION, but the arch is per-physical-DSP -- skip the
+   * ioctl once an earlier session already resolved and cached it. */
+  if (IS_DYNAMIC_EFFEC_DOMAIN_ID(domain)) {
+    fastrpc_domain_internal d;
+    if (fastrpc_get_domain_by_logical_id(GET_LOGICAL_FROM_DYNAMIC_EFFEC(domain), &d) &&
+        d.dsp_search_path[0] != '\0')
+      return;
+  } else if (DSP_SEARCH_PATHS_CACHE[GET_DOMAIN_FROM_EFFEC_DOMAIN_ID(domain)][0] != '\0') {
     return;
-
-  domain_path_cache = DSP_SEARCH_PATHS_CACHE[domain];
+  }
 
   /*
-   * Resolve arch string: capability API is preferred; YAML is the fallback
-   * for legacy targets where the capability is not supported.
+   * ARCH_VER is queried for every valid domain, dynamic or legacy -- it's
+   * cheap (one capability ioctl) and the result below drives both the
+   * legacy array-based cache and the dynamic-domain Level-1 table cache.
    */
   cap.domain = domain;
   nErr = fastrpc_get_cap(cap.domain, cap.attribute_ID, &cap.capability);
+  FARF(RUNTIME_RPC_HIGH, "%s: domain %d: ARCH_VER query nErr=0x%x capability=0x%x",
+       __func__, domain, nErr, cap.capability);
+
+  if (IS_DYNAMIC_EFFEC_DOMAIN_ID(domain)) {
+    /*
+     * Dynamic domains can't use DSP_SEARCH_PATHS_CACHE[] (sized for the
+     * NUM_DOMAINS legacy ids only) -- cache into the Level-1 domain table
+     * instead, keyed by logical id. No YAML fallback for dynamic domains
+     * (DSP_ARCH_KEY/DSP_ARCH_FROM_YAML are legacy-id-only); if the
+     * capability isn't available, leave it uncached and
+     * get_dsp_search_path_for_domain() falls back to DSP_LIBS_LOCATION.
+     */
+    if (nErr != AEE_SUCCESS || cap.capability == 0)
+      return;
+
+    snprintf(arch_str, sizeof(arch_str), "v%02x", cap.capability & 0xFF);
+    if (build_arch_search_path(arch_str, domain, dynamic_path, sizeof(dynamic_path)))
+      fastrpc_set_cached_dsp_search_path(GET_LOGICAL_FROM_DYNAMIC_EFFEC(domain),
+                                          dynamic_path);
+    return;
+  }
+
+  /*
+   * domain here is still the effective id (routing domain + NUM_DOMAINS *
+   * session, e.g. 8 for session 1 of routing domain 0) -- DSP_SEARCH_PATHS_CACHE[]
+   * and get_dsp_arch_from_yaml() are both sized/keyed by the bare routing
+   * domain only (0..NUM_DOMAINS-1), so every legacy domain opened with a
+   * session >= 1 would otherwise index past the end of the array.
+   */
+  int routing_domain = GET_DOMAIN_FROM_EFFEC_DOMAIN_ID(domain);
+  domain_path_cache = DSP_SEARCH_PATHS_CACHE[routing_domain];
+
+  /* YAML is the fallback for legacy targets where the capability is not supported. */
   if (nErr == AEE_SUCCESS && cap.capability != 0) {
     snprintf(arch_str, sizeof(arch_str), "v%02x", cap.capability & 0xFF);
     FARF(RUNTIME_RPC_HIGH, "%s: domain %d: resolved ARCH from capability 0x%x: %s",
@@ -508,7 +579,7 @@ static void build_dsp_search_path_cache_for_domain(int domain) {
          "Warning 0x%x: %s: ARCH_VER capability not supported for domain %d, "
          "trying YAML ARCH config",
          nErr, __func__, domain);
-    yaml_arch = get_dsp_arch_from_yaml(domain);
+    yaml_arch = get_dsp_arch_from_yaml(routing_domain);
     if (!yaml_arch || yaml_arch[0] == '\0') {
       FARF(ALWAYS,
            "Warning: %s: No YAML ARCH config for domain %d, "
@@ -528,26 +599,10 @@ static void build_dsp_search_path_cache_for_domain(int domain) {
    * The user-set ADSP_LIBRARY_PATH env is prepended at open-time by
    * apps_std_imp, so the effective resolution order is:
    *   1. ADSP_LIBRARY_PATH (user/container, highest priority)
-   *   2. arch-specific path  (e.g. CONFIG_BASE_DIR/hexagon/v75)
+   *   2. arch-specific path  (CONFIG_BASE_DIR/hexagon/<arch_str>)
    *   3. DSP_LIBS_LOCATION   (board-specific path from YAML + generic fallback)
    */
-  if (snprintf(arch_path, sizeof(arch_path), "%s/%s",
-               HEXAGON_LIBS_PATH_PREFIX, arch_str) >= (int)sizeof(arch_path)) {
-    FARF(ALWAYS,
-         "Warning: %s: ARCH path truncated for domain %d, "
-         "using DSP_LIBS_LOCATION only",
-         __func__, domain);
-    strlcpy(domain_path_cache, DSP_LIBS_LOCATION, PATH_MAX);
-    return;
-  }
-
-  strlcpy(domain_path_cache, arch_path, PATH_MAX);
-  strlcat(domain_path_cache, ";", PATH_MAX);
-  if (strlcat(domain_path_cache, DSP_LIBS_LOCATION, PATH_MAX) >= PATH_MAX) {
-    FARF(ALWAYS,
-         "Warning: %s: Failed to build search list for domain %d, "
-         "using DSP_LIBS_LOCATION only",
-         __func__, domain);
+  if (!build_arch_search_path(arch_str, domain, domain_path_cache, PATH_MAX)) {
     strlcpy(domain_path_cache, DSP_LIBS_LOCATION, PATH_MAX);
     return;
   }
@@ -557,8 +612,17 @@ static void build_dsp_search_path_cache_for_domain(int domain) {
 }
 
 static const char *get_dsp_search_path_for_domain(int domain) {
-  if (!IS_DYNAMIC_DOMAIN_ID(domain) &&
-      IS_VALID_DOMAIN_ID(domain) && DSP_SEARCH_PATHS_CACHE[domain][0] != '\0')
+  if (IS_DYNAMIC_DOMAIN_ID(domain)) {
+    fastrpc_domain_internal d;
+    if (fastrpc_get_domain_by_logical_id(domain, &d) && d.dsp_search_path[0] != '\0') {
+      static __thread char buf[PATH_MAX];
+      strlcpy(buf, d.dsp_search_path, sizeof(buf));
+      return buf;
+    }
+    return DSP_LIBS_LOCATION;
+  }
+
+  if (IS_VALID_DOMAIN_ID(domain) && DSP_SEARCH_PATHS_CACHE[domain][0] != '\0')
     return DSP_SEARCH_PATHS_CACHE[domain];
 
   return DSP_LIBS_LOCATION;

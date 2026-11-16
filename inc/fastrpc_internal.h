@@ -113,6 +113,11 @@ typedef struct {
      * a fixed per-instance table. */
     char           dev_basename[MAX_DOMAIN_NAMELEN];
 
+    /* Cached arch-specific DSP library search path, resolved once per
+     * physical domain from ARCH_VER at domain-init time. Empty string =
+     * not yet resolved / not available. */
+    char           dsp_search_path[PATH_MAX];
+
     /* Cached shell file path that worked last time, per signed(0)/unsigned(1)
      * variant -- avoids re-walking DSP_LIBS_LOCATION/VENDOR_DSP_LOCATION on
      * every session of a domain whose shell isn't at the default location. */
@@ -184,6 +189,10 @@ void fastrpc_set_domain_type(int logical_id, fastrpc_domain_type type);
 
 /* Caches DSP_IMAGE_CONFIG per logical domain; queries the kernel once. */
 uint32_t fastrpc_get_cached_image_config(int logical_id, int dev);
+
+/* Caches an arch-specific DSP library search path per logical domain.
+ * Read back via fastrpc_get_domain_by_logical_id()'s dsp_search_path field. */
+void fastrpc_set_cached_dsp_search_path(int logical_id, const char *path);
 
 /* Per-physical-domain shell path cache -- see shell_path[] above. */
 bool fastrpc_get_cached_shell_path(int logical_id, int unsigned_shell,
