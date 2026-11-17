@@ -70,8 +70,9 @@ static bool is_dir(const char* p) { struct stat st; return p && stat(p, &st)==0 
 static bool path_exists(const char* p) { struct stat st; return p && stat(p, &st)==0; }
 static bool is_chardev(const char* p) { struct stat st; return p && stat(p, &st)==0 && S_ISCHR(st.st_mode); }
 
-static void join2(char* out, size_t sz, const char* a, const char* b) {
-    snprintf(out, sz, "%s/%s", a, b);
+static bool join2(char* out, size_t sz, const char* a, const char* b) {
+    int n = snprintf(out, sz, "%s/%s", a, b);
+    return n >= 0 && (size_t)n < sz;
 }
 
 static int read_text(const char* path, char* out, size_t out_sz) {
@@ -111,8 +112,8 @@ static bool get_remoteproc_firmware_path(
     if (read_text(sysfs_path, fw_rel, sizeof(fw_rel)) < 0)
         return false;
 
-    snprintf(out, out_sz, FW_BASE_PATH "%s", fw_rel);
-    return true;
+    int n = snprintf(out, out_sz, FW_BASE_PATH "%s", fw_rel);
+    return n >= 0 && (size_t)n < out_sz;
 }
 
 typedef struct { char** v; size_t n; } strv_t;
@@ -253,8 +254,8 @@ static char* find_dsp_library_path_from_yaml(void)
             continue;
 
         char yaml_path[PATH_MAX];
-        snprintf(yaml_path, sizeof(yaml_path),
-                 "%s/%s", conf_dir, de->d_name);
+        if (!join2(yaml_path, sizeof(yaml_path), conf_dir, de->d_name))
+            continue;
 
         FILE* f = fopen(yaml_path, "r");
         if (!f)
@@ -326,7 +327,8 @@ static bool get_yaml_dsp_base(char* out, size_t out_sz)
     if (!cached_dsp_library_path)
         return false;
 
-    snprintf(out, out_sz, "%s/%s", QCOM_BASE_DIR, cached_dsp_library_path);
+    if (!join2(out, out_sz, QCOM_BASE_DIR, cached_dsp_library_path))
+        return false;
     return is_dir(out);
 }
 
@@ -416,7 +418,8 @@ static bool scan_shell_dir_for_build_id(
             continue;
 
         char shell_path[PATH_MAX];
-        join2(shell_path, sizeof(shell_path), dsp_dir, de->d_name);
+        if (!join2(shell_path, sizeof(shell_path), dsp_dir, de->d_name))
+            continue;
 
         char tmp[256];
         if (!extract_crm_build_id(shell_path, tmp, sizeof(tmp)))
@@ -475,8 +478,9 @@ static bool find_android_fw_build_id(
             continue;
 
         char fw_path[PATH_MAX];
-        join2(fw_path, sizeof(fw_path),
-              FW_BASE_PATH, de->d_name);
+        if (!join2(fw_path, sizeof(fw_path),
+                   FW_BASE_PATH, de->d_name))
+            continue;
 
         if (!path_exists(fw_path))
             continue;
@@ -510,8 +514,8 @@ static void scan_yaml_shell_availability(dsp_t* d)
         *c = tolower((unsigned char)*c);
 
     char dsp_dir[PATH_MAX];
-    snprintf(dsp_dir, sizeof(dsp_dir),
-             "%s/%s", dsp_base, dsp_lc);
+    if (!join2(dsp_dir, sizeof(dsp_dir), dsp_base, dsp_lc))
+        return;
 
     if (!is_dir(dsp_dir))
         return;
@@ -572,8 +576,8 @@ static bool find_shell_build_id(dsp_t* d, const char* unused)
     if (!get_yaml_dsp_base(dsp_base, sizeof(dsp_base)))
         return false;
 
-    snprintf(dsp_dir, sizeof(dsp_dir),
-             "%s/%s", dsp_base, dsp_lc);
+    if (!join2(dsp_dir, sizeof(dsp_dir), dsp_base, dsp_lc))
+        return false;
 #endif
 
     if (!scan_shell_dir_for_build_id(d, dsp_dir))
@@ -704,14 +708,17 @@ static void update_remoteproc_states(dsp_t dsps[DSP_COUNT]) {
         bool matched = false;
         for (size_t i = 0; i < sizeof(map)/sizeof(map[0]); ++i) {
             if (dsp_name_matches(name, map[i].key)) {
+                dsp_t* dsp = &dsps[map[i].id];
+                int n = snprintf(dsp->rproc, sizeof(dsp->rproc),
+                                 "%s", de->d_name);
 
-                dsps[map[i].id].present = true;
-                dsps[map[i].id].remote_running = running;
+                if (n < 0 || (size_t)n >= sizeof(dsp->rproc)) {
+                    dsp->rproc[0] = '\0';
+                    break;
+                }
 
-                snprintf(dsps[map[i].id].rproc,
-                        sizeof(dsps[map[i].id].rproc),
-                        "%s",
-                        de->d_name);
+                dsp->present = true;
+                dsp->remote_running = running;
 
                 matched = true;
                 break;
@@ -733,16 +740,15 @@ static void build_search_for(dsp_t* d, const char* dsp_all_env, const char* yaml
 
     if (yaml_base_path) {
         char dsp_base[PATH_MAX];
-        snprintf(dsp_base, sizeof(dsp_base), "%s/%s", QCOM_BASE_DIR, yaml_base_path);
-
         char dsp_lc[16];
         snprintf(dsp_lc, sizeof(dsp_lc), "%s", d->name);
         for (char* c = dsp_lc; *c; c++)
             *c = (char)tolower((unsigned char)*c);
 
         char subdir[PATH_MAX];
-        snprintf(subdir, sizeof(subdir), "%s/%s", dsp_base, dsp_lc);
-        if (is_dir(subdir)) {
+        if (join2(dsp_base, sizeof(dsp_base), QCOM_BASE_DIR, yaml_base_path) &&
+            join2(subdir, sizeof(subdir), dsp_base, dsp_lc) &&
+            is_dir(subdir)) {
             vec_push(&ordered, subdir);
         }
     }
@@ -924,7 +930,8 @@ static bool scan_qcom_yaml_and_check_dsp_modules(
             continue;
 
         char yaml_path[PATH_MAX];
-        snprintf(yaml_path, sizeof(yaml_path), "%s/%s", dirpath, de->d_name);
+        if (!join2(yaml_path, sizeof(yaml_path), dirpath, de->d_name))
+            continue;
 
         FILE* f = fopen(yaml_path, "r");
         if (!f)
@@ -981,8 +988,8 @@ static bool scan_qcom_yaml_and_check_dsp_modules(
             continue;
 
         char dsp_base[PATH_MAX];
-        snprintf(dsp_base, sizeof(dsp_base), "%s/%s",
-                 QCOM_BASE_DIR, dsp_lib_rel);
+        if (!join2(dsp_base, sizeof(dsp_base), QCOM_BASE_DIR, dsp_lib_rel))
+            continue;
 
 
         DIR* dsp_dir = opendir(dsp_base);
@@ -997,7 +1004,8 @@ static bool scan_qcom_yaml_and_check_dsp_modules(
                 continue;
 
             char subdir[PATH_MAX];
-            snprintf(subdir, sizeof(subdir), "%s/%s", dsp_base, sub->d_name);
+            if (!join2(subdir, sizeof(subdir), dsp_base, sub->d_name))
+                continue;
 
             if (!is_dir(subdir))
                 continue;
