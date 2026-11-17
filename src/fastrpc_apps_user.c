@@ -1058,10 +1058,6 @@ bail:
   return nErr;
 }
 
-inline int is_smmu_enabled(void) {
-  return hlist_lookup(get_current_domain())->info & FASTRPC_INFO_SMMU;
-}
-
 /**
  * print_open_handles() - Function to print all open handles.
  * @domain: domain of handles to be printed.
@@ -3101,7 +3097,7 @@ bail:
  */
 int get_domain_from_name(const char *uri, uint32_t type) {
   int domain = DEFAULT_DOMAIN_ID;
-  char *session_uri = NULL;
+  const char *session_uri = NULL;
   int session_id = 0;
   int effec_domain = -1;
 
