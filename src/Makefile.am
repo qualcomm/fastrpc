@@ -12,6 +12,8 @@ endif
 
 LIBDSPRPC_SOURCES = \
 		fastrpc_domains.c \
+		fastrpc_domain_watcher.c \
+		fastrpc_domain_discovery_devnode.c \
 		fastrpc_apps_user.c \
 		fastrpc_perf.c \
 		fastrpc_pm.c \

@@ -107,6 +107,21 @@ struct fastrpc_domain_hash_node {
 };
 
 /*
+ * Level-1 domain hash table, keyed by logical_id. Shared by
+ * fastrpc_domains.c (registry/public API), fastrpc_domain_watcher.c (the
+ * generic watcher thread), and the active discovery backend (today,
+ * fastrpc_domain_discovery_devnode.c).
+ */
+DECLARE_HASH_TABLE_TYPE(fastrpc_domain, struct fastrpc_domain_hash_node)
+extern fastrpc_domain_table g_domain_table;
+struct fastrpc_domain_hash_node *domain_table_add(int logical_id);
+struct fastrpc_domain_hash_node *domain_table_find(int logical_id);
+
+/* Bound on distinct physical domains tracked in one discovery pass or
+ * notification snapshot. */
+#define FASTRPC_MAX_DISCOVERED_DOMAINS 64
+
+/*
  * fastrpc_domain_filter_matches - check if a domain entry matches a filter.
  *
  * If domain_id >= 0, matches by exact domain id.

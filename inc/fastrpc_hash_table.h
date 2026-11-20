@@ -4,6 +4,7 @@
 #ifndef FASTRPC_HASH_TABLE_H
 #define FASTRPC_HASH_TABLE_H
 
+#include <pthread.h>
 #include "uthash.h"
 
 /* Add members to a struct to hash it using effective domain id */
