@@ -41,6 +41,7 @@ noinst_HEADERS = \
 	fastrpc_config.h \
 	fastrpc_config_parser.h \
 	fastrpc_context.h \
+	fastrpc_domain_watcher.h \
 	fastrpc_hash_table.h \
 	fastrpc_internal.h \
 	fastrpc_ioctl.h \

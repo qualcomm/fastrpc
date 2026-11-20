@@ -231,26 +231,39 @@ static AEEResult init_domain_queues_locked(int domain) {
   VERIFYC((dq = calloc(1, sizeof(*dq))) != NULL, AEE_ENOMEMORY);
   dq->domain = domain;
 
-  /* Get URI of session */
-  dspqueue_skel.domain_name_len = (dom == CDSP1_DOMAIN_ID) ?
-      strlen(CDSP1_DOMAIN_NAME) + 1 : strlen(CDSP_DOMAIN_NAME) + 1;
-  VERIFYC((dspqueue_skel.domain_name = (char *)calloc(
-               dspqueue_skel.domain_name_len, sizeof(char))) != NULL,
-          AEE_ENOMEMORY);
+  /* Get URI of session. "dom" is the dynamic logical id here, not a
+   * legacy id, when domain came from the Level-1 table. */
+  if (IS_DYNAMIC_DOMAIN_ID(dom)) {
+    fastrpc_domain_internal d;
 
-  // Open session on the right DSP
-  if (dom == CDSP_DOMAIN_ID) {
-    strlcpy(dspqueue_skel.domain_name, CDSP_DOMAIN_NAME,
-                dspqueue_skel.domain_name_len);
-  } else if (dom == ADSP_DOMAIN_ID) {
-    strlcpy(dspqueue_skel.domain_name, ADSP_DOMAIN_NAME,
-                dspqueue_skel.domain_name_len);
-  } else if (dom == CDSP1_DOMAIN_ID) {
-    strlcpy(dspqueue_skel.domain_name, CDSP1_DOMAIN_NAME,
+    VERIFYC(fastrpc_get_domain_by_logical_id(dom, &d), AEE_ERPC);
+    dspqueue_skel.domain_name_len = strlen(d.domain_info.name) + 1;
+    VERIFYC((dspqueue_skel.domain_name = (char *)calloc(
+                 dspqueue_skel.domain_name_len, sizeof(char))) != NULL,
+            AEE_ENOMEMORY);
+    strlcpy(dspqueue_skel.domain_name, d.domain_info.name,
                 dspqueue_skel.domain_name_len);
   } else {
-    nErr = AEE_EUNSUPPORTED;
-    goto bail;
+    dspqueue_skel.domain_name_len = (dom == CDSP1_DOMAIN_ID) ?
+        strlen(CDSP1_DOMAIN_NAME) + 1 : strlen(CDSP_DOMAIN_NAME) + 1;
+    VERIFYC((dspqueue_skel.domain_name = (char *)calloc(
+                 dspqueue_skel.domain_name_len, sizeof(char))) != NULL,
+            AEE_ENOMEMORY);
+
+    // Open session on the right DSP
+    if (dom == CDSP_DOMAIN_ID) {
+      strlcpy(dspqueue_skel.domain_name, CDSP_DOMAIN_NAME,
+                  dspqueue_skel.domain_name_len);
+    } else if (dom == ADSP_DOMAIN_ID) {
+      strlcpy(dspqueue_skel.domain_name, ADSP_DOMAIN_NAME,
+                  dspqueue_skel.domain_name_len);
+    } else if (dom == CDSP1_DOMAIN_ID) {
+      strlcpy(dspqueue_skel.domain_name, CDSP1_DOMAIN_NAME,
+                  dspqueue_skel.domain_name_len);
+    } else {
+      nErr = AEE_EUNSUPPORTED;
+      goto bail;
+    }
   }
   dspqueue_skel.session_id = GET_SESSION_ID_FROM_DOMAIN_ID(domain);
 
@@ -498,11 +511,15 @@ AEEResult dspqueue_create(int domain, uint32_t flags, uint32_t req_queue_size,
 
   if (domain == -1) {
     domain = get_current_domain();
+    domain = normalize_effec_domain_id(domain);
     if (!IS_VALID_EFFECTIVE_DOMAIN_ID(domain)) {
       return AEE_ERPC;
     }
-  } else if (!IS_VALID_EFFECTIVE_DOMAIN_ID(domain)) {
-    return AEE_EBADPARM;
+  } else {
+    domain = normalize_effec_domain_id(domain);
+    if (!IS_VALID_EFFECTIVE_DOMAIN_ID(domain)) {
+      return AEE_EBADPARM;
+    }
   }
 
   // Initialize process-level and per-domain queue structures and signaling
@@ -2760,10 +2777,17 @@ static int dspqueue_notif_callback(void *context, int domain, int session,
   }
   // All other statuses are some kind of process exit or DSP crash.
   assert(context == queues);
-  if (session && domain < NUM_DOMAINS) {
+  if (session) {
     // Did not receive effective domain ID for extended session. Compute it.
     effec_domain_id = GET_EFFECTIVE_DOMAIN_ID(domain, session);
   }
+  /*
+   * effec_domain_id may still be a bare logical id here (a dynamic domain
+   * with session 0 never enters the branch above) -- dspqueue_domain_queues_lookup()
+   * below is keyed by effective id only, so normalize unconditionally.
+   * No-op if effec_domain_id is already a valid effective id.
+   */
+  effec_domain_id = normalize_effec_domain_id(effec_domain_id);
   FARF(ALWAYS, "%s for domain %d, session %d, status %u", __func__, domain,
        session, status);
   assert(IS_VALID_EFFECTIVE_DOMAIN_ID(effec_domain_id));

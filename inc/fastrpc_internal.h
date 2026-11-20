@@ -5,6 +5,7 @@
 #define FASTRPC_INTERNAL_H
 
 #include <errno.h>
+#include <limits.h>
 #include <stdbool.h>
 #include <semaphore.h>
 
@@ -21,6 +22,177 @@
 
 // Aligns the memory
 #define ALIGN_B(p, a)	      (((p) + ((a) - 1)) & ~((a) - 1))
+
+/*
+ * Dynamic domain system: effective domain ID multiplier.
+ * For dynamic domains: effec_id = logical_id * EFFEC_DOMAIN_ID_MULTIPLIER + session
+ * For legacy domains:  effec_id = legacy_domain_id + NUM_DOMAINS * session
+ *
+ * Logical ID formula:
+ *   logical_id = (dsp_type * 1000) + instance_id
+ *   NSP  type=1: 1000 (nsp1000), 1001 (nsp1001), 1002, 1003
+ *   HPASS type=5: 5000 (hpass5000/adsp), 5001 (hpass5001), 5002 (hpass5002)
+ */
+#define EFFEC_DOMAIN_ID_MULTIPLIER      100
+#define FASTRPC_MIN_LOGICAL_DOMAIN_ID   1000
+#define FASTRPC_MAX_LOGICAL_DOMAIN_ID   5999
+
+/* True if id is a dynamic logical domain ID (not a legacy 0..NUM_DOMAINS-1 ID) */
+#define IS_DYNAMIC_DOMAIN_ID(id) \
+    ((id) >= FASTRPC_MIN_LOGICAL_DOMAIN_ID && (id) <= FASTRPC_MAX_LOGICAL_DOMAIN_ID)
+
+/* Compute effective domain ID for a dynamic domain */
+#define GET_DYNAMIC_EFFEC_DOMAIN_ID(logical_id, session) \
+    ((logical_id) * EFFEC_DOMAIN_ID_MULTIPLIER + (session))
+
+/* True if effec_id belongs to the dynamic domain system */
+#define IS_DYNAMIC_EFFEC_DOMAIN_ID(effec_id) \
+    IS_DYNAMIC_DOMAIN_ID((effec_id) / EFFEC_DOMAIN_ID_MULTIPLIER)
+
+/* Decode logical domain ID from a dynamic effective domain ID */
+#define GET_LOGICAL_FROM_DYNAMIC_EFFEC(effec_id) \
+    ((effec_id) / EFFEC_DOMAIN_ID_MULTIPLIER)
+
+/*
+ * Legacy and dynamic effective domain IDs share one int namespace and are
+ * told apart purely by value range (IS_DYNAMIC_EFFEC_DOMAIN_ID()), not by an
+ * explicit mode flag. That only works if the two ranges can never overlap:
+ * the largest legacy effective ID (NUM_DOMAINS-1 + NUM_DOMAINS*(MAX_SESSIONS_LIMIT-1))
+ * must stay below the smallest dynamic effective ID
+ * (FASTRPC_MIN_LOGICAL_DOMAIN_ID * EFFEC_DOMAIN_ID_MULTIPLIER). If either
+ * range ever gets widened, this catches the collision at compile time
+ * instead of silently misrouting an ID at runtime.
+ */
+_Static_assert(
+    (NUM_DOMAINS - 1) + NUM_DOMAINS * (MAX_SESSIONS_LIMIT - 1) <
+        FASTRPC_MIN_LOGICAL_DOMAIN_ID * EFFEC_DOMAIN_ID_MULTIPLIER,
+    "legacy and dynamic effective domain ID ranges overlap");
+
+/*
+ * Domain information shared by all session nodes for one physical domain.
+ * Populated from device node probing.
+ */
+typedef struct {
+    fastrpc_domain domain_info;             /* public info returned to clients */
+    int            legacy_domain_id;        /* e.g. ADSP_DOMAIN_ID=0, or -1 */
+    char           legacy_domain_name[MAX_DOMAIN_NAMELEN]; /* e.g. "adsp" or "" */
+
+    /* Cached DSP_IMAGE_CONFIG capability (enum dsp_image_config), 0 = not yet queried. */
+    uint32_t       dsp_image_config;
+
+    /* Raw /dev basename as discovered (e.g. "cdsp3", "gdsp0") -- the
+     * "fastrpc-" prefix and "-secure" suffix stripped. Lets device-open
+     * reconstruct both node paths for ANY discovered instance instead of
+     * a fixed per-instance table. */
+    char           dev_basename[MAX_DOMAIN_NAMELEN];
+
+    /* Cached arch-specific DSP library search path (e.g. ".../hexagon/v68"),
+     * resolved once per physical domain from ARCH_VER at domain-init time.
+     * Empty string = not yet resolved / not available. */
+    char           dsp_search_path[PATH_MAX];
+
+    /* Cached shell file path that worked last time, per signed(0)/unsigned(1)
+     * variant -- avoids re-walking DSP_LIBS_LOCATION/VENDOR_DSP_LOCATION on
+     * every session of a domain whose shell isn't at the default location. */
+    char           shell_path[2][PATH_MAX];
+} fastrpc_domain_internal;
+
+/*
+ * Level-1 hash table node for one physical domain.
+ * Keyed by logical_id (1000, 5000, 5001, etc.).
+ */
+struct fastrpc_domain_hash_node {
+    fastrpc_domain_internal domain_obj;
+    ADD_DOMAIN_HASH();          /* adds: int domain (=logical_id); UT_hash_handle hh; */
+};
+
+/*
+ * Level-1 domain hash table, keyed by logical_id. Shared by
+ * fastrpc_domains.c (registry/public API), fastrpc_domain_watcher.c (the
+ * generic watcher thread), and the active discovery backend (today,
+ * fastrpc_domain_discovery_devnode.c).
+ */
+DECLARE_HASH_TABLE_TYPE(fastrpc_domain, struct fastrpc_domain_hash_node)
+extern fastrpc_domain_table g_domain_table;
+struct fastrpc_domain_hash_node *domain_table_add(int logical_id);
+struct fastrpc_domain_hash_node *domain_table_find(int logical_id);
+
+/* Bound on distinct physical domains tracked in one discovery pass or
+ * notification snapshot. */
+#define FASTRPC_MAX_DISCOVERED_DOMAINS 64
+
+/*
+ * fastrpc_domain_filter_matches - check if a domain entry matches a filter.
+ *
+ * If domain_id >= 0, matches by exact domain id.
+ * Otherwise matches by domain_type (FASTRPC_ALL_DOMAINS is a wildcard).
+ */
+static __inline bool fastrpc_domain_filter_matches(
+    int domain_id,
+    fastrpc_domain_type domain_type,
+    const fastrpc_domain *domain_info)
+{
+    if (!domain_info)
+        return false;
+    if (domain_id >= 0)
+        return domain_id == domain_info->id;
+    if (domain_type == FASTRPC_ALL_DOMAINS)
+        return true;
+    return domain_type == domain_info->type;
+}
+
+/* fastrpc_domains.c exports */
+void fastrpc_domain_table_init(void);
+void fastrpc_domain_table_deinit(void);
+int  fastrpc_discover_domains(void);
+int  fastrpc_get_logical_id_for_legacy(int legacy_domain_id);
+/*
+ * Copy the matching Level-1 entry into *out while g_domain_table.mut is
+ * held, instead of returning a pointer into the live node -- a caller
+ * reading fields off that pointer after the lock was released could race
+ * fastrpc_discover_domains()'s in-place field updates.
+ * Returns false, *out untouched, if no match.
+ */
+bool fastrpc_get_domain_by_name(const char *name, size_t name_len,
+                                 fastrpc_domain_internal *out);
+bool fastrpc_get_domain_by_logical_id(int logical_id, fastrpc_domain_internal *out);
+void fastrpc_domains_table_lock(void);
+void fastrpc_domains_table_unlock(void);
+
+/* Iterates logical ids present in the Level-1 domain table, in increasing
+ * order; pass -1 to start. Returns -1 once exhausted. */
+int fastrpc_next_logical_domain(int prev);
+
+/*
+ * Backward-compatibility conversion functions.
+ * These allow old apps that pass legacy domain IDs (e.g. CDSP_DOMAIN_ID=3)
+ * directly to APIs to be routed to the same dynamic session as new apps.
+ */
+int convert_legacy_domain_to_dynamic(int domain);
+int convert_legacy_effec_domain_to_dynamic(int effec_domain);
+
+/* Caches DSP_IMAGE_CONFIG per logical domain; queries the kernel once. */
+uint32_t fastrpc_get_cached_image_config(int logical_id, int dev);
+
+/* Caches an arch-specific DSP library search path per logical domain.
+ * Read back via fastrpc_get_domain_by_logical_id()'s dsp_search_path field. */
+void fastrpc_set_cached_dsp_search_path(int logical_id, const char *path);
+
+/* Per-physical-domain shell path cache -- see shell_path[] above. */
+bool fastrpc_get_cached_shell_path(int logical_id, int unsigned_shell,
+                                   char *out, size_t out_len);
+void fastrpc_set_cached_shell_path(int logical_id, int unsigned_shell,
+                                   const char *path);
+
+/* Domain-status notification API; callbacks fire on up/down change. */
+void fastrpc_domain_status_notif_init(void);
+void fastrpc_domain_status_notif_deinit(void);
+void fastrpc_notify_domain_status(fastrpc_domain domain_info);
+int  fastrpc_register_domain_status_notif(fastrpc_domain_notif_info *info);
+int  fastrpc_deregister_domain_status_notif(fastrpc_domain_notif_info *info);
+
+/* True if a session entry exists for the effective domain id */
+bool fastrpc_is_valid_effec_domain(int effec_domain_id);
 
 #define FASTRPC_SESSION_ID1  (4)
 
@@ -71,24 +243,117 @@ static __inline uint32_t Q6_R_cl0_R(uint32_t num) {
 
 #define FASTRPC_INFO_SMMU   (1 << 0)
 
-#define GET_SESSION_ID_FROM_DOMAIN_ID(domain_id) ((int)((domain_id) / NUM_DOMAINS))
+/* Session ID from an effective domain ID (dynamic or legacy) */
+static __inline int get_session_id_from_domain_id(int domain_id) {
+    if (IS_DYNAMIC_EFFEC_DOMAIN_ID(domain_id))
+        return (domain_id) % EFFEC_DOMAIN_ID_MULTIPLIER;
+    return (int)((domain_id) / NUM_DOMAINS);
+}
+#define GET_SESSION_ID_FROM_DOMAIN_ID(domain_id) get_session_id_from_domain_id(domain_id)
 
-/* From actual domain ID and session ID, get effective domain ID */
-#define GET_EFFECTIVE_DOMAIN_ID(domain, session) ((domain) + (NUM_DOMAINS * (session)))
+/*
+ * From domain ID and session ID, get effective domain ID.
+ * For dynamic domains: effec = logical_id * 100 + session
+ * For legacy domains:  effec = domain + NUM_DOMAINS * session
+ */
+static __inline int get_effective_domain_id(int domain, int session) {
+    if (IS_DYNAMIC_DOMAIN_ID(domain))
+        return GET_DYNAMIC_EFFEC_DOMAIN_ID(domain, session);
+    return domain + (NUM_DOMAINS * session);
+}
+#define GET_EFFECTIVE_DOMAIN_ID(domain, session) get_effective_domain_id(domain, session)
 
-/* From effective domain ID, get actual domain ID */
-#define GET_DOMAIN_FROM_EFFEC_DOMAIN_ID(effec_dom_id) ((effec_dom_id) % NUM_DOMAINS)
+/*
+ * normalize_effec_domain_id - convert a legacy effective domain ID to
+ *   the dynamic equivalent when the Level-1 table has been populated.
+ *
+ * A legacy effective ID satisfies:
+ *   - not dynamic (< FASTRPC_MIN_LOGICAL_DOMAIN_ID * EFFEC_DOMAIN_ID_MULTIPLIER)
+ *   - not -1 (wildcard/all)
+ *
+ * If the Level-1 table has not been populated yet (Level-2 entries for the
+ * dynamic domain do not exist), the legacy ID is returned unchanged so that
+ * the existing legacy Level-2 session is used as a fallback.
+ */
+static __inline int normalize_effec_domain_id(int effec_id) {
+    int dynamic;
 
-/* Check if given domain ID is in valid range */
-#define IS_VALID_DOMAIN_ID(domain) ((domain >= 0) && (domain < NUM_DOMAINS))
+    /* Already dynamic, -1 (all domains), or out of range — no change */
+    if (effec_id < 0 || IS_DYNAMIC_EFFEC_DOMAIN_ID(effec_id))
+        return effec_id;
+
+    /* Only convert if it looks like a legacy effective ID */
+    if (effec_id >= NUM_DOMAINS * 1000)
+        return effec_id;  /* unknown range, leave as-is */
+
+    dynamic = convert_legacy_effec_domain_to_dynamic(effec_id);
+
+    /*
+     * Only use the dynamic ID if a Level-2 session entry was pre-created
+     * for it (i.e. the domain was discovered and its sessions initialized).
+     * fastrpc_is_valid_effec_domain() checks the hlist hash table.
+     */
+    if (dynamic > 0 && dynamic != effec_id && fastrpc_is_valid_effec_domain(dynamic))
+        return dynamic;
+
+    /*
+     * effec_id didn't decode to a real legacy-effective session above, but
+     * its numeric range (FASTRPC_MIN_LOGICAL_DOMAIN_ID..FASTRPC_MAX_LOGICAL_DOMAIN_ID)
+     * also overlaps bare dynamic logical domain ids (e.g. 5000 for
+     * "adsp"/HPASS instance 0) -- callers that query a capability or send a
+     * control request without ever opening a session pass the logical id
+     * directly, not an effective id. Try that interpretation: session 0 of
+     * a dynamic domain has its entry pre-created at discovery time (see
+     * fastrpc_ensure_default_session()), so this only succeeds for a
+     * genuinely discovered domain, not an arbitrary in-range number.
+     */
+    if (IS_DYNAMIC_DOMAIN_ID(effec_id)) {
+        int effec0 = get_effective_domain_id(effec_id, 0);
+
+        if (fastrpc_is_valid_effec_domain(effec0))
+            return effec0;
+    }
+
+    return effec_id;
+}
+
+/*
+ * From effective domain ID, get the routing domain ID.
+ * For dynamic: returns the logical_id (e.g. 5001)
+ * For legacy:  returns legacy domain ID (e.g. 3 for CDSP)
+ */
+static __inline int get_domain_from_effec_domain_id(int effec_id) {
+    if (IS_DYNAMIC_EFFEC_DOMAIN_ID(effec_id))
+        return GET_LOGICAL_FROM_DYNAMIC_EFFEC(effec_id);
+    return effec_id % NUM_DOMAINS;
+}
+#define GET_DOMAIN_FROM_EFFEC_DOMAIN_ID(effec_dom_id) \
+    get_domain_from_effec_domain_id(effec_dom_id)
+
+/*
+ * Check if given domain ID is valid:
+ * - Legacy IDs: 0..NUM_DOMAINS-1
+ * - Dynamic logical IDs: FASTRPC_MIN_LOGICAL_DOMAIN_ID..FASTRPC_MAX_LOGICAL_DOMAIN_ID
+ */
+#define IS_VALID_DOMAIN_ID(domain) \
+    (((domain) >= 0 && (domain) < NUM_DOMAINS) || IS_DYNAMIC_DOMAIN_ID(domain))
 
 /* Check if given effective domain ID has a session entry (see
  * fastrpc_is_valid_effec_domain()). Sessions are created when they are
  * reserved or first used, so there is no fixed range to compare against. */
 #define IS_VALID_EFFECTIVE_DOMAIN_ID(domain) fastrpc_is_valid_effec_domain(domain)
 
-/* Check if given effective domain ID is for a session other than 0 */
-#define IS_EXTENDED_DOMAIN_ID(domain) ((domain) >= NUM_DOMAINS)
+/*
+ * Check if effective domain ID represents a session other than 0.
+ * For legacy:  any effec_id >= NUM_DOMAINS means session >= 1
+ * For dynamic: session_id = effec_id % EFFEC_DOMAIN_ID_MULTIPLIER
+ */
+static __inline bool is_extended_domain_id(int effec_id) {
+    if (IS_DYNAMIC_EFFEC_DOMAIN_ID(effec_id))
+        return (effec_id % EFFEC_DOMAIN_ID_MULTIPLIER) >= 1;
+    return effec_id >= NUM_DOMAINS;
+}
+#define IS_EXTENDED_DOMAIN_ID(domain) is_extended_domain_id(domain)
 
 /* Loop thru list of all domain ids */
 #define FOR_EACH_DOMAIN_ID(i) for(i = 0; i < NUM_DOMAINS; i++)
@@ -350,6 +615,15 @@ struct handle_list {
   * fastrpc_apps_user.c. Returns NULL if the session has no entry.
   **/
 struct handle_list *fastrpc_get_hlist_node(int domain);
+
+/**
+  * @brief Ensures a session-0 entry exists for a discovered logical domain,
+  * defined in fastrpc_apps_user.c. Called from domain discovery so a
+  * capability query or other no-session-opened caller can resolve a bare
+  * logical domain id (see normalize_effec_domain_id()) without first
+  * reserving or opening anything.
+  **/
+void fastrpc_ensure_default_session(int logical_domain);
 
 /**
   * @brief API to get the DSP_SEARCH_PATH stored locally as static.
