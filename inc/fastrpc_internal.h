@@ -134,6 +134,21 @@ struct fastrpc_domain_hash_node {
 };
 
 /*
+ * Level-1 domain hash table, keyed by logical_id. Shared by
+ * fastrpc_domains.c (registry/public API), fastrpc_domain_watcher.c (the
+ * generic watcher thread), and the active discovery backend (today,
+ * fastrpc_domain_discovery_devnode.c).
+ */
+DECLARE_HASH_TABLE_TYPE(fastrpc_domain, struct fastrpc_domain_hash_node)
+extern fastrpc_domain_table g_domain_table;
+struct fastrpc_domain_hash_node *domain_table_add(int logical_id);
+struct fastrpc_domain_hash_node *domain_table_find(int logical_id);
+
+/* Bound on distinct physical domains tracked in one discovery pass or
+ * notification snapshot. */
+#define FASTRPC_MAX_DISCOVERED_DOMAINS 64
+
+/*
  * fastrpc_domain_filter_matches - check if a domain entry matches a filter.
  *
  * If domain_id >= 0, matches by exact domain id.
@@ -170,6 +185,31 @@ bool fastrpc_get_domain_by_name(const char *name, size_t name_len,
 bool fastrpc_get_domain_by_logical_id(int logical_id, fastrpc_domain_internal *out);
 void fastrpc_domains_table_lock(void);
 void fastrpc_domains_table_unlock(void);
+
+/*
+ * Parses a device basename (e.g. "cdsp3", "gdsp1", "hpass", "adsp") of the
+ * form "<family><digits>" into a type + instance id; absent digits ==
+ * instance 0. Shared with callers (e.g. the default listener's CLI
+ * argument resolution) that need the same family/instance split discovery
+ * itself uses, instead of re-deriving it ad hoc per family.
+ */
+bool fastrpc_parse_dev_family(const char *base, fastrpc_domain_type *type,
+                               int *instance_id);
+
+/*
+ * Same as fastrpc_parse_dev_family(), but also overrides the placeholder
+ * type with the real classified type if this basename has already been
+ * discovered -- the override every caller that then computes a
+ * "type*1000+instance_id" logical_id needs, so callers don't have to
+ * re-derive it themselves (and can't forget to).
+ */
+bool fastrpc_resolve_dev_family(const char *base, fastrpc_domain_type *type,
+                                 int *instance_id);
+
+/* Maps a domain type to its name-prefix label (e.g. FASTRPC_HPASS ->
+ * "hpass"), used to build the "<label><logical_id>" domain name. Shared so
+ * fastrpc_set_domain_type() can rebuild "name" after reclassification. */
+const char *domain_type_label(fastrpc_domain_type t);
 
 /* Iterates logical ids present in the Level-1 domain table, in increasing
  * order; pass -1 to start. Returns -1 once exhausted. */
