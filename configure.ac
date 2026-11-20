@@ -174,6 +174,7 @@ AC_SUBST([STRICTER_LDFLAGS])
 AC_CONFIG_FILES([
 Makefile
 inc/Makefile
+idl/Makefile
 src/Makefile
 test/Makefile
 files/Makefile
