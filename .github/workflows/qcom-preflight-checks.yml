@@ -16,7 +16,7 @@ jobs:
     with:
         # ✅ Preflight Checkers
         enable-repolinter-check: true          # default: true
-        enable-semgrep-scan: true              # default: true
+        enable-semgrep-scan: false             # disabled: covered by GitHub Advanced Security (Semgrep OSS)
         enable-copyright-license-check: true   # default: true
         enable-commit-email-check: true        # default: true
         enable-dependency-review: true         # default: true
