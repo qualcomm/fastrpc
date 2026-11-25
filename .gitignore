@@ -45,3 +45,4 @@ test/fastrpc_test
 
 # make dist tarballs
 fastrpc-*.tar.gz
+*.pc
