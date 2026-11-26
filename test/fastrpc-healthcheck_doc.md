@@ -125,14 +125,16 @@ DSP runtime components are searched in the following order:
 
 1. Command-line paths (`--lib-path`)
 2. Platform configuration (YAML-derived paths on Linux)
-3. Environment variables:
-   - `DSP_LIBRARY_PATH`
-   - DSP-specific environment variables
+3. Environment variable (`;`-separated, same as libfastrpc):
+   - `DSP_LIBRARY_PATH`, or `ADSP_LIBRARY_PATH` if `DSP_LIBRARY_PATH` is not set
 4. Platform defaults:
    - Linux: `/usr/lib/dsp`, `/usr/lib/rfsa/adsp`
 5. (Android only) DSP-specific directories under `/vendor/dsp`
 
 This priority ensures that user-specified paths override system configuration.
+
+Directories from `--lib-path` or the environment variable that do not exist
+are skipped, and the tool prints a warning listing them.
 
 ---
 

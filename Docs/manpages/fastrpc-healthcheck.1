@@ -6,6 +6,7 @@ fastrpc\-healthcheck \- report DSP availability and FastRPC offload readiness
 .SH SYNOPSIS
 .B fastrpc\-healthcheck
 [\fB\-l\fR \fIDSP\fB:\fIPATH\fR]...
+[\fB\-j\fR | \fB\-\-json\fR]
 [\fB\-h\fR | \fB\-\-help\fR]
 
 .SH DESCRIPTION
@@ -48,6 +49,10 @@ or
 May be given more than once, including more than once for the same DSP.
 Paths given this way are searched before all others.
 .TP
+.BR \-j ", " \-\-json
+Print the report as a single JSON object instead of text tables. See
+.BR "JSON OUTPUT" .
+.TP
 .BR \-h ", " \-\-help
 Print a usage summary and exit.
 
@@ -88,9 +93,88 @@ followed by the first unmet requirement in parentheses, or
 .B \-
 if the DSP is offline.
 
+.SH JSON OUTPUT
+With
+.BR \-\-json ,
+the same information is printed as one JSON object with these members:
+.TP
+.B version
+Format version, currently 1. It is increased only when a member is renamed,
+removed or changes meaning; new members may be added without a change.
+.TP
+.BR firmware_path ", " build_id ", " dsp_libs_path
+As in the text report;
+.B null
+where the text report shows
+.BR N/A .
+.TP
+.B dma_heap_system
+Whether the system DMA\-BUF heap is available.
+.TP
+.B missing_lib_paths
+Configured library directories that do not exist, each with
+.B source
+(the environment variable name or
+.BR \-\-lib\-path ),
+.B dsp
+(for
+.BR \-\-lib\-path ,
+otherwise
+.BR null )
+and
+.BR path .
+.TP
+.B dsps
+One object per DSP found, with
+.BR name ,
+.B state
+.RB ( online " or " offline ),
+.BR signed_pd ,
+.BR unsigned_pd ,
+.B fastrpc_support
+.RB ( true ,
+.BR false ,
+or
+.B null
+if the DSP is offline) and
+.B reason
+(the first unmet requirement when
+.B fastrpc_support
+is
+.BR false ,
+otherwise
+.BR null ).
+.TP
+.B daemons
+One object per FastRPC daemon, with
+.BR daemon ,
+.BR dsp ,
+.B pd
+and
+.BR running .
+.TP
+.B device_nodes
+One object per FastRPC device node, with
+.BR dsp ,
+.BR path ,
+.BR present ,
+.B permissions
+(as shown by
+.BR "ls \-l" ),
+.B mode
+(octal string),
+.B owner
+and
+.BR group .
+The last four are
+.B null
+if the node is not present.
+
 .SH DSP LIBRARY SEARCH ORDER
 DSP shell binaries are searched for in the following order. Only
-directories that exist are used.
+directories that exist are used; directories given with
+\fB\-\-lib\-path\fR or in the library path environment variable that do
+not exist are listed in a warning.
 .IP 1. 4
 Paths given with \fB\-\-lib\-path\fR for that DSP.
 .IP 2.
@@ -99,7 +183,12 @@ from the machine\-specific configuration in
 .IR /usr/share/qcom/conf.d/ .
 .IP 3.
 Directories listed in
-.BR DSP_LIBRARY_PATH .
+.BR DSP_LIBRARY_PATH ,
+or in
+.B ADSP_LIBRARY_PATH
+if
+.B DSP_LIBRARY_PATH
+is not set.
 .IP 4.
 The platform defaults
 .I /usr/lib/dsp
@@ -109,8 +198,15 @@ and
 .SH ENVIRONMENT
 .TP
 .B DSP_LIBRARY_PATH
-Colon\-separated list of directories to search for DSP shell binaries, for
-all DSPs.
+Semicolon\-separated list of directories to search for DSP shell binaries,
+for all DSPs. This matches how libfastrpc parses the variable.
+.TP
+.B ADSP_LIBRARY_PATH
+Older name for
+.BR DSP_LIBRARY_PATH ,
+used only when
+.B DSP_LIBRARY_PATH
+is not set.
 .TP
 .B LD_LIBRARY_PATH
 Colon\-separated list of directories searched, in addition to
