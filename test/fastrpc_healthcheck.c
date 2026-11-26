@@ -996,6 +996,232 @@ static const char* offload_block_reason(const dsp_t* d)
     return "-";
 }
 
+static void print_text_report(const char* base_fw_path,
+                              const char* matched_build_id,
+                              const char* dsp_env_name,
+                              const char* dsp_all_env,
+                              bool dma_ok,
+                              const dsp_t dsps[DSP_COUNT])
+{
+    printf("DSP firmware path : %s\n", base_fw_path);
+    printf("DSP build ID      : %s\n",
+        matched_build_id[0] ? matched_build_id : "N/A");
+
+    printf("DSP dynamic libs path : %s\n",
+        dsp_base_path[0] ? dsp_base_path : "N/A");
+
+    warn_missing_lib_paths(dsp_env_name, dsp_all_env, dsps);
+
+    printf("\nDMA-BUF Heap Support:\nSystem heap -> %s\n", dma_ok ? "available" : "unavailable");
+
+    printf("\nDSP Summary:\n");
+    printf("%-8s %-10s %-9s %-11s %s\n",
+        "DSP", "State", "SignedPD", "UnsignedPD*", "FastRPC Support");
+    printf("---------------------------------------------------------------------------------\n");
+
+
+    for (int i = 0; i < DSP_COUNT; i++) {
+        const dsp_t* d = &dsps[i];
+
+        if (!d->present) {
+            continue;
+        }
+
+        const char* state = d->online ? "Online" : "Offline";
+
+        char fastrpc_support[128];
+        if (!d->online) {
+            snprintf(fastrpc_support, sizeof(fastrpc_support), "-");
+        } else if (d->offload_capable) {
+            snprintf(fastrpc_support, sizeof(fastrpc_support), "Yes");
+        } else {
+            snprintf(fastrpc_support, sizeof(fastrpc_support),
+                    "No (%s)", offload_block_reason(d));
+        }
+
+        printf("%-8s %-10s %-9s %-11s %s\n",
+            d->name,
+            state,
+            d->signed_pd   ? "Yes" : "No",
+            d->unsigned_pd ? "Yes" : "No",
+            fastrpc_support);
+
+
+    }
+
+    printf("\n* If Unsigned PD not supported, needs signing to run\n");
+
+    print_daemon_status(dsps);
+    printf("\nFastRPC Device Nodes:\n");
+    printf("%-28s %-17s  %-10s %s\n", "Node", "Permissions", "Owner", "Group");
+    printf("---------------------------------------------------------------------------------\n");
+    for (int i = 0; i < DSP_COUNT; i++) {
+        const dsp_t* d = &dsps[i];
+        if (!d->present) continue;
+        for (size_t n = 0; n < d->dev_n; n++)
+            print_devnode_info(d->devnodes[n]);
+    }
+}
+
+/* Print s as a JSON string literal, or null if s is NULL. */
+static void json_str(const char* s) {
+    if (!s) {
+        fputs("null", stdout);
+        return;
+    }
+    putchar('"');
+    for (const unsigned char* p = (const unsigned char*)s; *p; p++) {
+        switch (*p) {
+        case '"':  fputs("\\\"", stdout); break;
+        case '\\': fputs("\\\\", stdout); break;
+        case '\n': fputs("\\n", stdout);  break;
+        case '\t': fputs("\\t", stdout);  break;
+        default:
+            if (*p < 0x20) printf("\\u%04x", *p);
+            else           putchar(*p);
+        }
+    }
+    putchar('"');
+}
+
+static const char* json_bool(bool b) { return b ? "true" : "false"; }
+
+/* Start the next element of a JSON array; n counts elements printed so far. */
+static void json_next(size_t* n) {
+    printf("%s\n    ", (*n)++ ? "," : "");
+}
+
+static void json_end_array(size_t n, bool last) {
+    printf("%s]%s\n", n ? "\n  " : "", last ? "" : ",");
+}
+
+/*
+ * Same data as print_text_report(), as one JSON object. Bump "version" when
+ * a field is renamed, removed or changes meaning; adding fields is fine.
+ */
+static void print_json_report(const char* base_fw_path,
+                              const char* matched_build_id,
+                              const char* dsp_env_name,
+                              const char* dsp_all_env,
+                              bool dma_ok,
+                              const dsp_t dsps[DSP_COUNT])
+{
+    size_t n;
+
+    printf("{\n  \"version\": 1,\n");
+    printf("  \"firmware_path\": ");
+    json_str(base_fw_path);
+    printf(",\n  \"build_id\": ");
+    json_str(matched_build_id[0] ? matched_build_id : NULL);
+    printf(",\n  \"dsp_libs_path\": ");
+    json_str(dsp_base_path[0] ? dsp_base_path : NULL);
+    printf(",\n  \"dma_heap_system\": %s,\n", json_bool(dma_ok));
+
+    printf("  \"missing_lib_paths\": [");
+    n = 0;
+    strv_t missing = {0};
+    missing_env_lib_paths(dsp_all_env, &missing);
+    for (size_t i = 0; i < missing.n; i++) {
+        json_next(&n);
+        printf("{ \"source\": ");
+        json_str(dsp_env_name);
+        printf(", \"dsp\": null, \"path\": ");
+        json_str(missing.v[i]);
+        printf(" }");
+    }
+    vec_free(&missing);
+    for (int i = 0; i < DSP_COUNT; i++) {
+        for (size_t k = 0; k < dsps[i].cli_paths.n; k++) {
+            if (is_dir(dsps[i].cli_paths.v[k])) continue;
+            json_next(&n);
+            printf("{ \"source\": \"--lib-path\", \"dsp\": ");
+            json_str(dsps[i].name);
+            printf(", \"path\": ");
+            json_str(dsps[i].cli_paths.v[k]);
+            printf(" }");
+        }
+    }
+    json_end_array(n, false);
+
+    /* fastrpc_support is null for offline DSPs, matching "-" in the text table. */
+    printf("  \"dsps\": [");
+    n = 0;
+    for (int i = 0; i < DSP_COUNT; i++) {
+        const dsp_t* d = &dsps[i];
+        if (!d->present) continue;
+
+        json_next(&n);
+        printf("{ \"name\": ");
+        json_str(d->name);
+        printf(", \"state\": \"%s\", \"signed_pd\": %s, \"unsigned_pd\": %s",
+               d->online ? "online" : "offline",
+               json_bool(d->signed_pd), json_bool(d->unsigned_pd));
+        if (!d->online)
+            printf(", \"fastrpc_support\": null, \"reason\": null }");
+        else if (d->offload_capable)
+            printf(", \"fastrpc_support\": true, \"reason\": null }");
+        else {
+            printf(", \"fastrpc_support\": false, \"reason\": ");
+            json_str(offload_block_reason(d));
+            printf(" }");
+        }
+    }
+    json_end_array(n, false);
+
+    printf("  \"daemons\": [");
+    n = 0;
+    for (size_t k = 0; k < sizeof(fastrpc_daemons) / sizeof(fastrpc_daemons[0]); k++) {
+        const dsp_t* d = &dsps[fastrpc_daemons[k].dsp];
+        if (!d->present) continue;
+
+        bool running = daemon_running(fastrpc_daemons[k].bin,
+                                      fastrpc_daemons[k].pd,
+                                      fastrpc_daemons[k].domain);
+        json_next(&n);
+        printf("{ \"daemon\": ");
+        json_str(fastrpc_daemons[k].bin);
+        printf(", \"dsp\": ");
+        json_str(d->name);
+        printf(", \"pd\": ");
+        json_str(fastrpc_daemons[k].pd);
+        printf(", \"running\": %s }", json_bool(running));
+    }
+    json_end_array(n, false);
+
+    printf("  \"device_nodes\": [");
+    n = 0;
+    for (int i = 0; i < DSP_COUNT; i++) {
+        const dsp_t* d = &dsps[i];
+        if (!d->present) continue;
+
+        for (size_t k = 0; k < d->dev_n; k++) {
+            devnode_info_t info;
+            get_devnode_info(d->devnodes[k], &info);
+
+            json_next(&n);
+            printf("{ \"dsp\": ");
+            json_str(d->name);
+            printf(", \"path\": ");
+            json_str(d->devnodes[k]);
+            if (!info.present) {
+                printf(", \"present\": false, \"permissions\": null, "
+                       "\"mode\": null, \"owner\": null, \"group\": null }");
+                continue;
+            }
+            printf(", \"present\": true, \"permissions\": ");
+            json_str(info.perms);
+            printf(", \"mode\": \"%04o\", \"owner\": ", info.mode);
+            json_str(info.owner);
+            printf(", \"group\": ");
+            json_str(info.group);
+            printf(" }");
+        }
+    }
+    json_end_array(n, true);
+
+    printf("}\n");
+}
+
 static bool firmware_present_for(dsp_t* d)
 {
     d->fw_present = false;
@@ -1065,6 +1291,7 @@ static void usage(const char* argv0) {
       "Usage: %s [OPTIONS]\n"
       "Options:\n"
       "  -l, --lib-path DSP:PATH   Add library search path for specific DSP (repeatable)\n"
+      "  -j, --json                Print the report as JSON\n"
       "  -h, --help                Show this help message\n"
       "\n"
       "DSP names: ADSP, CDSP, CDSP1, GDSP0, GDSP1, MDSP, SDSP\n"
@@ -1228,15 +1455,21 @@ int main(int argc, char** argv) {
     memset(dsps, 0, sizeof(dsps));
     dsp_init_defaults(dsps);
 
+    bool json_output = false;
+
     static struct option long_options[] = {
         {"lib-path", required_argument, 0, 'l'},
+        {"json",     no_argument,       0, 'j'},
         {"help",     no_argument,       0, 'h'},
         {0, 0, 0, 0}
     };
 
     int opt;
-    while ((opt = getopt_long(argc, argv, "hl:", long_options, NULL)) != -1) {
+    while ((opt = getopt_long(argc, argv, "hjl:", long_options, NULL)) != -1) {
         switch (opt) {
+            case 'j':
+                json_output = true;
+                break;
             case 'l': {
                 char* spec = xstrdup(optarg);
                 char* colon = strchr(spec, ':');
@@ -1408,64 +1641,12 @@ int main(int argc, char** argv) {
 
     }
 
-    printf("DSP firmware path : %s\n", base_fw_path);
-    printf("DSP build ID      : %s\n",
-        matched_build_id[0] ? matched_build_id : "N/A");
-
-    printf("DSP dynamic libs path : %s\n",
-        dsp_base_path[0] ? dsp_base_path : "N/A");
-
-    warn_missing_lib_paths(dsp_env_name, dsp_all_env, dsps);
-
-    printf("\nDMA-BUF Heap Support:\nSystem heap -> %s\n", dma_ok ? "available" : "unavailable");
-
-    printf("\nDSP Summary:\n");
-    printf("%-8s %-10s %-9s %-11s %s\n",
-        "DSP", "State", "SignedPD", "UnsignedPD*", "FastRPC Support");
-    printf("---------------------------------------------------------------------------------\n");
-
-
-    for (int i = 0; i < DSP_COUNT; i++) {
-        dsp_t* d = &dsps[i];
-
-        if (!d->present) {
-            continue;
-        }
-
-        const char* state = d->online ? "Online" : "Offline";
-
-        char fastrpc_support[128];
-        if (!d->online) {
-            snprintf(fastrpc_support, sizeof(fastrpc_support), "-");
-        } else if (d->offload_capable) {
-            snprintf(fastrpc_support, sizeof(fastrpc_support), "Yes");
-        } else {
-            snprintf(fastrpc_support, sizeof(fastrpc_support),
-                    "No (%s)", offload_block_reason(d));
-        }
-
-        printf("%-8s %-10s %-9s %-11s %s\n",
-            d->name,
-            state,
-            d->signed_pd   ? "Yes" : "No",
-            d->unsigned_pd ? "Yes" : "No",
-            fastrpc_support);
-
-
-    }
-
-    printf("\n* If Unsigned PD not supported, needs signing to run\n");
-
-    print_daemon_status(dsps);
-    printf("\nFastRPC Device Nodes:\n");
-    printf("%-28s %-17s  %-10s %s\n", "Node", "Permissions", "Owner", "Group");
-    printf("---------------------------------------------------------------------------------\n");
-    for (int i = 0; i < DSP_COUNT; i++) {
-        const dsp_t* d = &dsps[i];
-        if (!d->present) continue;
-        for (size_t n = 0; n < d->dev_n; n++)
-            print_devnode_info(d->devnodes[n]);
-    }
+    if (json_output)
+        print_json_report(base_fw_path, matched_build_id, dsp_env_name,
+                          dsp_all_env, dma_ok, dsps);
+    else
+        print_text_report(base_fw_path, matched_build_id, dsp_env_name,
+                          dsp_all_env, dma_ok, dsps);
 
 #ifdef PARSE_YAML
     if (cached_dsp_library_path) {
