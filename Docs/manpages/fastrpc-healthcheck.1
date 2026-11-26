@@ -90,7 +90,9 @@ if the DSP is offline.
 
 .SH DSP LIBRARY SEARCH ORDER
 DSP shell binaries are searched for in the following order. Only
-directories that exist are used.
+directories that exist are used; directories given with
+\fB\-\-lib\-path\fR or in the library path environment variable that do
+not exist are listed in a warning.
 .IP 1. 4
 Paths given with \fB\-\-lib\-path\fR for that DSP.
 .IP 2.
@@ -99,7 +101,12 @@ from the machine\-specific configuration in
 .IR /usr/share/qcom/conf.d/ .
 .IP 3.
 Directories listed in
-.BR DSP_LIBRARY_PATH .
+.BR DSP_LIBRARY_PATH ,
+or in
+.B ADSP_LIBRARY_PATH
+if
+.B DSP_LIBRARY_PATH
+is not set.
 .IP 4.
 The platform defaults
 .I /usr/lib/dsp
@@ -109,8 +116,15 @@ and
 .SH ENVIRONMENT
 .TP
 .B DSP_LIBRARY_PATH
-Colon\-separated list of directories to search for DSP shell binaries, for
-all DSPs.
+Semicolon\-separated list of directories to search for DSP shell binaries,
+for all DSPs. This matches how libfastrpc parses the variable.
+.TP
+.B ADSP_LIBRARY_PATH
+Older name for
+.BR DSP_LIBRARY_PATH ,
+used only when
+.B DSP_LIBRARY_PATH
+is not set.
 .TP
 .B LD_LIBRARY_PATH
 Colon\-separated list of directories searched, in addition to

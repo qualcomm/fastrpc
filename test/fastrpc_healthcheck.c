@@ -130,12 +130,21 @@ static void vec_free(strv_t* sv) {
     free(sv->v); sv->v=NULL; sv->n=0;
 }
 
-static void split_colon_paths(const char* in, strv_t* out) {
+static void split_paths(const char* in, const char* delim, strv_t* out) {
     if (!in || !*in) return;
     char* dup = xstrdup(in);
-    char* save=NULL; char* tok = strtok_r(dup, ":", &save);
-    while (tok) { if (*tok) vec_push(out, tok); tok = strtok_r(NULL, ":", &save); }
+    char* save=NULL; char* tok = strtok_r(dup, delim, &save);
+    while (tok) { if (*tok) vec_push(out, tok); tok = strtok_r(NULL, delim, &save); }
     free(dup);
+}
+
+static void split_colon_paths(const char* in, strv_t* out) {
+    split_paths(in, ":", out);
+}
+
+/* libfastrpc separates DSP_LIBRARY_PATH/ADSP_LIBRARY_PATH entries with ';'. */
+static void split_dsp_lib_paths(const char* in, strv_t* out) {
+    split_paths(in, ";", out);
 }
 
 static bool dir_has_any(const char* dir, const char* const pats[], size_t np) {
@@ -756,9 +765,7 @@ static void build_search_for(dsp_t* d, const char* dsp_all_env, const char* yaml
     }
 
     strv_t envv = {0};
-    if (dsp_all_env && *dsp_all_env) split_colon_paths(dsp_all_env, &envv);
-    const char* specific = getenv(d->env_name);
-    if (specific && *specific) split_colon_paths(specific, &envv);
+    split_dsp_lib_paths(dsp_all_env, &envv);
     for (size_t i=0; i<envv.n; i++) {
         if (is_dir(envv.v[i])) {
             vec_push(&ordered, envv.v[i]);
@@ -773,6 +780,38 @@ static void build_search_for(dsp_t* d, const char* dsp_all_env, const char* yaml
     }
 
     d->search = ordered;
+}
+
+/* Entries of the DSP library path env var that are not existing directories. */
+static void missing_env_lib_paths(const char* env_val, strv_t* out) {
+    strv_t envv = {0};
+    split_dsp_lib_paths(env_val, &envv);
+    for (size_t i = 0; i < envv.n; i++)
+        if (!is_dir(envv.v[i])) vec_push(out, envv.v[i]);
+    vec_free(&envv);
+}
+
+static void warn_missing_lib_paths(const char* env_name, const char* env_val,
+                                   const dsp_t dsps[DSP_COUNT]) {
+    strv_t missing = {0};
+    missing_env_lib_paths(env_val, &missing);
+    if (missing.n)
+        printf("\nWARNING: %s has folders that do not exist (ignored):\n", env_name);
+    for (size_t i = 0; i < missing.n; i++)
+        printf("  %s\n", missing.v[i]);
+    vec_free(&missing);
+
+    bool header = false;
+    for (int i = 0; i < DSP_COUNT; i++) {
+        for (size_t k = 0; k < dsps[i].cli_paths.n; k++) {
+            if (is_dir(dsps[i].cli_paths.v[k])) continue;
+            if (!header) {
+                printf("\nWARNING: --lib-path folders that do not exist (ignored):\n");
+                header = true;
+            }
+            printf("  %s:%s\n", dsps[i].name, dsps[i].cli_paths.v[k]);
+        }
+    }
 }
 
 #ifdef ANDROID
@@ -1029,7 +1068,7 @@ static void usage(const char* argv0) {
       "  -h, --help                Show this help message\n"
       "\n"
       "DSP names: ADSP, CDSP, CDSP1, GDSP0, GDSP1, MDSP, SDSP\n"
-      "ENV: DSP_LIBRARY_PATH (global for all DSPs)\n",
+      "ENV: DSP_LIBRARY_PATH, or ADSP_LIBRARY_PATH if unset (';'-separated, global for all DSPs)\n",
       argv0);
 }
 
@@ -1229,7 +1268,10 @@ int main(int argc, char** argv) {
 
     update_remoteproc_states(dsps);
 
-    const char* dsp_all_env = getenv("DSP_LIBRARY_PATH");
+    /* Same rule as libfastrpc: DSP_LIBRARY_PATH if set, else ADSP_LIBRARY_PATH. */
+    const char* dsp_env_name = getenv("DSP_LIBRARY_PATH") ? "DSP_LIBRARY_PATH"
+                                                          : "ADSP_LIBRARY_PATH";
+    const char* dsp_all_env = getenv(dsp_env_name);
     char yaml_base_rel[PATH_MAX] = "";
     char yaml_base_abs[PATH_MAX] = "";
 
@@ -1372,6 +1414,8 @@ int main(int argc, char** argv) {
 
     printf("DSP dynamic libs path : %s\n",
         dsp_base_path[0] ? dsp_base_path : "N/A");
+
+    warn_missing_lib_paths(dsp_env_name, dsp_all_env, dsps);
 
     printf("\nDMA-BUF Heap Support:\nSystem heap -> %s\n", dma_ok ? "available" : "unavailable");
 
