@@ -849,6 +849,88 @@ static void print_devnode_info(const char* path) {
            path, info.perms, info.mode, info.owner, info.group);
 }
 
+/* FastRPC daemons (see the .service files in files/): DSP, binary, PD, domain. */
+static const struct {
+    int dsp;
+    const char* bin;
+    const char* pd;
+    const char* domain;
+} fastrpc_daemons[] = {
+    { DSP_ADSP,  "adsprpcd", "rootpd",  "adsp"  },
+    { DSP_ADSP,  "adsprpcd", "audiopd", "adsp"  },
+    { DSP_CDSP,  "cdsprpcd", "rootpd",  "cdsp"  },
+    { DSP_CDSP1, "cdsprpcd", "rootpd",  "cdsp1" },
+    { DSP_GDSP0, "gdsprpcd", "rootpd",  "gdsp0" },
+    { DSP_GDSP1, "gdsprpcd", "rootpd",  "gdsp1" },
+    { DSP_SDSP,  "sdsprpcd", "rootpd",  "sdsp"  },
+};
+
+static const char* daemon_default_domain(const char* bin) {
+    if (!strcmp(bin, "adsprpcd")) return "adsp";
+    if (!strcmp(bin, "cdsprpcd")) return "cdsp";
+    if (!strcmp(bin, "sdsprpcd")) return "sdsp";
+    return NULL; /* gdsprpcd has no default domain */
+}
+
+/*
+ * Scan /proc for a daemon started as "<bin> [pd [domain]]" (see dsprpcd.c).
+ * A missing pd means rootpd; a missing domain means the binary's default DSP.
+ */
+static bool daemon_running(const char* bin, const char* pd, const char* domain) {
+    DIR* dp = opendir("/proc");
+    if (!dp) return false;
+
+    bool found = false;
+    struct dirent* de;
+    while (!found && (de = readdir(dp)) != NULL) {
+        if (!isdigit((unsigned char)de->d_name[0])) continue;
+
+        char path[PATH_MAX], buf[512];
+        snprintf(path, sizeof(path), "/proc/%s/cmdline", de->d_name);
+        FILE* f = fopen(path, "r");
+        if (!f) continue;
+        size_t n = fread(buf, 1, sizeof(buf) - 1, f);
+        fclose(f);
+        if (n == 0) continue; /* kernel thread */
+        buf[n] = '\0';
+
+        /* cmdline is NUL-separated: argv[0]\0argv[1]\0argv[2]\0 */
+        const char* args[3] = { NULL, NULL, NULL };
+        size_t off = 0;
+        for (int a = 0; a < 3 && off < n; a++) {
+            args[a] = buf + off;
+            off += strlen(buf + off) + 1;
+        }
+
+        const char* base = strrchr(args[0], '/');
+        base = base ? base + 1 : args[0];
+        if (strcmp(base, bin) != 0) continue;
+
+        const char* p   = args[1] ? args[1] : "rootpd";
+        const char* dom = args[2] ? args[2] : daemon_default_domain(bin);
+        found = !strcmp(p, pd) && dom && !strcmp(dom, domain);
+    }
+    closedir(dp);
+    return found;
+}
+
+static void print_daemon_status(const dsp_t dsps[DSP_COUNT]) {
+    printf("\nFastRPC Daemons:\n");
+    printf("%-10s %-8s %-8s %s\n", "Daemon", "DSP", "PD", "Status");
+    printf("---------------------------------------------------------------------------------\n");
+    for (size_t k = 0; k < sizeof(fastrpc_daemons) / sizeof(fastrpc_daemons[0]); k++) {
+        const dsp_t* d = &dsps[fastrpc_daemons[k].dsp];
+        if (!d->present) continue;
+
+        bool running = daemon_running(fastrpc_daemons[k].bin,
+                                      fastrpc_daemons[k].pd,
+                                      fastrpc_daemons[k].domain);
+        printf("%-10s %-8s %-8s %s\n",
+               fastrpc_daemons[k].bin, d->name, fastrpc_daemons[k].pd,
+               running ? "running" : "not running");
+    }
+}
+
 static const char* offload_block_reason(const dsp_t* d)
 {
     if (!d->online)
@@ -1330,6 +1412,7 @@ int main(int argc, char** argv) {
 
     printf("\n* If Unsigned PD not supported, needs signing to run\n");
 
+    print_daemon_status(dsps);
     printf("\nFastRPC Device Nodes:\n");
     printf("%-28s %-17s  %-10s %s\n", "Node", "Permissions", "Owner", "Group");
     printf("---------------------------------------------------------------------------------\n");
