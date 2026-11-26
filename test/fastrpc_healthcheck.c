@@ -16,6 +16,8 @@
 #include <fnmatch.h>
 #include <limits.h>
 #include <getopt.h>
+#include <grp.h>
+#include <pwd.h>
 #include <sys/stat.h>
 #include <sys/types.h>
 
@@ -800,6 +802,53 @@ static bool dsp_devnode_ok(const dsp_t* d) {
     return false;
 }
 
+/* Format st_mode like `ls -l`, e.g. "crw-r-----". */
+static void mode_to_str(mode_t m, char out[11]) {
+    out[0] = S_ISCHR(m) ? 'c' : S_ISBLK(m) ? 'b' : S_ISDIR(m) ? 'd' : '-';
+    const char* rwx = "rwxrwxrwx";
+    for (int i = 0; i < 9; i++)
+        out[i + 1] = (m & (1 << (8 - i))) ? rwx[i] : '-';
+    out[10] = '\0';
+}
+
+typedef struct {
+    bool     present;
+    char     perms[11];   /* e.g. "crw-r-----" */
+    unsigned mode;        /* permission bits, e.g. 0640 */
+    char     owner[32];
+    char     group[32];
+} devnode_info_t;
+
+static void get_devnode_info(const char* path, devnode_info_t* info) {
+    memset(info, 0, sizeof(*info));
+    struct stat st;
+    if (stat(path, &st) != 0)
+        return;
+
+    info->present = true;
+    mode_to_str(st.st_mode, info->perms);
+    info->mode = (unsigned)(st.st_mode & 07777);
+
+    struct passwd* pw = getpwuid(st.st_uid);
+    struct group* gr = getgrgid(st.st_gid);
+    if (pw) snprintf(info->owner, sizeof(info->owner), "%s", pw->pw_name);
+    else    snprintf(info->owner, sizeof(info->owner), "%u", (unsigned)st.st_uid);
+    if (gr) snprintf(info->group, sizeof(info->group), "%s", gr->gr_name);
+    else    snprintf(info->group, sizeof(info->group), "%u", (unsigned)st.st_gid);
+}
+
+static void print_devnode_info(const char* path) {
+    devnode_info_t info;
+    get_devnode_info(path, &info);
+    if (!info.present) {
+        printf("%-28s %s\n", path, "not present");
+        return;
+    }
+
+    printf("%-28s %s (%04o)  %-10s %s\n",
+           path, info.perms, info.mode, info.owner, info.group);
+}
+
 static const char* offload_block_reason(const dsp_t* d)
 {
     if (!d->online)
@@ -1280,6 +1329,16 @@ int main(int argc, char** argv) {
     }
 
     printf("\n* If Unsigned PD not supported, needs signing to run\n");
+
+    printf("\nFastRPC Device Nodes:\n");
+    printf("%-28s %-17s  %-10s %s\n", "Node", "Permissions", "Owner", "Group");
+    printf("---------------------------------------------------------------------------------\n");
+    for (int i = 0; i < DSP_COUNT; i++) {
+        const dsp_t* d = &dsps[i];
+        if (!d->present) continue;
+        for (size_t n = 0; n < d->dev_n; n++)
+            print_devnode_info(d->devnodes[n]);
+    }
 
 #ifdef PARSE_YAML
     if (cached_dsp_library_path) {
