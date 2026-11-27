@@ -516,7 +516,7 @@ int ioctl_init(int dev, uint32_t flags, int attr, unsigned char* shell, int shel
 int ioctl_invoke(int dev, int req, remote_handle handle, uint32_t sc, void* pra, int* fds, unsigned int* attrs, unsigned int* crc, uint64_t* perf_kernel, uint64_t* perf_dsp);
 int ioctl_invoke2_notif(int dev, int *domain, int *session, int *status);
 int ioctl_mmap(int dev, int req, uint32_t flags, int attr, int fd, int offset, size_t len, uintptr_t vaddrin, uint64_t* vaddr_out);
-int ioctl_munmap(int dev, int req, int attr, void* buf, int fd, int len, uint64_t vaddr);
+int ioctl_munmap(int dev, int req, int attr, void* buf, int fd, size_t len, uint64_t vaddr);
 int ioctl_getperf(int dev, int keys, void *data, int *datalen);
 int ioctl_getinfo(int dev, uint32_t *info);
 int ioctl_getdspinfo(int dev, int domain, uint32_t attr_id, uint32_t *cap);

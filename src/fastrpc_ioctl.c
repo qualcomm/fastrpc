@@ -103,7 +103,7 @@ int ioctl_mmap(int dev, int req, uint32_t flags, int attr, int fd, int offset,
   return ioErr;
 }
 
-int ioctl_munmap(int dev, int req, int attr, void *buf, int fd, int len,
+int ioctl_munmap(int dev, int req, int attr, void *buf, int fd, size_t len,
                  uint64_t vaddr) {
   int ioErr = AEE_SUCCESS;
 
@@ -121,7 +121,7 @@ int ioctl_munmap(int dev, int req, int attr, void *buf, int fd, int len,
   case MUNMAP_64: {
     struct fastrpc_ioctl_req_munmap unmap = {0};
     unmap.vaddrout = vaddr;
-    unmap.size = (ssize_t)len;
+    unmap.size = len;
     ioErr = ioctl(dev, FASTRPC_IOCTL_MUNMAP, (unsigned long)&unmap);
   } break;
   default:

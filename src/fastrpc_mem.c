@@ -725,6 +725,7 @@ int fastrpc_munmap(int domain, int fd, void *vaddr, size_t length) {
     }
   }
   VERIFYC(mNode && mNode->map.fd == fd, AEE_ENOSUCHMAP);
+  VERIFYC(length == 0 || length == mNode->map.length, AEE_EBADPARM);
   if (mNode->refs > 1) {
     FARF(ERROR, "%s: Attempt to unmap FD %d with %d outstanding references",
          __func__, fd, mNode->refs - 1);
