@@ -17,6 +17,7 @@
 #include "fastrpc_internal.h"
 #include "remote.h"
 #include "verify.h"
+#include <fcntl.h>
 #include <poll.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -206,6 +207,49 @@ bail:
 	return err;
 }
 
+/*
+ * resolve_domain_cli_alias() - resolve a CLI "<family><digits>" short name
+ * (e.g. "adsp1") to its discovered logical domain id.
+ */
+static int resolve_domain_cli_alias(const char *name) {
+  fastrpc_domain_type type;
+  int instance_id;
+  fastrpc_domain_internal d;
+
+  if (!fastrpc_resolve_dev_family(name, &type, &instance_id))
+    return INVALID_DOMAIN_ID;
+  if (!fastrpc_get_domain_by_logical_id((int)type * 1000 + instance_id, &d))
+    return INVALID_DOMAIN_ID;
+  return d.domain_info.id;
+}
+
+/*
+ * fastrpc_domain_is_audio() - decide whether an audiopd daemon should
+ * connect to this domain. Declines when the domain's image config is
+ * COMPUTE or COMPUTE_LITE (no spare audio capacity on either); connects
+ * otherwise (AUDIO, or unknown).
+ */
+static bool fastrpc_domain_is_audio(int domain_id) {
+  fastrpc_domain_internal d;
+  const char *sec_dev = NULL, *non_sec_dev = NULL;
+  int dev, cfg;
+
+  if (!fastrpc_get_domain_by_logical_id(domain_id, &d))
+    return true;
+
+  get_domain_device_names(domain_id, &sec_dev, &non_sec_dev);
+  dev = non_sec_dev ? open(non_sec_dev, O_RDWR | O_CLOEXEC) : -1;
+  if (dev < 0 && sec_dev)
+    dev = open(sec_dev, O_RDWR | O_CLOEXEC);
+  if (dev < 0)
+    return false;
+
+  cfg = (int)fastrpc_get_cached_image_config(domain_id, dev);
+  close(dev);
+
+  return cfg != FASTRPC_DSP_COMPUTE && cfg != FASTRPC_DSP_COMPUTE_LITE;
+}
+
 int adsp_default_listener_start(int argc, char *argv[]) {
   struct pollfd pfd;
   eventfd_t event = 0;
@@ -247,11 +291,15 @@ int adsp_default_listener_start(int argc, char *argv[]) {
      */
     VERIFY_IPRINTF("%s started with arguments %s and %s\n", __func__, argv[1],
                    argv[2]);
-    VERIFYC(INVALID_DOMAIN_ID != (domain_id = get_domain_from_name(
-                                      argv[2], DOMAIN_NAME_STAND_ALONE)),
-            AEE_EINVALIDDOMAIN);
+    domain_id = get_domain_from_name(argv[2], DOMAIN_NAME_STAND_ALONE);
+    if (domain_id == INVALID_DOMAIN_ID)
+      domain_id = resolve_domain_cli_alias(argv[2]);
+    VERIFYC(INVALID_DOMAIN_ID != domain_id, AEE_EINVALIDDOMAIN);
     VERIFYC(NULL != (domain_uri_suffix = build_domain_uri_suffix(domain_id)),
             AEE_EINVALIDDOMAIN);
+    VERIFYC(strcmp(argv[1], "audiopd") != 0 ||
+                fastrpc_domain_is_audio(domain_id),
+            AEE_EUNSUPPORTED);
 
     VERIFYC(AEE_SUCCESS == (nErr = fastrpc_wait_for_device(domain_id)), AEE_ECONNREFUSED);
     // Allocate memory for URI. Example: "ITRANSPORT_PREFIX
