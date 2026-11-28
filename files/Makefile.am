@@ -3,12 +3,26 @@
 # Define systemd unit directory
 systemdsystemunitdir = @systemdsystemunitdir@
 
-# List of systemd service files to install (generated from .in templates)
+# List of systemd service files to install (generated from .in templates).
+#
+# adsp/cdsp/cdsp1/gdsp0/gdsp1 keep their original, non-templated unit names
+# (adsprpcd.service, cdsprpcd.service, cdsp1rpcd.service, gdsp0rpcd.service,
+# gdsp1rpcd.service) so anything that enables/starts them by their exact
+# legacy name keeps working.
+#
+# adsprpcd@.service/cdsprpcd@.service are systemd template
+# units -- one file each, instantiated at runtime as e.g. "cdsprpcd@cdsp2.service"
+# by the udev rule in 60-fastrpc.rules. They are only used for instances with
+# no legacy name (adsp2+, cdsp2+). gdsp has no template unit -- only
+# gdsp0/gdsp1 are supported, both covered by their legacy flat unit names.
 systemdsystemunit_DATA = \
 	adsprpcd.service \
+	adsprpcd@.service \
 	adsprpcd_audiopd.service \
+	adsprpcd_audiopd@.service \
 	cdsprpcd.service \
 	cdsp1rpcd.service \
+	cdsprpcd@.service \
 	gdsp0rpcd.service \
 	gdsp1rpcd.service \
 	sdsprpcd.service
@@ -16,9 +30,12 @@ systemdsystemunit_DATA = \
 # Service template files
 EXTRA_DIST = \
 	adsprpcd.service.in \
+	adsprpcd@.service.in \
 	adsprpcd_audiopd.service.in \
+	adsprpcd_audiopd@.service.in \
 	cdsprpcd.service.in \
 	cdsp1rpcd.service.in \
+	cdsprpcd@.service.in \
 	gdsp0rpcd.service.in \
 	gdsp1rpcd.service.in \
 	sdsprpcd.service.in

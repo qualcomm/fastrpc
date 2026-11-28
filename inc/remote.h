@@ -314,7 +314,27 @@ enum remote_dsp_attributes {
     ASYNC_FASTRPC_SUPPORT,        /** Async FastRPC Support */
     STATUS_NOTIFICATION_SUPPORT , /** DSP User PD status notification Support */
     MCID_MULTICAST,               /** Multicast widget programming */
+    DSP_IMAGE_CONFIG        = 14, /** Configuration of image flashed on DSP.
+                                    * Will be one of `enum dsp_image_config`
+                                    */
     /** Update FASTRPC_MAX_DSP_ATTRIBUTES when adding new value to this enum */
+};
+
+/**
+ * @enum dsp_image_config
+ * @brief Type of DSP image that can be queried as a capability using the
+ * `DSP_IMAGE_CONFIG` attribute with `remote_handle_control` api with
+ * `DSPRPC_GET_DSP_INFO` request id.
+ */
+enum dsp_image_config {
+    /** Compute image (eg: NSP) */
+    FASTRPC_DSP_COMPUTE = 1,
+
+    /** Compute-lite image (eg: HPASS with NSP image) */
+    FASTRPC_DSP_COMPUTE_LITE,
+
+    /** Audio image (eg: LPASS / HPASS with audio image) */
+    FASTRPC_DSP_AUDIO,
 };
 
 /** Macro for backward compatibility. Clients can compile wakelock request code
@@ -710,6 +730,198 @@ enum fastrpc_map_flags {
     /** Always keep this as the last member */
     FASTRPC_MAP_MAX,
 };
+
+#define MAX_DOMAIN_NAMELEN 30
+
+/* Position of domain type in flags */
+#define DOMAINS_LIST_FLAGS_TYPE_POS 5
+
+/* Helper macro to set domain type in flags */
+#define DOMAINS_LIST_FLAGS_SET_TYPE(flags, type) \
+	(flags | (type & ((1 << DOMAINS_LIST_FLAGS_TYPE_POS) - 1)))
+
+/**
+ * @enum fastrpc_domain_type
+ * @brief Indicates the type of domains (DSPs) present in the system
+ */
+typedef enum {
+	/** Flag to be used to query list of all available domains */
+	FASTRPC_ALL_DOMAINS,
+	FASTRPC_NSP,
+	FASTRPC_LPASS,
+	FASTRPC_SDSP,
+	FASTRPC_MDSP,
+	FASTRPC_HPASS,
+} fastrpc_domain_type;
+
+/**
+ * @struct fastrpc_domain
+ * @brief Describes the details of each domain
+ */
+typedef struct {
+	/**
+	 * @param : Logical domain id of the dsp.
+	 * This can be used to query the capabilities of the dsp and
+	 * can change with every reboot of device depending on the order
+	 * of domain enumeration.
+	 * This is NOT the same as effective domain id. To get the effective
+	 * domain id of a particular session on this domain, pass the corresponding
+	 * domain name with the `FASTRPC_GET_EFFECTIVE_DOMAIN_ID` request.
+	 */
+	int id;
+
+	/**
+	 * @param : Instance id of the domain.
+	 * Actual HW instance id of the dsp domain. Most client apps do not need
+	 * to use this parameter. This is required only for apps which directly
+	 * communicate with the dsp domain independently of fastrpc.
+	 */
+	int instance_id;
+
+	/**
+	 * @param : Name of domain.
+	 * To be appended with module uri while opening remote handle,
+	 * or for querying the effective domain id on a specific session
+	 * on this domain.
+	 */
+	char name[MAX_DOMAIN_NAMELEN];
+
+	/**
+	 * @param : Type of DSP, of 'fastrpc_domain_type'.
+	 */
+	fastrpc_domain_type type;
+
+	/**
+	 * @param : Status of domain: 0 if domain is down
+	 *                            non-zero if domain is up
+	 */
+	int status;
+
+	/**
+	 * @param : Card on which domain is present (for future use).
+	 */
+	uint32_t card;
+
+	/**
+	 * @param : SoC on which domain is present (for future use).
+	 */
+	uint32_t soc_id;
+
+	/**
+	 * @param : Reserved (for future use).
+	 */
+	uint32_t reserved[10];
+} fastrpc_domain;
+
+/**
+ * @struct fastrpc_domain_info
+ * @brief Structure used with 'FASTRPC_GET_DOMAINS' request id
+ * to query the list of available domains in the system.
+ */
+typedef struct {
+	/**
+	 * @param[in/out] : Domains-info array pointer.
+	 * Array needs to be allocated by client with size of array specified
+	 * in 'max_domains'. Array will be populated by fastrpc with list of
+	 * available domains.
+	 * To query number of domains first, pass NULL pointer.
+	 */
+	fastrpc_domain *domains;
+
+	/**
+	 * @param[in] : Size of the 'domains' array allocated by user.
+	 * This has to be greater than or equal to the actual number of available
+	 * domains. To query number of domains first, pass 0 in this field.
+	 */
+	int max_domains;
+
+	/**
+	 * @param[out] : This field will be populated with the total number
+	 * of available domains. While reading the domains-info in the array,
+	 * read only until 'num_domains' elements.
+	 */
+	int num_domains;
+
+	/**
+	 * @param[in] : Bit-mask for the type of request, to be populated by client.
+	 * Use DOMAINS_LIST_FLAGS_SET_TYPE macro to configure domain-type in flags.
+	 * Only domains of this type will be returned in the 'domains' array.
+	 * To get list of all available domains, use 'ALL_DOMAINS' type.
+	 * Other bits reserved for future use.
+	 */
+	uint64_t flags;
+} fastrpc_domains_info;
+
+/**
+ * fastrpc_domain_status_notif_fn_t
+ * Callback fired when a domain status changes.
+ *
+ * @param context   Opaque pointer supplied at registration time.
+ * @param domain    Pointer to the full fastrpc_domain descriptor. Valid only
+ *                  for the duration of the callback.
+ * @retval          0 on success
+ */
+typedef int (*fastrpc_domain_status_notif_fn_t)(void *context,
+							const fastrpc_domain *domain);
+
+/**
+ * @struct fastrpc_domain_notif_info
+ * @brief Payload used with FASTRPC_REGISTER_DOMAIN_STATUS_NOTIFICATIONS and
+ *        FASTRPC_DEREGISTER_DOMAIN_STATUS_NOTIFICATIONS request ids.
+ */
+typedef struct {
+	/* [in] Logical domain id, or -1 for type/wildcard filter */
+	int domain_id;
+	/* [in] Domain type filter. Used only when domain_id == -1 */
+	fastrpc_domain_type domain_type;
+	/* [in] Client context, passed to callback */
+	void *context;
+	/* [in] Callback function pointer */
+	fastrpc_domain_status_notif_fn_t notifier_fn;
+} fastrpc_domain_notif_info;
+
+/**
+ * @enum system_req_id
+ * @brief Request IDs used with remote_system_request() to query available
+ *        domains and manage domain status notifications.
+ */
+typedef enum {
+	/** Query list of available domains */
+	FASTRPC_GET_DOMAINS = 0,
+	/**
+	 * Register callback for domain status notifications.
+	 * Use with system_req_payload.domain_notif (fastrpc_domain_notif_info).
+	 */
+	FASTRPC_REGISTER_DOMAIN_STATUS_NOTIFICATIONS,
+	/**
+	 * Deregister a previously registered domain status callback.
+	 * Use with system_req_payload.domain_notif (fastrpc_domain_notif_info).
+	 */
+	FASTRPC_DEREGISTER_DOMAIN_STATUS_NOTIFICATIONS,
+} system_req_id;
+
+/**
+ * @struct system_req_payload
+ * @brief Payload for remote_system_request API
+ */
+typedef struct {
+	/* Request id */
+	system_req_id id;
+	union {
+		/* Used with FASTRPC_GET_DOMAINS */
+		fastrpc_domains_info sys;
+		/* Used with FASTRPC_REGISTER/DEREGISTER_DOMAIN_STATUS_NOTIFICATIONS */
+		fastrpc_domain_notif_info domain_notif;
+	};
+} system_req_payload;
+
+/**
+ * remote_system_request
+ * API to get system info like list of available domains
+ * @param req, payload containing system info and request ID
+ * @return, 0 on Success
+ */
+int remote_system_request(system_req_payload *req);
 
 /**
  * Attributes for remote_register_buf_attr

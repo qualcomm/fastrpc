@@ -28,7 +28,8 @@
 #define VENDOR_DOM_LOCATION "/vendor/dsp/xdsp/"
 #endif
 
-int fopen_from_dirlist(const char *dirList, const char *delim, 
-    const char *mode, const char *name, apps_std_FILE *psout);
+int fopen_from_dirlist(const char *dirList, const char *delim,
+    const char *mode, const char *name, int domain, apps_std_FILE *psout,
+    char **out_path);
 
 #endif /*__APPS_STD_INTERNAL_H__*/

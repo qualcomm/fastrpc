@@ -585,6 +585,7 @@ static int fastrpc_mmap_helper(int *domain, int fd, void *vaddr, int offset,
   if (*domain == -1) {
     *domain = get_current_domain();
   }
+  *domain = normalize_effec_domain_id(*domain);
   VERIFYC(IS_VALID_EFFECTIVE_DOMAIN_ID(*domain), AEE_EBADPARM);
   FASTRPC_GET_REF(*domain);
   VERIFY(AEE_SUCCESS == (nErr = fastrpc_session_dev(*domain, &dev)));
@@ -704,6 +705,7 @@ int fastrpc_munmap(int domain, int fd, void *vaddr, size_t length) {
   if (domain == -1) {
     domain = get_current_domain();
   }
+  domain = normalize_effec_domain_id(domain);
   VERIFYC(fd >= 0 && IS_VALID_EFFECTIVE_DOMAIN_ID(domain),
           AEE_EBADPARM);
   FASTRPC_GET_REF(domain);
@@ -807,6 +809,7 @@ int fastrpc_munmap_internal(int domain, uint64_t raddr, size_t length) {
   if (domain == -1) {
     domain = get_current_domain();
   }
+  domain = normalize_effec_domain_id(domain);
   VERIFYC(IS_VALID_EFFECTIVE_DOMAIN_ID(domain), AEE_EBADPARM);
   FASTRPC_GET_REF(domain);
   VERIFY(AEE_SUCCESS == (nErr = fastrpc_session_dev(domain, &dev)));
@@ -886,6 +889,7 @@ int remote_mem_map(int domain, int fd, int flags, uint64_t vaddr, size_t size,
   if (domain == -1) {
     domain = get_current_domain();
   }
+  domain = normalize_effec_domain_id(domain);
   VERIFYC(IS_VALID_EFFECTIVE_DOMAIN_ID(domain), AEE_EBADPARM);
 
   FASTRPC_GET_REF(domain);
@@ -919,6 +923,7 @@ int remote_mem_unmap(int domain, uint64_t raddr, size_t size) {
   if (domain == -1) {
     domain = get_current_domain();
   }
+  domain = normalize_effec_domain_id(domain);
   VERIFYC(IS_VALID_EFFECTIVE_DOMAIN_ID(domain), AEE_EBADPARM);
 
   FASTRPC_GET_REF(domain);

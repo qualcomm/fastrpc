@@ -17,6 +17,7 @@
 #include "fastrpc_internal.h"
 #include "remote.h"
 #include "verify.h"
+#include <fcntl.h>
 #include <poll.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -54,6 +55,44 @@ static domain_t *get_domain_uri(int domain_id) {
   }
 
   return NULL;
+}
+
+/*
+ * build_domain_uri_suffix() - "&_dom=<name>" for domain_id, dynamically
+ * sized -- unlike supported_domains[]/get_domain_uri() above, which only
+ * has room for the 7 original legacy-aliased names (domain_t.uri is a
+ * tiny fixed char[]). get_domain_from_name() returns the dynamic logical
+ * id for any domain the Level-1 table has discovered, including ones
+ * with a legacy alias (e.g. "cdsp" -> nsp1000's id), so the common case
+ * is resolved here via the Level-1 table directly, using the domain's own
+ * discovered name (e.g. "&_dom=hpass5000" for what was requested as
+ * "adsp") -- mirrors the same resolution remote_session_control's
+ * FASTRPC_GET_URI already uses, and resolves to the same session as the
+ * legacy name would.
+ *
+ * Falls back to the static table for a bare legacy id (discovery didn't
+ * run, or wasn't told to -- the Level-1 table has nothing to look up).
+ * Returns NULL if domain_id is neither. Caller must free() the result.
+ */
+static char *build_domain_uri_suffix(int domain_id) {
+  fastrpc_domain_internal d;
+
+  if (fastrpc_get_domain_by_logical_id(domain_id, &d)) {
+    size_t len = strlen(FASTRPC_DOMAIN_URI) + strlen(d.domain_info.name) + 1;
+    char *uri = (char *)malloc(len);
+
+    if (!uri)
+      return NULL;
+    strlcpy(uri, FASTRPC_DOMAIN_URI, len);
+    strlcat(uri, d.domain_info.name, len);
+    return uri;
+  }
+
+  {
+    domain_t *legacy = get_domain_uri(domain_id);
+
+    return legacy ? strdup(legacy->uri) : NULL;
+  }
 }
 
 
@@ -168,6 +207,49 @@ bail:
 	return err;
 }
 
+/*
+ * resolve_domain_cli_alias() - resolve a CLI "<family><digits>" short name
+ * (e.g. "adsp1") to its discovered logical domain id.
+ */
+static int resolve_domain_cli_alias(const char *name) {
+  fastrpc_domain_type type;
+  int instance_id;
+  fastrpc_domain_internal d;
+
+  if (!fastrpc_resolve_dev_family(name, &type, &instance_id))
+    return INVALID_DOMAIN_ID;
+  if (!fastrpc_get_domain_by_logical_id((int)type * 1000 + instance_id, &d))
+    return INVALID_DOMAIN_ID;
+  return d.domain_info.id;
+}
+
+/*
+ * fastrpc_domain_is_audio() - decide whether an audiopd daemon should
+ * connect to this domain. Declines when the domain's image config is
+ * COMPUTE or COMPUTE_LITE (no spare audio capacity on either); connects
+ * otherwise (AUDIO, or unknown).
+ */
+static bool fastrpc_domain_is_audio(int domain_id) {
+  fastrpc_domain_internal d;
+  const char *sec_dev = NULL, *non_sec_dev = NULL;
+  int dev, cfg;
+
+  if (!fastrpc_get_domain_by_logical_id(domain_id, &d))
+    return true;
+
+  get_domain_device_names(domain_id, &sec_dev, &non_sec_dev);
+  dev = non_sec_dev ? open(non_sec_dev, O_RDWR | O_CLOEXEC) : -1;
+  if (dev < 0 && sec_dev)
+    dev = open(sec_dev, O_RDWR | O_CLOEXEC);
+  if (dev < 0)
+    return false;
+
+  cfg = (int)fastrpc_get_cached_image_config(domain_id, dev);
+  close(dev);
+
+  return cfg != FASTRPC_DSP_COMPUTE && cfg != FASTRPC_DSP_COMPUTE_LITE;
+}
+
 int adsp_default_listener_start(int argc, char *argv[]) {
   struct pollfd pfd;
   eventfd_t event = 0;
@@ -177,14 +259,30 @@ int adsp_default_listener_start(int argc, char *argv[]) {
   int nErr = AEE_SUCCESS, domain_id = INVALID_DOMAIN_ID;
   char *name = NULL;
   char *adsp_default_listener1_URI_domain = NULL;
-  int adsp_default_listener1_URI_domain_len =
-      strlen(adsp_default_listener1_URI) + MAX_DOMAIN_URI_SIZE;
-  domain_t *dsp_domain = NULL;
+  int adsp_default_listener1_URI_domain_len = 0;
+  char *domain_uri_suffix = NULL;
   int namelen = 0;
   char *eventfd_domain = NULL;
   int eventfdlen = 0;
   (void)argc;
   (void)argv;
+
+  /*
+   * get_domain_from_name() below only resolves a dynamic-only name (e.g.
+   * "cdsp2", "adsp1" -- anything without a legacy alias) via the Level-1
+   * domain table, which is empty until something has triggered discovery
+   * in this process. A fresh daemon process (e.g. cdsprpcd started by
+   * systemd) has never called any other fastrpc API yet, so without this,
+   * get_domain_from_name() would unconditionally fail with
+   * INVALID_DOMAIN_ID for those names. Force discovery now; ignore
+   * failure here and let the normal domain-id checks below report it.
+   */
+  if (argc > 1) {
+    system_req_payload discover_req;
+    memset(&discover_req, 0, sizeof(discover_req));
+    discover_req.id = FASTRPC_GET_DOMAINS;
+    remote_system_request(&discover_req);
+  }
 
   if (argc > 2) {
     /* Two arguments are passed in below format
@@ -193,17 +291,21 @@ int adsp_default_listener_start(int argc, char *argv[]) {
      */
     VERIFY_IPRINTF("%s started with arguments %s and %s\n", __func__, argv[1],
                    argv[2]);
-    VERIFYC(INVALID_DOMAIN_ID != (domain_id = get_domain_from_name(
-                                      argv[2], DOMAIN_NAME_STAND_ALONE)),
+    domain_id = get_domain_from_name(argv[2], DOMAIN_NAME_STAND_ALONE);
+    if (domain_id == INVALID_DOMAIN_ID)
+      domain_id = resolve_domain_cli_alias(argv[2]);
+    VERIFYC(INVALID_DOMAIN_ID != domain_id, AEE_EINVALIDDOMAIN);
+    VERIFYC(NULL != (domain_uri_suffix = build_domain_uri_suffix(domain_id)),
             AEE_EINVALIDDOMAIN);
-    VERIFYC(NULL != (dsp_domain = get_domain_uri(domain_id)),
-            AEE_EINVALIDDOMAIN);
+    VERIFYC(strcmp(argv[1], "audiopd") != 0 ||
+                fastrpc_domain_is_audio(domain_id),
+            AEE_EUNSUPPORTED);
 
     VERIFYC(AEE_SUCCESS == (nErr = fastrpc_wait_for_device(domain_id)), AEE_ECONNREFUSED);
     // Allocate memory for URI. Example: "ITRANSPORT_PREFIX
     // createstaticpd:audiopd&dom=adsp"
     namelen = strlen(ITRANSPORT_PREFIX CREATE_STATICPD) + strlen(argv[1]) +
-              strlen(ADSP_DOMAIN);
+              strlen(domain_uri_suffix);
     VERIFYC(NULL != (name = (char *)malloc((namelen + 1) * sizeof(char))),
             AEE_ENOMEMORY);
 
@@ -220,7 +322,9 @@ int adsp_default_listener_start(int argc, char *argv[]) {
     }
 
     // Concatenate domain to the URI
-    strlcat(name, dsp_domain->uri, namelen + 1);
+    strlcat(name, domain_uri_suffix, namelen + 1);
+    free(domain_uri_suffix);
+    domain_uri_suffix = NULL;
 
     // Open static process handle
     VERIFY(AEE_SUCCESS == (nErr = remote_handle64_open(name, &fd)));
@@ -232,6 +336,17 @@ int adsp_default_listener_start(int argc, char *argv[]) {
      */
     VERIFY_IPRINTF("%s started with arguments %s\n", __func__, argv[1]);
     domain_id = get_domain_from_name(argv[1], DOMAIN_NAME_IN_URI);
+    /*
+     * Unlike DOMAIN_NAME_STAND_ALONE (always a bare logical/legacy id),
+     * DOMAIN_NAME_IN_URI returns the effective id (it resolves any
+     * "&_session=" in the URI, or defaults a dynamic domain to session 0 --
+     * see get_domain_from_name()). domain_id is used below and at the
+     * shared start_listener label only by build_domain_uri_suffix()/
+     * fastrpc_wait_for_device(), both of which expect the bare id, so
+     * convert back here rather than at each use site.
+     */
+    if (domain_id != INVALID_DOMAIN_ID)
+      domain_id = GET_DOMAIN_FROM_EFFEC_DOMAIN_ID(domain_id);
 
     // If domain name part of arguments, use domains API
     if (domain_id != INVALID_DOMAIN_ID) {
@@ -270,15 +385,17 @@ start_listener:
   if (domain_id != INVALID_DOMAIN_ID) {
     // Allocate memory and copy adsp_default_listener1 URI Example:
     // "adsp_default_listener1_URI&dom=adsp"
+    VERIFYC(NULL != (domain_uri_suffix = build_domain_uri_suffix(domain_id)),
+            AEE_EINVALIDDOMAIN);
+    adsp_default_listener1_URI_domain_len =
+        strlen(adsp_default_listener1_URI) + strlen(domain_uri_suffix) + 1;
     VERIFYC(NULL !=
                 (adsp_default_listener1_URI_domain = (char *)malloc(
                      (adsp_default_listener1_URI_domain_len) * sizeof(char))),
             AEE_ENOMEMORY);
-    VERIFYC(NULL != (dsp_domain = get_domain_uri(domain_id)),
-            AEE_EINVALIDDOMAIN);
     nErr = snprintf(adsp_default_listener1_URI_domain,
                     adsp_default_listener1_URI_domain_len, "%s%s",
-                    adsp_default_listener1_URI, dsp_domain->uri);
+                    adsp_default_listener1_URI, domain_uri_suffix);
     if (nErr < 0) {
       VERIFY_EPRINTF("ERROR: %s: %d returned from snprintf\n", __func__, nErr);
       nErr = AEE_EFAILED;
@@ -308,12 +425,12 @@ start_poll:
   if (domain_id != INVALID_DOMAIN_ID) {
     // Allocate memory and copy geteventfd URI Example: "ITRANSPORT_PREFIX
     // geteventfd&dom=adsp"
-    eventfdlen = strlen(ITRANSPORT_PREFIX "geteventfd") + MAX_DOMAIN_URI_SIZE;
+    eventfdlen = strlen(ITRANSPORT_PREFIX "geteventfd") + strlen(domain_uri_suffix) + 1;
     VERIFYC(NULL !=
                 (eventfd_domain = (char *)malloc((eventfdlen) * sizeof(char))),
             AEE_ENOMEMORY);
     nErr = snprintf(eventfd_domain, eventfdlen, "%s%s",
-                    ITRANSPORT_PREFIX "geteventfd", dsp_domain->uri);
+                    ITRANSPORT_PREFIX "geteventfd", domain_uri_suffix);
     if (nErr < 0) {
       VERIFY_EPRINTF("ERROR: %s: %d returned from snprintf\n", __func__, nErr);
       nErr = AEE_EFAILED;
@@ -338,6 +455,10 @@ start_poll:
   if (adsp_default_listener1_URI_domain != NULL) {
     free(adsp_default_listener1_URI_domain);
     adsp_default_listener1_URI_domain = NULL;
+  }
+  if (domain_uri_suffix != NULL) {
+    free(domain_uri_suffix);
+    domain_uri_suffix = NULL;
   }
   // Poll on listener thread
   pfd.events = POLLIN;
@@ -365,6 +486,10 @@ bail:
     if (adsp_default_listener1_URI_domain != NULL) {
       free(adsp_default_listener1_URI_domain);
       adsp_default_listener1_URI_domain = NULL;
+    }
+    if (domain_uri_suffix != NULL) {
+      free(domain_uri_suffix);
+      domain_uri_suffix = NULL;
     }
     VERIFY_EPRINTF("Error 0x%x: %s exiting\n", nErr, __func__);
   }
